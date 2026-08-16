@@ -29,10 +29,31 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // Overrides the implicit debug config, which by default points at
+        // whatever ~/.android/debug.keystore happens to exist on the
+        // machine doing the build — auto-generated fresh (and therefore
+        // with a different SHA-1) on every ephemeral CI runner. Pinning
+        // this to a checked-in keystore means the signing certificate
+        // (and its SHA-1, which Google Sign-In validates against) is
+        // identical for every local build and every CI build. This is a
+        // debug key with a hardcoded, publicly-documented password by
+        // Android convention — it protects nothing and isn't meant to;
+        // see docs/AUTH_SETUP.md for why it's safe and expected to be
+        // committed to the repo.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Signed with the (pinned) debug key so `flutter build apk
+            // --release` and CI both work without a separate release
+            // signing setup. See the signingConfigs block above.
             signingConfig = signingConfigs.getByName("debug")
         }
     }

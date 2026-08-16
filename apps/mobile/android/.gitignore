@@ -12,3 +12,11 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Exception: app/debug.keystore is intentionally tracked. It's a debug
+# key with Android's standard hardcoded alias/password ("androiddebugkey"
+# / "android") — it protects nothing by design. It's pinned here (and
+# referenced explicitly in app/build.gradle.kts) so every build, local or
+# CI, produces the same signing certificate/SHA-1, which Google Sign-In
+# validates against. See /docs/AUTH_SETUP.md.
+!app/debug.keystore

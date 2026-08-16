@@ -52,14 +52,27 @@ Supabase dashboard and stays there.
      and its **Client Secret** goes into Supabase in the next step (nowhere
      else).
    - **Type: Android.** Package name: `co.opentrip.opentrip_mobile`. SHA-1
-     fingerprint: run this and copy the `SHA1:` line —
+     fingerprint — **use the repo's pinned debug keystore, not your own
+     machine's** `~/.android/debug.keystore`. Those are different files
+     with different (random, per-machine) keys, and a mismatch here is
+     exactly what produces `PlatformException(sign_failed, ..., 10, ...)`
+     at sign-in time — status 10 is Google's `DEVELOPER_ERROR`, meaning
+     "this APK's signing cert doesn't match what's registered." Every
+     build (local or CI) signs with `apps/mobile/android/app/debug.keystore`,
+     which is checked into the repo on purpose (see that file's
+     `.gitignore` exception, and the comment in `android/app/build.gradle.kts`)
+     specifically so the SHA-1 is identical everywhere, including on
+     ephemeral GitHub Actions runners that would otherwise auto-generate a
+     fresh, different one on every run:
      ```bash
-     keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
+     keytool -list -v -keystore apps/mobile/android/app/debug.keystore -alias androiddebugkey -storepass android -keypass android
      ```
-     (That's the debug keystore Flutter signs release-without-your-own-key
-     builds with — the same one used for the APKs built so far. If you
-     later set up your own release signing key, you'll need to add that
-     key's SHA-1 here too.)
+     Current fingerprint for this repo's pinned keystore:
+     `10:9E:F7:72:EC:01:FC:1D:BF:A4:AC:F8:3C:FD:95:11:52:34:68:89`
+     — paste that directly if you don't want to run the command.
+     If you later set up your own real release signing key instead of the
+     debug one, you'll need to add that key's SHA-1 here too (Google
+     Cloud allows multiple SHA-1 fingerprints on one Android OAuth client).
      This Android client's ID is never referenced in code — Google's SDK
      finds it automatically via the package name + SHA-1 match.
 4. Back in **Supabase Dashboard → Authentication → Sign In / Providers →
