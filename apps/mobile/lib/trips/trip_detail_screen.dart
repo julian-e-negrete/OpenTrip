@@ -39,6 +39,23 @@ class TripDetailScreen extends StatelessWidget {
             trip.maxSpeedKph == null ? '—' : '${trip.maxSpeedKph!.toStringAsFixed(1)} km/h',
           ),
           _Row('GPS points recorded', '${trip.pointCount}'),
+          if (trip.hasBleTelemetry) ...[
+            const Padding(
+              padding: EdgeInsets.only(top: 16, bottom: 4),
+              child: Text('From the bike', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+            ),
+            if (trip.bleMaxSpeedKph != null)
+              _Row('Max speed (bike)', '${trip.bleMaxSpeedKph!.toStringAsFixed(0)} km/h'),
+            if (trip.bleMaxRpm != null) _Row('Max RPM', '${trip.bleMaxRpm}'),
+            if (trip.bleMaxLeanDeg != null) _Row('Max lean angle', '${trip.bleMaxLeanDeg!.toStringAsFixed(0)}°'),
+            if (trip.bleMaxBrakePressureKpa != null)
+              _Row('Max front brake pressure', '${trip.bleMaxBrakePressureKpa!.toStringAsFixed(0)} kPa'),
+            if (trip.bleMinWaterTemperatureC != null && trip.bleMaxWaterTemperatureC != null)
+              _Row(
+                'Water temperature range',
+                '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC} °C',
+              ),
+          ],
         ],
       ),
     );

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
 import '../auth/auth_service.dart';
 import '../data/models/trip.dart';
@@ -8,6 +9,7 @@ import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../vehicle/kawasaki_connector.dart';
 import 'location_recorder.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -20,6 +22,8 @@ class RecordingScreen extends StatefulWidget {
 /// How many points to buffer before writing them to SQLite as a batch —
 /// keeps write volume sane on a long trip without losing much on a crash.
 const _flushEvery = 20;
+
+enum _BleState { none, connecting, connected, failed }
 
 class _RecordingScreenState extends State<RecordingScreen> {
   final _recorder = LocationRecorder();
@@ -35,7 +39,24 @@ class _RecordingScreenState extends State<RecordingScreen> {
   StreamSubscription<TripPoint>? _pointSub;
   StreamSubscription<RecordingStats>? _statsSub;
 
+  // Optional live vehicle telemetry (see vehicle/kawasaki_connector.dart).
+  // Independent of GPS recording — a bike connection can fail or never be
+  // attempted and the trip is still saved as GPS-only.
+  _BleState _bleState = _BleState.none;
+  String? _bleError;
+  KawasakiClient? _bleClient;
+  RidingTelemetry? _bleLatest;
+  StreamSubscription<RidingTelemetry>? _bleTelemetrySub;
+  double? _bleMaxSpeedKph;
+  int? _bleMaxRpm;
+  double? _bleMaxLeanDeg;
+  double? _bleMaxBrakeKpa;
+  int? _bleMinWaterTemp;
+  int? _bleMaxWaterTemp;
+
   String get _userId => AuthService.instance.currentUser!.id;
+
+  bool get _vehicleSupportsBle => _selectedVehicle?.bleConnector == VehicleBleConnector.kawasakiRideology;
 
   @override
   void initState() {
@@ -47,6 +68,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
   void dispose() {
     _pointSub?.cancel();
     _statsSub?.cancel();
+    _bleTelemetrySub?.cancel();
+    _bleClient?.dispose();
     _recorder.dispose();
     super.dispose();
   }
@@ -59,6 +82,62 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _selectedVehicle = vehicles.isEmpty ? null : vehicles.first;
       _loadingVehicles = false;
     });
+  }
+
+  Future<void> _connectBike() async {
+    setState(() {
+      _bleState = _BleState.connecting;
+      _bleError = null;
+    });
+    try {
+      await KawasakiConnector.ensurePermissions();
+      final result = await KawasakiConnector.findBike();
+      if (result == null) {
+        throw StateError('No Kawasaki-* bike found nearby.');
+      }
+      final client = await KawasakiConnector.connect(result: result);
+      _bleTelemetrySub = client.telemetry.listen(_onBleTelemetry);
+      setState(() {
+        _bleClient = client;
+        _bleState = _BleState.connected;
+      });
+    } catch (e) {
+      setState(() {
+        _bleState = _BleState.failed;
+        _bleError = e.toString();
+      });
+    }
+  }
+
+  void _onBleTelemetry(RidingTelemetry t) {
+    final speed = t.speedKph?.toDouble();
+    if (speed != null && (_bleMaxSpeedKph == null || speed > _bleMaxSpeedKph!)) _bleMaxSpeedKph = speed;
+    if (t.rpm != null && (_bleMaxRpm == null || t.rpm! > _bleMaxRpm!)) _bleMaxRpm = t.rpm;
+    if (t.leanDeg != null) {
+      final absLean = t.leanDeg!.abs();
+      if (_bleMaxLeanDeg == null || absLean > _bleMaxLeanDeg!) _bleMaxLeanDeg = absLean;
+    }
+    if (t.frontBrakePressureKpa != null &&
+        (_bleMaxBrakeKpa == null || t.frontBrakePressureKpa! > _bleMaxBrakeKpa!)) {
+      _bleMaxBrakeKpa = t.frontBrakePressureKpa;
+    }
+    if (t.waterTemperatureC != null) {
+      if (_bleMinWaterTemp == null || t.waterTemperatureC! < _bleMinWaterTemp!) {
+        _bleMinWaterTemp = t.waterTemperatureC;
+      }
+      if (_bleMaxWaterTemp == null || t.waterTemperatureC! > _bleMaxWaterTemp!) {
+        _bleMaxWaterTemp = t.waterTemperatureC;
+      }
+    }
+    if (mounted) setState(() => _bleLatest = t);
+  }
+
+  Future<void> _disconnectBike() async {
+    await _bleTelemetrySub?.cancel();
+    _bleTelemetrySub = null;
+    await _bleClient?.dispose();
+    _bleClient = null;
+    if (mounted) setState(() => _bleState = _BleState.none);
   }
 
   Future<void> _start() async {
@@ -107,13 +186,27 @@ class _RecordingScreenState extends State<RecordingScreen> {
       avgSpeedKph: finalStats.avgSpeedKph,
       maxSpeedKph: finalStats.maxSpeedKph,
       pointCount: finalStats.pointCount,
+      bleMaxSpeedKph: _bleMaxSpeedKph,
+      bleMaxRpm: _bleMaxRpm,
+      bleMaxLeanDeg: _bleMaxLeanDeg,
+      bleMaxBrakePressureKpa: _bleMaxBrakeKpa,
+      bleMinWaterTemperatureC: _bleMinWaterTemp,
+      bleMaxWaterTemperatureC: _bleMaxWaterTemp,
     );
     await TripRepository.instance.finishTrip(finished);
+    await _disconnectBike();
 
     if (!mounted) return;
     setState(() {
       _activeTrip = null;
       _stats = null;
+      _bleMaxSpeedKph = null;
+      _bleMaxRpm = null;
+      _bleMaxLeanDeg = null;
+      _bleMaxBrakeKpa = null;
+      _bleMinWaterTemp = null;
+      _bleMaxWaterTemp = null;
+      _bleLatest = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Trip saved: ${finished.distanceKm.toStringAsFixed(2)} km')),
@@ -145,11 +238,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
         DropdownButtonFormField<Vehicle>(
           initialValue: _selectedVehicle,
           decoration: const InputDecoration(labelText: 'Vehicle', border: OutlineInputBorder()),
-          items: _vehicles
-              .map((v) => DropdownMenuItem(value: v, child: Text(v.name)))
-              .toList(),
-          onChanged: recording ? null : (v) => setState(() => _selectedVehicle = v),
+          items: _vehicles.map((v) => DropdownMenuItem(value: v, child: Text(v.name))).toList(),
+          onChanged: recording
+              ? null
+              : (v) {
+                  if (v?.id == _selectedVehicle?.id) return;
+                  _disconnectBike();
+                  setState(() => _selectedVehicle = v);
+                },
         ),
+        if (_vehicleSupportsBle) ...[
+          const SizedBox(height: 12),
+          _BleConnectionCard(
+            state: _bleState,
+            error: _bleError,
+            telemetry: _bleLatest,
+            onConnect: _connectBike,
+            onDisconnect: _disconnectBike,
+          ),
+        ],
         const SizedBox(height: 24),
         if (recording) _StatsView(stats: _stats) else const Spacer(),
         const SizedBox(height: 24),
@@ -167,6 +274,68 @@ class _RecordingScreenState extends State<RecordingScreen> {
       ],
     );
   }
+}
+
+class _BleConnectionCard extends StatelessWidget {
+  const _BleConnectionCard({
+    required this.state,
+    required this.error,
+    required this.telemetry,
+    required this.onConnect,
+    required this.onDisconnect,
+  });
+
+  final _BleState state;
+  final String? error;
+  final RidingTelemetry? telemetry;
+  final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(
+              state == _BleState.connected ? Icons.bluetooth_connected : Icons.bluetooth,
+              color: state == _BleState.connected ? Colors.lightBlueAccent : Colors.grey,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_statusText(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (state == _BleState.connected && telemetry != null)
+                    Text(
+                      '${telemetry!.rpm ?? '—'} rpm · gear ${telemetry!.gear ?? '—'}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  if (state == _BleState.failed && error != null)
+                    Text(error!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                ],
+              ),
+            ),
+            if (state == _BleState.connected)
+              TextButton(onPressed: onDisconnect, child: const Text('Disconnect'))
+            else if (state == _BleState.connecting)
+              const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              TextButton(onPressed: onConnect, child: const Text('Connect')),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _statusText() => switch (state) {
+    _BleState.none => 'Bike not connected (GPS only)',
+    _BleState.connecting => 'Connecting to bike…',
+    _BleState.connected => 'Bike connected',
+    _BleState.failed => 'Bike connection failed',
+  };
 }
 
 class _StatsView extends StatelessWidget {

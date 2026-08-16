@@ -10,6 +10,20 @@ class Trip {
   final double? maxSpeedKph;
   final int pointCount;
 
+  // Vehicle-reported (BLE) telemetry summary, only populated if the
+  // vehicle was connected via a live connector (see
+  // vehicle/kawasaki_connector.dart) during recording. Null on a
+  // GPS-only trip or on any vehicle without a connector. These are
+  // separate from maxSpeedKph/avgSpeedKph above (which are always
+  // GPS-derived) because the bike's own speedometer/tachometer reading is
+  // more accurate than a GPS speed estimate, especially at low speed.
+  final double? bleMaxSpeedKph;
+  final int? bleMaxRpm;
+  final double? bleMaxLeanDeg;
+  final double? bleMaxBrakePressureKpa;
+  final int? bleMinWaterTemperatureC;
+  final int? bleMaxWaterTemperatureC;
+
   const Trip({
     required this.id,
     required this.userId,
@@ -21,7 +35,15 @@ class Trip {
     this.avgSpeedKph,
     this.maxSpeedKph,
     this.pointCount = 0,
+    this.bleMaxSpeedKph,
+    this.bleMaxRpm,
+    this.bleMaxLeanDeg,
+    this.bleMaxBrakePressureKpa,
+    this.bleMinWaterTemperatureC,
+    this.bleMaxWaterTemperatureC,
   });
+
+  bool get hasBleTelemetry => bleMaxSpeedKph != null || bleMaxRpm != null;
 
   bool get isFinished => endedAt != null;
 
@@ -34,6 +56,12 @@ class Trip {
     required double? avgSpeedKph,
     required double? maxSpeedKph,
     required int pointCount,
+    double? bleMaxSpeedKph,
+    int? bleMaxRpm,
+    double? bleMaxLeanDeg,
+    double? bleMaxBrakePressureKpa,
+    int? bleMinWaterTemperatureC,
+    int? bleMaxWaterTemperatureC,
   }) {
     return Trip(
       id: id,
@@ -46,6 +74,12 @@ class Trip {
       avgSpeedKph: avgSpeedKph,
       maxSpeedKph: maxSpeedKph,
       pointCount: pointCount,
+      bleMaxSpeedKph: bleMaxSpeedKph,
+      bleMaxRpm: bleMaxRpm,
+      bleMaxLeanDeg: bleMaxLeanDeg,
+      bleMaxBrakePressureKpa: bleMaxBrakePressureKpa,
+      bleMinWaterTemperatureC: bleMinWaterTemperatureC,
+      bleMaxWaterTemperatureC: bleMaxWaterTemperatureC,
     );
   }
 
@@ -60,6 +94,12 @@ class Trip {
     'avg_speed_kph': avgSpeedKph,
     'max_speed_kph': maxSpeedKph,
     'point_count': pointCount,
+    'ble_max_speed_kph': bleMaxSpeedKph,
+    'ble_max_rpm': bleMaxRpm,
+    'ble_max_lean_deg': bleMaxLeanDeg,
+    'ble_max_brake_kpa': bleMaxBrakePressureKpa,
+    'ble_min_water_temp_c': bleMinWaterTemperatureC,
+    'ble_max_water_temp_c': bleMaxWaterTemperatureC,
   };
 
   static Trip fromRow(Map<String, Object?> row) => Trip(
@@ -73,5 +113,11 @@ class Trip {
     avgSpeedKph: row['avg_speed_kph'] as double?,
     maxSpeedKph: row['max_speed_kph'] as double?,
     pointCount: row['point_count'] as int,
+    bleMaxSpeedKph: row['ble_max_speed_kph'] as double?,
+    bleMaxRpm: row['ble_max_rpm'] as int?,
+    bleMaxLeanDeg: row['ble_max_lean_deg'] as double?,
+    bleMaxBrakePressureKpa: row['ble_max_brake_kpa'] as double?,
+    bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
+    bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
   );
 }

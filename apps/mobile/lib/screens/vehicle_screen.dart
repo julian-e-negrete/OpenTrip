@@ -1,12 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../logging/log_buffer.dart';
-import '../vehicle/flutter_blue_plus_transport.dart';
+import '../vehicle/kawasaki_connector.dart';
 import 'log_screen.dart';
 
 /// Minimal demo screen: scan for a Kawasaki Rideology-equipped bike,
@@ -20,7 +18,7 @@ class VehicleScreen extends StatefulWidget {
   State<VehicleScreen> createState() => _VehicleScreenState();
 }
 
-enum _ConnectionState { idle, scanning, connecting, handshaking, connected, error }
+enum _ConnectionState { idle, scanning, connecting, connected, error }
 
 class _VehicleScreenState extends State<VehicleScreen> {
   _ConnectionState _state = _ConnectionState.idle;
@@ -28,12 +26,10 @@ class _VehicleScreenState extends State<VehicleScreen> {
   KawasakiClient? _client;
   RidingTelemetry? _telemetry;
   StreamSubscription<RidingTelemetry>? _telemetrySub;
-  StreamSubscription<List<ScanResult>>? _scanSub;
 
   @override
   void dispose() {
     _telemetrySub?.cancel();
-    _scanSub?.cancel();
     _client?.dispose();
     super.dispose();
   }
@@ -46,10 +42,10 @@ class _VehicleScreenState extends State<VehicleScreen> {
     logBuffer.add('--- New connection attempt ---');
 
     try {
-      await _ensurePermissions();
+      await KawasakiConnector.ensurePermissions();
 
       logBuffer.add('Scan: looking for a device advertising as ${kAdvertisedNamePrefixes.join(" or ")}…');
-      final result = await _findBike();
+      final result = await KawasakiConnector.findBike(onLog: logBuffer.add);
       if (result == null) {
         logBuffer.add('Scan: timed out, no matching device found');
         setState(() {
@@ -64,16 +60,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
       );
 
       setState(() => _state = _ConnectionState.connecting);
-      final transport = FlutterBluePlusTransport(result.device);
-      final client = KawasakiClient(
-        transport: transport,
-        config: z500Er500fConfig,
-        logger: logBuffer.add,
-      );
-      await client.connect();
-
-      setState(() => _state = _ConnectionState.handshaking);
-      await client.runStartupSequence();
+      final client = await KawasakiConnector.connect(result: result, onLog: logBuffer.add);
 
       _telemetrySub = client.telemetry.listen((t) {
         if (mounted) setState(() => _telemetry = t);
@@ -90,42 +77,6 @@ class _VehicleScreenState extends State<VehicleScreen> {
         _errorMessage = e.toString();
       });
     }
-  }
-
-  Future<void> _ensurePermissions() async {
-    logBuffer.add('Requesting Bluetooth scan/connect + location permissions…');
-    final statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.locationWhenInUse,
-    ].request();
-    for (final entry in statuses.entries) {
-      logBuffer.add('Permission ${entry.key}: ${entry.value}');
-    }
-  }
-
-  Future<ScanResult?> _findBike() async {
-    final completer = Completer<ScanResult?>();
-    _scanSub = FlutterBluePlus.scanResults.listen((results) {
-      for (final r in results) {
-        final name = r.advertisementData.advName;
-        if (name.isNotEmpty) {
-          logBuffer.add('Scan: saw "$name" (${r.device.remoteId}), RSSI ${r.rssi}');
-        }
-        if (kAdvertisedNamePrefixes.any(name.startsWith)) {
-          if (!completer.isCompleted) completer.complete(r);
-        }
-      }
-    });
-
-    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-    final result = await completer.future.timeout(
-      const Duration(seconds: 11),
-      onTimeout: () => null,
-    );
-    await FlutterBluePlus.stopScan();
-    await _scanSub?.cancel();
-    return result;
   }
 
   @override

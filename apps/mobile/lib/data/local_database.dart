@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -51,7 +51,13 @@ class LocalDatabase {
             duration_seconds INTEGER NOT NULL DEFAULT 0,
             avg_speed_kph REAL,
             max_speed_kph REAL,
-            point_count INTEGER NOT NULL DEFAULT 0
+            point_count INTEGER NOT NULL DEFAULT 0,
+            ble_max_speed_kph REAL,
+            ble_max_rpm INTEGER,
+            ble_max_lean_deg REAL,
+            ble_max_brake_kpa REAL,
+            ble_min_water_temp_c INTEGER,
+            ble_max_water_temp_c INTEGER
           )
         ''');
         await db.execute('CREATE INDEX idx_trips_vehicle ON trips(vehicle_id)');
@@ -69,6 +75,20 @@ class LocalDatabase {
             PRIMARY KEY (trip_id, seq)
           )
         ''');
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          for (final column in [
+            'ble_max_speed_kph REAL',
+            'ble_max_rpm INTEGER',
+            'ble_max_lean_deg REAL',
+            'ble_max_brake_kpa REAL',
+            'ble_min_water_temp_c INTEGER',
+            'ble_max_water_temp_c INTEGER',
+          ]) {
+            await db.execute('ALTER TABLE trips ADD COLUMN $column');
+          }
+        }
       },
     );
   }

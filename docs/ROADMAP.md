@@ -6,7 +6,8 @@
   protocol constants, frame builder, byte-level parsers for the frames a
   trip tracker actually needs (live telemetry, odometer/trip, temps),
   startup-handshake orchestration, and golden-fixture tests ported from
-  real captured frames.
+  real captured frames. **Confirmed working against a real 2026 Z500 ABS**
+  — see `README.md`'s validation section.
 - **Flutter app + platform scaffolding** (`apps/mobile/`): real `android/`
   (built and installable) and `ios/` (scaffolded, unbuildable without a
   Mac) projects, wired to the BLE connector via `flutter_blue_plus`, plus
@@ -24,6 +25,16 @@
   (`trip/location_recorder.dart` — haversine distance, GPS-glitch
   rejection, accuracy filtering) with a live start/stop recording screen,
   and trip history + detail views.
+- **BLE telemetry wired into trip recording** (`vehicle/kawasaki_connector.dart`,
+  `trip/recording_screen.dart`): the scan/connect/handshake logic that used
+  to live only in the standalone BLE demo screen is now a shared helper.
+  Recording a trip on a vehicle flagged `kawasakiRideology` shows an
+  optional "Connect bike" card; if connected, live telemetry
+  (speed/RPM/lean/front-brake-pressure/water-temp) is tracked for max/min
+  values alongside GPS and saved onto the trip (`data/models/trip.dart`'s
+  `ble*` fields), shown in trip detail under "From the bike". A trip
+  without a bike connection, or on a non-BLE vehicle, is unaffected —
+  every `ble*` field just stays null.
 
 ## Not done yet
 
@@ -47,13 +58,11 @@
    ranked categories (distance, longest drive, territory explored,
    trophies) — deliberately *not* speed-based. Needs cloud sync (1) first,
    since leaderboards are inherently cross-user.
-5. **Wire vehicle telemetry into trip records.** A vehicle can be flagged
-   `kawasakiRideology` today (`data/models/vehicle.dart`), but the
-   recording screen doesn't yet connect to it and attach live telemetry
-   (speed/RPM/lean/brake) to the trip — that's where the BLE connector
-   actually pays off for the tracker, beyond being a standalone demo
-   screen. Straightforward once (2) exists, since both need the app alive
-   in the background during a ride.
+5. **Background BLE + trip pairing.** The BLE telemetry hookup (see
+   "Done" above) only survives while the app is foregrounded, same
+   limitation as (2) — connecting the bike, then locking the phone
+   mid-ride, currently drops both the GPS stream and the BLE connection.
+   Fixed by the same foreground-service work as (2).
 
 ## Explicitly deferred inside the Kawasaki connector itself
 
