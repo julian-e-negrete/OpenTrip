@@ -4,6 +4,18 @@ A free, open-source driving trip tracker for Android and iOS — the same idea a
 apps like TripRank, but with no subscription, no paywalled features, and a
 codebase anyone can audit, self-host, or extend.
 
+## Get a build
+
+Every push to `main` builds and tests the whole app via GitHub Actions and
+publishes the APKs to the **["Latest build" release](../../releases/tag/latest)**
+— on a phone, open that link and download `app-arm64-v8a-release.apk`
+(works on basically any Android phone from the last ~8 years), then
+sideload it. No local Flutter/Android toolchain needed just to try it.
+Login (Google/email) only works in these builds if the repo has
+`SUPABASE_URL`/`SUPABASE_ANON_KEY`/`GOOGLE_WEB_CLIENT_ID` set as Actions
+secrets (see [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md)) — without them the
+build still works fine via the local guest mode, just without cloud login.
+
 This repo is in active development. What exists today:
 
 - **`packages/kawasaki_rideology_ble/`** — a pure-Dart library that speaks the

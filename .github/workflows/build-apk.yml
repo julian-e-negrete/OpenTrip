@@ -1,0 +1,84 @@
+name: Build Android APK
+
+# Builds and publishes the app on every push to main, plus on demand.
+# This is the intended way to get a testable APK onto a phone — it sidesteps
+# any local toolchain setup and any chat-upload flakiness entirely: open the
+# "Latest build" release on GitHub from the phone's browser and download the
+# arm64-v8a APK directly.
+#
+# Login (Google/email) only works in these builds if SUPABASE_URL,
+# SUPABASE_ANON_KEY, and GOOGLE_WEB_CLIENT_ID are set as repo secrets (see
+# docs/AUTH_SETUP.md) — Settings -> Secrets and variables -> Actions.
+# Without them, the build still succeeds and is still fully testable via
+# the local guest mode (auth/current_user.dart); only Google/email sign-in
+# stays unconfigured, same as any local build.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.0"
+          channel: stable
+          cache: true
+
+      - name: Test the Kawasaki BLE protocol package
+        working-directory: packages/kawasaki_rideology_ble
+        run: |
+          dart pub get
+          dart test
+
+      - name: Install app dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Analyze
+        working-directory: apps/mobile
+        run: flutter analyze
+
+      - name: Test
+        working-directory: apps/mobile
+        run: flutter test
+
+      - name: Build release APKs (per-ABI)
+        working-directory: apps/mobile
+        run: |
+          flutter build apk --release --split-per-abi \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+
+      - name: Upload APKs as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opentrip-apks
+          path: apps/mobile/build/app/outputs/flutter-apk/*.apk
+
+      - name: Publish "Latest build" release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest build
+          prerelease: true
+          body: |
+            Automatically built from ${{ github.sha }}. Download
+            `app-arm64-v8a-release.apk` for basically any Android phone
+            from the last ~8 years — sideload it (enable "install unknown
+            apps" for whatever app you downloaded it with) and open it.
+          files: apps/mobile/build/app/outputs/flutter-apk/*.apk
