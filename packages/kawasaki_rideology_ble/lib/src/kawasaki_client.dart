@@ -34,11 +34,20 @@ class KawasakiClient {
   final BikeConfig config;
   final String phoneModel;
 
+  /// Optional sink for human-readable protocol log lines (every frame sent
+  /// and received, handshake progress, timeouts). The library never prints
+  /// on its own — pass a callback (e.g. wired to an in-app log buffer) if
+  /// you want visibility into what's happening on the wire.
+  final void Function(String message)? logger;
+
   KawasakiClient({
     required this.transport,
     required this.config,
     this.phoneModel = 'OpenTrip',
+    this.logger,
   });
+
+  void _log(String message) => logger?.call(message);
 
   final _telemetryController = StreamController<RidingTelemetry>.broadcast();
   final List<Uint8List> _pendingFrames = [];
@@ -56,12 +65,16 @@ class KawasakiClient {
   RidingTelemetry get current => _current;
 
   Future<void> connect() async {
+    _log('BLE: connecting…');
     await transport.connect();
+    _log('BLE: connected, discovering services…');
     await transport.discoverServices();
+    _log('BLE: services discovered, subscribing to notifications');
     _notifySub = transport.notifications.listen(_handleNotify);
   }
 
   Future<void> disconnect() async {
+    _log('BLE: disconnecting');
     await _notifySub?.cancel();
     _notifySub = null;
     await transport.disconnect();
@@ -74,24 +87,33 @@ class KawasakiClient {
   /// have been observed to need this exact shape before they'll start
   /// streaming frame 0x4A telemetry.
   Future<void> runStartupSequence() async {
+    _log('Handshake: starting (${config.startupFrames.length} frames)');
     for (final frameId in config.startupFrames) {
       final shouldWait = config.requireStartupResponses && !config.startupNoWaitFrames.contains(frameId);
       final maxAttempts = shouldWait ? 1 + config.startupRetries : 1;
+      final name = frameName(frameId);
+      final hexId = frameId.toRadixString(16).padLeft(2, '0').toUpperCase();
 
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         final startIndex = _pendingFrames.length;
         await _sendStartupFrame(frameId);
 
-        if (!shouldWait) break;
+        if (!shouldWait) {
+          _log('Handshake: 0x$hexId ($name) sent, not waiting for a response');
+          break;
+        }
 
         try {
-          await _waitForStartupResponse(frameId, startIndex: startIndex);
+          final response = await _waitForStartupResponse(frameId, startIndex: startIndex);
+          _log('Handshake: 0x$hexId ($name) acknowledged — RX ${bytesToHex(response)}');
           break;
         } on TimeoutException {
           if (attempt >= maxAttempts) {
             final (_, expected) = _startupResponseMatcher(frameId);
+            _log('Handshake: 0x$hexId ($name) FAILED after $maxAttempts attempt(s), expected $expected');
             throw KawasakiStartupTimeoutException(frameId, expected);
           }
+          _log('Handshake: 0x$hexId ($name) no response on attempt $attempt/$maxAttempts, retrying');
           await Future<void>.delayed(config.startupRetryDelay);
         }
       }
@@ -100,6 +122,7 @@ class KawasakiClient {
         await Future<void>.delayed(config.startupInterFrameDelay);
       }
     }
+    _log('Handshake: complete');
   }
 
   Future<void> _sendStartupFrame(int frameId) async {
@@ -112,6 +135,7 @@ class KawasakiClient {
       KawiFrame.emcInfo => buildSimpleFrame(KawiFrame.emcInfo, tail: 0x01),
       _ => buildSimpleFrame(frameId),
     };
+    _log('TX 0x${frameId.toRadixString(16).padLeft(2, '0').toUpperCase()} (${frameName(frameId)}): ${bytesToHex(frame)}');
     await transport.writeControlCharacteristic(frame, withResponse: config.controlWriteWithResponse);
   }
 
@@ -202,6 +226,8 @@ class KawasakiClient {
     final frameId = payload[0];
     var updated = false;
 
+    _log('RX 0x${frameId.toRadixString(16).padLeft(2, '0').toUpperCase()} (${frameName(frameId)}): ${bytesToHex(payload)}');
+
     switch (frameId) {
       case KawiFrame.modelInfo:
         final info = parseModelInfo(payload);
@@ -265,6 +291,7 @@ class KawasakiClient {
           tcsLevelLb: mid.tcsLevelLb,
         );
         updated = true;
+        _log('telemetry: speed=${mid.wheelKph}kph rpm=${mid.rpm} gear=${mid.gear} throttle=${mid.throttle?.toStringAsFixed(0)}%');
     }
 
     if (updated) _telemetryController.add(_current);

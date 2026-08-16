@@ -5,7 +5,9 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../logging/log_buffer.dart';
 import '../vehicle/flutter_blue_plus_transport.dart';
+import 'log_screen.dart';
 
 /// Minimal demo screen: scan for a Kawasaki Rideology-equipped bike,
 /// connect, run the startup handshake, and show live telemetry. This is
@@ -41,22 +43,33 @@ class _VehicleScreenState extends State<VehicleScreen> {
       _state = _ConnectionState.scanning;
       _errorMessage = null;
     });
+    logBuffer.add('--- New connection attempt ---');
 
     try {
       await _ensurePermissions();
 
+      logBuffer.add('Scan: looking for a device advertising as ${kAdvertisedNamePrefixes.join(" or ")}…');
       final result = await _findBike();
       if (result == null) {
+        logBuffer.add('Scan: timed out, no matching device found');
         setState(() {
           _state = _ConnectionState.error;
           _errorMessage = 'No Kawasaki-* bike found nearby. Make sure it\'s on and in range.';
         });
         return;
       }
+      logBuffer.add(
+        'Scan: found "${result.advertisementData.advName}" '
+        '(${result.device.remoteId}), RSSI ${result.rssi}',
+      );
 
       setState(() => _state = _ConnectionState.connecting);
       final transport = FlutterBluePlusTransport(result.device);
-      final client = KawasakiClient(transport: transport, config: z500Er500fConfig);
+      final client = KawasakiClient(
+        transport: transport,
+        config: z500Er500fConfig,
+        logger: logBuffer.add,
+      );
       await client.connect();
 
       setState(() => _state = _ConnectionState.handshaking);
@@ -71,6 +84,7 @@ class _VehicleScreenState extends State<VehicleScreen> {
         _state = _ConnectionState.connected;
       });
     } catch (e) {
+      logBuffer.add('ERROR: $e');
       setState(() {
         _state = _ConnectionState.error;
         _errorMessage = e.toString();
@@ -79,11 +93,15 @@ class _VehicleScreenState extends State<VehicleScreen> {
   }
 
   Future<void> _ensurePermissions() async {
-    await [
+    logBuffer.add('Requesting Bluetooth scan/connect + location permissions…');
+    final statuses = await [
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
       Permission.locationWhenInUse,
     ].request();
+    for (final entry in statuses.entries) {
+      logBuffer.add('Permission ${entry.key}: ${entry.value}');
+    }
   }
 
   Future<ScanResult?> _findBike() async {
@@ -91,6 +109,9 @@ class _VehicleScreenState extends State<VehicleScreen> {
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
       for (final r in results) {
         final name = r.advertisementData.advName;
+        if (name.isNotEmpty) {
+          logBuffer.add('Scan: saw "$name" (${r.device.remoteId}), RSSI ${r.rssi}');
+        }
         if (kAdvertisedNamePrefixes.any(name.startsWith)) {
           if (!completer.isCompleted) completer.complete(r);
         }
@@ -110,7 +131,18 @@ class _VehicleScreenState extends State<VehicleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Vehicle')),
+      appBar: AppBar(
+        title: const Text('Vehicle'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.article_outlined),
+            tooltip: 'BLE logs',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LogScreen()),
+            ),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: switch (_state) {

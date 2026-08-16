@@ -86,6 +86,11 @@ String frameName(int? frameId) {
   return names[frameId] ?? 'unknown_0x${frameId.toRadixString(16).padLeft(2, '0').toUpperCase()}';
 }
 
+/// `[0x4a, 0x01, 0x02]` -> `"4A0102"`. Used for human-readable BLE logging.
+String bytesToHex(List<int> bytes) => bytes
+    .map((b) => (b & 0xFF).toRadixString(16).padLeft(2, '0').toUpperCase())
+    .join();
+
 String ackResultText(int? resultCode) {
   if (resultCode == null) return 'unknown';
   if (resultCode == 0x00) return 'accepted';
