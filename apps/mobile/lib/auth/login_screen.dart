@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../config/app_config.dart';
 import 'auth_service.dart';
 
 enum _EmailStep { enterEmail, enterCode }
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  const LoginScreen({super.key, required this.onContinueAsGuest});
+
+  /// Called when the user chooses to skip login and use the app with
+  /// on-device-only data. See auth/current_user.dart.
+  final VoidCallback onContinueAsGuest;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -41,8 +46,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _signInWithGoogle() => _run(() async {
     await AuthService.instance.signInWithGoogle();
-    // On success, the auth-state listener in main.dart navigates away from
-    // this screen — nothing else to do here.
   });
 
   Future<void> _sendCode() => _run(() async {
@@ -83,11 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
-                FilledButton.icon(
-                  onPressed: _busy ? null : _signInWithGoogle,
-                  icon: const Icon(Icons.account_circle_outlined),
-                  label: const Text('Continue with Google'),
-                ),
+                if (AppConfig.isSupabaseConfigured) ..._buildLoginOptions() else _buildNotConfiguredNotice(context),
                 const SizedBox(height: 24),
                 const Row(
                   children: [
@@ -97,42 +96,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                if (_step == _EmailStep.enterEmail) ...[
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _busy ? null : _sendCode,
-                    child: const Text('Send sign-in code'),
-                  ),
-                ] else ...[
-                  Text('Enter the code sent to ${_emailController.text.trim()}'),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _codeController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: '6-digit code',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _busy ? null : _verifyCode,
-                    child: const Text('Verify & sign in'),
-                  ),
-                  TextButton(
-                    onPressed: _busy ? null : () => setState(() => _step = _EmailStep.enterEmail),
-                    child: const Text('Use a different email'),
-                  ),
-                ],
+                OutlinedButton(
+                  onPressed: widget.onContinueAsGuest,
+                  child: const Text('Continue without an account'),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Vehicles and trips stay on this device only, until you sign in.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
                 if (_busy) ...[
                   const SizedBox(height: 16),
                   const Center(child: CircularProgressIndicator()),
@@ -147,5 +120,60 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildNotConfiguredNotice(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Icon(Icons.settings_outlined),
+            const SizedBox(height: 8),
+            Text(
+              'Google/email sign-in isn\'t configured for this build yet — '
+              'see docs/AUTH_SETUP.md. Everything else works without it:',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildLoginOptions() {
+    return [
+      FilledButton.icon(
+        onPressed: _busy ? null : _signInWithGoogle,
+        icon: const Icon(Icons.account_circle_outlined),
+        label: const Text('Continue with Google'),
+      ),
+      const SizedBox(height: 24),
+      if (_step == _EmailStep.enterEmail) ...[
+        TextField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(onPressed: _busy ? null : _sendCode, child: const Text('Send sign-in code')),
+      ] else ...[
+        Text('Enter the code sent to ${_emailController.text.trim()}'),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _codeController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: '6-digit code', border: OutlineInputBorder()),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton(onPressed: _busy ? null : _verifyCode, child: const Text('Verify & sign in')),
+        TextButton(
+          onPressed: _busy ? null : () => setState(() => _step = _EmailStep.enterEmail),
+          child: const Text('Use a different email'),
+        ),
+      ],
+    ];
   }
 }

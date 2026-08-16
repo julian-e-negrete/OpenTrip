@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth/auth_service.dart';
 import 'auth/login_screen.dart';
-import 'auth/supabase_not_configured_screen.dart';
 import 'config/app_config.dart';
 import 'home_shell.dart';
 import 'logging/log_buffer.dart';
@@ -46,24 +45,40 @@ class OpenTripApp extends StatelessWidget {
     return MaterialApp(
       title: 'OpenTrip',
       theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true, brightness: Brightness.dark),
-      home: AppConfig.isSupabaseConfigured ? const _AuthGate() : const SupabaseNotConfiguredScreen(),
+      home: const _AuthGate(),
     );
   }
 }
 
-/// Shows the login screen or the signed-in app shell, following Supabase's
-/// auth-state stream so sign-in/sign-out anywhere (including a token
-/// expiring) updates this immediately.
-class _AuthGate extends StatelessWidget {
+/// Decides between the login screen and the app shell. Two independent
+/// ways to reach the shell: a real Supabase sign-in, or the "Continue
+/// without an account" guest path (see auth/current_user.dart) — the
+/// latter works even when Supabase was never configured for this build,
+/// which is what makes every on-device feature (vehicles, GPS recording,
+/// BLE) testable with zero backend setup.
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
 
   @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _guestMode = false;
+
+  void _continueAsGuest() => setState(() => _guestMode = true);
+
+  @override
   Widget build(BuildContext context) {
+    if (!AppConfig.isSupabaseConfigured) {
+      return _guestMode ? const HomeShell() : LoginScreen(onContinueAsGuest: _continueAsGuest);
+    }
     return StreamBuilder<AuthState>(
       stream: AuthService.instance.onAuthStateChange,
       builder: (context, snapshot) {
         final signedIn = AuthService.instance.isSignedIn;
-        return signedIn ? const HomeShell() : const LoginScreen();
+        if (signedIn || _guestMode) return const HomeShell();
+        return LoginScreen(onContinueAsGuest: _continueAsGuest);
       },
     );
   }

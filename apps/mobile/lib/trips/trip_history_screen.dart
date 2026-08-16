@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../auth/auth_service.dart';
+import '../auth/current_user.dart';
 import '../data/models/trip.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
@@ -19,8 +19,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   Map<String, Vehicle> _vehiclesById = {};
   bool _loading = true;
 
-  String get _userId => AuthService.instance.currentUser!.id;
-
   @override
   void initState() {
     super.initState();
@@ -28,8 +26,9 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   }
 
   Future<void> _load() async {
-    final trips = await TripRepository.instance.listForUser(_userId);
-    final vehicles = await VehicleRepository.instance.listForUser(_userId);
+    final userId = await CurrentUser.instance.id();
+    final trips = await TripRepository.instance.listForUser(userId);
+    final vehicles = await VehicleRepository.instance.listForUser(userId);
     if (!mounted) return;
     setState(() {
       _trips = trips;

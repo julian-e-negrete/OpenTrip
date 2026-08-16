@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../auth/auth_service.dart';
+import '../auth/current_user.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/vehicle_repository.dart';
 
@@ -14,8 +14,7 @@ class VehicleListScreen extends StatefulWidget {
 class _VehicleListScreenState extends State<VehicleListScreen> {
   List<Vehicle> _vehicles = [];
   bool _loading = true;
-
-  String get _userId => AuthService.instance.currentUser!.id;
+  late String _userId;
 
   @override
   void initState() {
@@ -24,6 +23,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   }
 
   Future<void> _load() async {
+    _userId = await CurrentUser.instance.id();
     final vehicles = await VehicleRepository.instance.listForUser(_userId);
     if (!mounted) return;
     setState(() {

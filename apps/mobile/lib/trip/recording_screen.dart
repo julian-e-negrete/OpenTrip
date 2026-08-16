@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
-import '../auth/auth_service.dart';
+import '../auth/current_user.dart';
 import '../data/models/trip.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
@@ -54,7 +54,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   int? _bleMinWaterTemp;
   int? _bleMaxWaterTemp;
 
-  String get _userId => AuthService.instance.currentUser!.id;
+  late String _userId;
 
   bool get _vehicleSupportsBle => _selectedVehicle?.bleConnector == VehicleBleConnector.kawasakiRideology;
 
@@ -75,6 +75,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
   }
 
   Future<void> _loadVehicles() async {
+    _userId = await CurrentUser.instance.id();
     final vehicles = await VehicleRepository.instance.listForUser(_userId);
     if (!mounted) return;
     setState(() {
