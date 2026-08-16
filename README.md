@@ -4,7 +4,7 @@ A free, open-source driving trip tracker for Android and iOS — the same idea a
 apps like TripRank, but with no subscription, no paywalled features, and a
 codebase anyone can audit, self-host, or extend.
 
-This repo is in early scaffolding. What exists today:
+This repo is in active development. What exists today:
 
 - **`packages/kawasaki_rideology_ble/`** — a pure-Dart library that speaks the
   Kawasaki Rideology BLE protocol directly, so the app can read live bike
@@ -13,12 +13,17 @@ This repo is in early scaffolding. What exists today:
   (ER500F platform)**, which covers the 2024–2026 Z500/Z500 ABS/Ninja 500
   generation. See that package's README for protocol details and the
   [validation caveat](#z500-abs-2026-validation-status) below.
-- **`apps/mobile/`** — a minimal Flutter app skeleton wiring the Kawasaki
-  package to a live telemetry screen. Not yet a trip tracker — see
-  [docs/ROADMAP.md](docs/ROADMAP.md) for what's next (GPS recording, maps,
-  leaderboards, backend).
-- **`docs/`** — the vehicle-connector plugin architecture, and a step-by-step
-  guide for capturing and validating a new bike's BLE traffic.
+- **`apps/mobile/`** — the Flutter app: Google/email login, multi-vehicle
+  management, GPS trip recording with a live distance/speed/duration screen,
+  trip history, and the Kawasaki BLE telemetry screen with an in-app log
+  viewer for on-device debugging. Builds and installs as a real Android APK
+  today; see [docs/ROADMAP.md](docs/ROADMAP.md) for what's next (cloud sync,
+  maps, background recording, leaderboards).
+- **`docs/`** — the vehicle-connector plugin architecture, a step-by-step
+  guide for capturing and validating a new bike's BLE traffic, and how to
+  configure login ([`AUTH_SETUP.md`](docs/AUTH_SETUP.md) — you'll need your
+  own free Supabase project and Google OAuth client; nothing shared is
+  pre-configured, by design, since this is meant to be self-hostable).
 
 ## Why this exists
 

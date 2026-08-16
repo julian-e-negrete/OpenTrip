@@ -1,0 +1,66 @@
+import 'package:flutter/material.dart';
+
+import '../data/models/trip.dart';
+import '../data/models/vehicle.dart';
+
+/// Trip stats only — no map rendering yet. Route points are already being
+/// recorded and persisted (see data/repositories/trip_repository.dart's
+/// pointsForTrip), so a map view is a UI-only follow-up once MapLibre is
+/// wired in (/docs/ROADMAP.md).
+class TripDetailScreen extends StatelessWidget {
+  const TripDetailScreen({super.key, required this.trip, required this.vehicle});
+
+  final Trip trip;
+  final Vehicle? vehicle;
+
+  String _fmtDuration(int seconds) {
+    final d = Duration(seconds: seconds);
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(vehicle?.name ?? 'Trip')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          _Row('Started', trip.startedAt.toLocal().toString().substring(0, 19)),
+          if (trip.endedAt != null) _Row('Ended', trip.endedAt!.toLocal().toString().substring(0, 19)),
+          _Row('Distance', '${trip.distanceKm.toStringAsFixed(2)} km'),
+          _Row('Duration', _fmtDuration(trip.durationSeconds)),
+          _Row(
+            'Average speed',
+            trip.avgSpeedKph == null ? '—' : '${trip.avgSpeedKph!.toStringAsFixed(1)} km/h',
+          ),
+          _Row(
+            'Max speed',
+            trip.maxSpeedKph == null ? '—' : '${trip.maxSpeedKph!.toStringAsFixed(1)} km/h',
+          ),
+          _Row('GPS points recorded', '${trip.pointCount}'),
+        ],
+      ),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  const _Row(this.label, this.value);
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+}

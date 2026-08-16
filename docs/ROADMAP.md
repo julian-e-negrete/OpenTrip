@@ -7,44 +7,53 @@
   trip tracker actually needs (live telemetry, odometer/trip, temps),
   startup-handshake orchestration, and golden-fixture tests ported from
   real captured frames.
-- **Flutter app skeleton** (`apps/mobile/`) wiring that connector to a
-  live-telemetry screen via `flutter_blue_plus`.
+- **Flutter app + platform scaffolding** (`apps/mobile/`): real `android/`
+  (built and installable) and `ios/` (scaffolded, unbuildable without a
+  Mac) projects, wired to the BLE connector via `flutter_blue_plus`, plus
+  an in-app BLE log viewer (`screens/log_screen.dart`) with one-tap
+  copy-to-clipboard for pulling logs off a phone with no computer.
+- **Auth** (`auth/`): Google sign-in (native ID-token flow) and
+  passwordless email (6-digit OTP, no deep-linking needed) via Supabase
+  Auth. Fails loud with setup instructions
+  (`auth/supabase_not_configured_screen.dart`) rather than crashing when
+  no Supabase project is wired in yet — see `docs/AUTH_SETUP.md` for the
+  (unavoidable, you-bring-your-own-project) setup steps.
+- **Multi-vehicle trip recording** (`data/`, `trip/`, `vehicles/`,
+  `trips/`): on-device SQLite (vehicles / trips / trip_points tables,
+  scoped per signed-in user), a vehicle CRUD screen, a GPS recorder
+  (`trip/location_recorder.dart` — haversine distance, GPS-glitch
+  rejection, accuracy filtering) with a live start/stop recording screen,
+  and trip history + detail views.
 
-## Not done yet — this is a vehicle-connector slice, not a full app
+## Not done yet
 
-The original ask was "the same thing TripRank does, but free and open" —
-GPS trip recording, distance/territory leaderboards, trip history, social
-features — *plus* direct vehicle telemetry. Only the vehicle-telemetry
-half exists so far. In rough build order:
-
-1. **Platform scaffolding.** `apps/mobile/` has a `pubspec.yaml` and
-   `lib/`, but no `android/`/`ios/` platform folders yet — those need
-   `flutter create .` run from a machine with the Flutter SDK installed
-   (unavailable in the environment this was built in). Also needs Android
-   manifest entries for `BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT`/location
-   permissions, and iOS `Info.plist` entries for Bluetooth + location
-   usage descriptions.
-2. **GPS trip recording core.** Background location capture (start/stop
-   detection, route as a point sequence), distance/duration/speed
-   calculation. `OpenTracks` (F-Droid) is a solid reference for the
-   battery-efficient recording pattern.
-3. **Local trip storage + history UI.** SQLite/Drift for on-device trip
-   records before anything touches a server.
-4. **Maps.** MapLibre GL + OpenStreetMap tiles for route replay — no
-   Mapbox/Google billing dependency.
-5. **Backend for leaderboards/social.** Self-hostable by design (matches
-   this project's "free and open" premise) — Supabase (Postgres + PostGIS
-   + Auth + Realtime, itself open-source and self-hostable) is a
-   reasonable default; `FitTrackee`/`Endurain` are useful references for
-   the self-hosted-activity-tracker shape.
-6. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
+1. **Cloud sync.** Trips/vehicles are local-only right now — login
+   establishes *who you are* (and is required to record a trip, since
+   every local row is scoped to a user id) but nothing is pushed to
+   Supabase's Postgres yet. That's the natural next slice once auth is
+   confirmed working end-to-end: mirror `data/local_database.dart`'s
+   schema into Supabase tables with row-level security scoped to
+   `auth.uid()`, then sync opportunistically when online.
+2. **Background recording.** GPS tracking currently only runs while the
+   app is in the foreground — `geolocator`'s stream stops if Android kills
+   the app in the background. A foreground service (e.g.
+   `flutter_foreground_task`, MIT-licensed) is the fix; not added yet to
+   keep this slice's scope verifiable in one pass.
+3. **Maps.** Route points are already being recorded and persisted
+   per-trip — `trips/trip_detail_screen.dart` shows stats only, no map.
+   MapLibre GL + OpenStreetMap tiles is still the plan (no Mapbox/Google
+   billing dependency).
+4. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
    ranked categories (distance, longest drive, territory explored,
-   trophies) — deliberately *not* speed-based, both because that's the
-   safer design and because it sidesteps encouraging risky riding.
-7. **Wire vehicle telemetry into trip records.** Once (2) exists, a
-   connected bike's speed/RPM/lean/brake data should attach to the GPS
-   trip as enrichment — this is where the Kawasaki connector actually pays
-   off for the tracker, beyond being a standalone live-telemetry screen.
+   trophies) — deliberately *not* speed-based. Needs cloud sync (1) first,
+   since leaderboards are inherently cross-user.
+5. **Wire vehicle telemetry into trip records.** A vehicle can be flagged
+   `kawasakiRideology` today (`data/models/vehicle.dart`), but the
+   recording screen doesn't yet connect to it and attach live telemetry
+   (speed/RPM/lean/brake) to the trip — that's where the BLE connector
+   actually pays off for the tracker, beyond being a standalone demo
+   screen. Straightforward once (2) exists, since both need the app alive
+   in the background during a ride.
 
 ## Explicitly deferred inside the Kawasaki connector itself
 

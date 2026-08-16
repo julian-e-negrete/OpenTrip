@@ -12,12 +12,18 @@
         android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
         android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="30" />
 
     <!-- Declares this app uses Bluetooth LE, but doesn't require it (some
          tablets/desktops running Android have no BLE radio). -->
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+
+    <!-- GPS trip recording (docs/ROADMAP.md) and pre-Android-12 BLE
+         scanning both need this — unrestricted, not capped to old SDKs. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Supabase auth/sync network calls. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:label="opentrip_mobile"

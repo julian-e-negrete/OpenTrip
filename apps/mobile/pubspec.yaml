@@ -18,6 +18,17 @@ dependencies:
   # BLE transport for the vehicle-connector layer.
   flutter_blue_plus: ^1.32.12
   permission_handler: ^11.3.1
+  # Auth + (future) sync backend. Supabase is open-source and self-hostable,
+  # matching this project's "free and open" premise — see /docs/AUTH_SETUP.md
+  # for what you need to configure before login actually works.
+  supabase_flutter: ^2.5.6
+  google_sign_in: ^6.2.1
+  # Local-first trip/vehicle storage (works with zero backend configured).
+  sqflite: ^2.3.3
+  path: ^1.9.0
+  uuid: ^4.4.0
+  # GPS trip recording.
+  geolocator: ^13.0.1
 
 dev_dependencies:
   flutter_test:
