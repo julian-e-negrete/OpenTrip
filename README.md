@@ -49,14 +49,25 @@ the way Kawasaki's Rideology app or CFMoto's MotoPlay do for their own bikes.
 
 ## Z500 ABS 2026 validation status
 
-The bundled config (`z500_er500f_config.json`) comes from a real capture
-against a Z500 (ER500F platform), reverse-engineered by the upstream Home
-Assistant project this connector is ported from. The Z500 ABS 2026 model
-year shares that ER500F chassis/ECU platform, so the same GATT service,
-frame protocol, and field layout are very likely to apply unchanged —
-Kawasaki has not been observed to change the BLE protocol between trims or
-model years on this platform. **It has not been verified against a physical
-2026 Z500 ABS unit by this project.** If you have access to the bike:
+**Confirmed working against a real 2026 Z500 ABS unit.** The bike
+connected, completed the startup handshake, and streamed live telemetry
+that decoded to physically self-consistent values while parked: gear 0
+(neutral), speed 0, RPM 0, throttle 0%, and — notably — both water
+temperature and inlet air temperature independently decoded to the same
+16°C cold-engine reading from two different byte offsets using the same
+`raw − 40` formula. That kind of agreement between independently-gated
+fields is a strong signal the byte offsets and scaling are correct, not
+just that the connection didn't crash. The 0x4B (riding-log-high) frames
+this unit sent were all `0xFF` padding, confirming the "not exposed on
+this platform" note in `packages/kawasaki_rideology_ble/README.md`.
+
+The bundled config (`z500_er500f_config.json`) originally comes from a
+capture against a Z500 (ER500F platform), reverse-engineered by the
+upstream Home Assistant project this connector is ported from — the 2026
+Z500 ABS confirmation above shows that config applies unchanged across
+model years on this platform, as expected.
+
+If you hit a field that looks wrong on your own unit:
 
 1. Follow [`docs/CAPTURE_GUIDE.md`](docs/CAPTURE_GUIDE.md) to capture an HCI
    snoop log while pairing/using the official Rideology app.

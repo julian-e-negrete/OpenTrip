@@ -3,10 +3,9 @@
 // (Apache License 2.0). See /NOTICE.md at the repo root.
 //
 // Covers the ER500F platform: Z500 / Z500 ABS / Ninja 500 (2024+
-// generation). Captured and validated against a real Z500. NOT yet
-// independently re-validated against a 2026 Z500 ABS unit specifically —
-// see /README.md "Z500 ABS 2026 validation status" and
-// /docs/CAPTURE_GUIDE.md if you have one and want to confirm/correct this.
+// generation). Captured and validated against a real Z500, and confirmed
+// working against a real 2026 Z500 ABS unit — see /README.md "Z500 ABS
+// 2026 validation status" for details.
 //
 // The original JSON this was translated from ships alongside this file
 // (z500_er500f_config.json) for provenance/diffing; the app uses this Dart
