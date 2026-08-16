@@ -1,0 +1,28 @@
+name: opentrip_mobile
+description: >
+  Open-source, free driving trip tracker for Android and iOS, with direct
+  vehicle telemetry over BLE for supported bikes (starting with Kawasaki
+  Rideology-equipped models). No subscription, no paywalled features.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  kawasaki_rideology_ble:
+    path: ../../packages/kawasaki_rideology_ble
+  # BLE transport for the vehicle-connector layer.
+  flutter_blue_plus: ^1.32.12
+  permission_handler: ^11.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

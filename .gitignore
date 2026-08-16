@@ -1,0 +1,26 @@
+# Dart / Flutter
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.g.dart
+*.freezed.dart
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+
+# Android
+apps/mobile/android/local.properties
+apps/mobile/android/.gradle/
+apps/mobile/android/**/gradle-wrapper.jar
+
+# iOS
+apps/mobile/ios/Pods/
+apps/mobile/ios/.symlinks/
+apps/mobile/ios/Flutter/Flutter.podspec

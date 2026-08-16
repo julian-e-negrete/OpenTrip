@@ -1,0 +1,22 @@
+name: kawasaki_rideology_ble
+description: >
+  Independent, open-source Dart client for the Kawasaki Rideology BLE
+  protocol. Reads live motorcycle telemetry (speed, RPM, gear, lean,
+  brake pressure, temperatures, odometer) directly from compatible bikes
+  without the official Rideology app. Unofficial, unaffiliated with
+  Kawasaki Motors, Ltd.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+# Deliberately has NO Flutter or BLE-plugin dependency. The BLE transport
+# (scan/connect/discover/write/notify) is injected by the app through the
+# BleTransport interface in lib/src/transport.dart, so this package can be
+# unit tested with plain `dart test` and reused outside Flutter.
+dependencies: {}
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^4.0.0
