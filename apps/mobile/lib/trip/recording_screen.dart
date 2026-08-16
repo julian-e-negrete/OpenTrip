@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
 import '../auth/current_user.dart';
+import '../data/data_events.dart';
 import '../data/models/trip.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
@@ -62,10 +63,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
   void initState() {
     super.initState();
     _loadVehicles();
+    // This screen lives inside HomeShell's IndexedStack, so initState only
+    // ever runs once — reload the vehicle list whenever one is
+    // added/edited/deleted elsewhere (e.g. the Vehicles tab), instead of
+    // staying stuck on whatever existed at the moment this tab first
+    // mounted. See data/data_events.dart.
+    DataEvents.instance.listenable.addListener(_loadVehicles);
   }
 
   @override
   void dispose() {
+    DataEvents.instance.listenable.removeListener(_loadVehicles);
     _pointSub?.cancel();
     _statsSub?.cancel();
     _bleTelemetrySub?.cancel();
@@ -80,7 +88,15 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (!mounted) return;
     setState(() {
       _vehicles = vehicles;
-      _selectedVehicle = vehicles.isEmpty ? null : vehicles.first;
+      // Keep the current selection if it still exists (e.g. a vehicle was
+      // added elsewhere while this tab already had one picked, possibly
+      // mid-recording) — only fall back to the first vehicle if it's gone
+      // or nothing was selected yet.
+      final selected = _selectedVehicle;
+      final stillExists = selected != null && vehicles.any((v) => v.id == selected.id);
+      if (!stillExists) {
+        _selectedVehicle = vehicles.isEmpty ? null : vehicles.first;
+      }
       _loadingVehicles = false;
     });
   }

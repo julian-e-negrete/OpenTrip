@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
+import '../data/data_events.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/vehicle_repository.dart';
 
@@ -20,6 +21,16 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   void initState() {
     super.initState();
     _load();
+    // This screen lives inside HomeShell's IndexedStack, so initState only
+    // ever runs once — reload whenever any repository reports a change,
+    // not just after this screen's own actions. See data/data_events.dart.
+    DataEvents.instance.listenable.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    DataEvents.instance.listenable.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

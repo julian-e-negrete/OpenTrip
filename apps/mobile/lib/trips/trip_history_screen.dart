@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
+import '../data/data_events.dart';
 import '../data/models/trip.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
@@ -23,6 +24,16 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   void initState() {
     super.initState();
     _load();
+    // This screen lives inside HomeShell's IndexedStack, so initState only
+    // ever runs once — reload whenever a trip is started/finished/deleted
+    // elsewhere. See data/data_events.dart.
+    DataEvents.instance.listenable.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    DataEvents.instance.listenable.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {

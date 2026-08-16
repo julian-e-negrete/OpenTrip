@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../data_events.dart';
 import '../local_database.dart';
 import '../models/vehicle.dart';
 
@@ -36,16 +37,19 @@ class VehicleRepository {
     );
     final db = await LocalDatabase.instance.database;
     await db.insert('vehicles', vehicle.toRow());
+    DataEvents.instance.notifyChanged();
     return vehicle;
   }
 
   Future<void> update(Vehicle vehicle) async {
     final db = await LocalDatabase.instance.database;
     await db.update('vehicles', vehicle.toRow(), where: 'id = ?', whereArgs: [vehicle.id]);
+    DataEvents.instance.notifyChanged();
   }
 
   Future<void> delete(String vehicleId) async {
     final db = await LocalDatabase.instance.database;
     await db.delete('vehicles', where: 'id = ?', whereArgs: [vehicleId]);
+    DataEvents.instance.notifyChanged();
   }
 }

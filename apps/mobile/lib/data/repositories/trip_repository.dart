@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../data_events.dart';
 import '../local_database.dart';
 import '../models/trip.dart';
 import '../models/trip_point.dart';
@@ -14,12 +15,16 @@ class TripRepository {
     final trip = Trip(id: _uuid.v4(), userId: userId, vehicleId: vehicleId, startedAt: DateTime.now());
     final db = await LocalDatabase.instance.database;
     await db.insert('trips', trip.toRow());
+    DataEvents.instance.notifyChanged();
     return trip;
   }
 
   /// Appends points in one transaction — called periodically while
   /// recording (see trip/location_recorder.dart), not once per GPS fix,
-  /// to keep SQLite write volume reasonable.
+  /// to keep SQLite write volume reasonable. Deliberately doesn't fire
+  /// DataEvents — that would make Trip history reload on every batch
+  /// while a trip is being recorded, for no visible benefit (the list
+  /// view doesn't show live point counts).
   Future<void> appendPoints(List<TripPoint> points) async {
     if (points.isEmpty) return;
     final db = await LocalDatabase.instance.database;
@@ -33,6 +38,7 @@ class TripRepository {
   Future<Trip> finishTrip(Trip finished) async {
     final db = await LocalDatabase.instance.database;
     await db.update('trips', finished.toRow(), where: 'id = ?', whereArgs: [finished.id]);
+    DataEvents.instance.notifyChanged();
     return finished;
   }
 
@@ -72,5 +78,6 @@ class TripRepository {
   Future<void> deleteTrip(String tripId) async {
     final db = await LocalDatabase.instance.database;
     await db.delete('trips', where: 'id = ?', whereArgs: [tripId]);
+    DataEvents.instance.notifyChanged();
   }
 }
