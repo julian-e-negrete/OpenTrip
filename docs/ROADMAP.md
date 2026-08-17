@@ -152,6 +152,21 @@
   timestamp, so it can't be used to reconstruct anyone's actual path.
   Reachable via a map icon on the Leaderboard screen; guests get the
   same "sign in" gate as the leaderboard itself.
+- **One shared BLE connection, not two** (`vehicle/ble_connection_service.dart`):
+  the standalone Vehicle tab (`screens/vehicle_screen.dart`) and the
+  Record tab's "Connect bike" card (`trip/recording_screen.dart`) used to
+  each run their own `KawasakiConnector.connect()` and own a separate
+  `KawasakiClient` — connecting on one tab and switching to the other
+  triggered a second, independent scan + GATT connect to the same bike,
+  which most BLE peripherals (this one included) reject or silently
+  drop the first connection over. Fixed with a singleton
+  (`BleConnectionService.instance`) that owns the one real connection;
+  both screens read and drive it through there instead. Connecting or
+  disconnecting on either tab now shows up on both immediately. As a
+  consequence, ending a trip recording no longer auto-disconnects the
+  bike (it used to) — disconnecting is now a user action on either tab,
+  not tied to a trip's lifecycle, since the connection can outlive any
+  one screen that's using it.
 - **Trip deletion** (`trips/trip_history_screen.dart`,
   `trips/trip_detail_screen.dart`): swipe a trip left in the list, or use
   the delete icon on its detail screen — both confirm first. Removes the

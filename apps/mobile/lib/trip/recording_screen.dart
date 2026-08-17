@@ -11,7 +11,7 @@ import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../gamification/gamification_service.dart';
-import '../vehicle/kawasaki_connector.dart';
+import '../vehicle/ble_connection_service.dart';
 import 'location_recorder.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -24,8 +24,6 @@ class RecordingScreen extends StatefulWidget {
 /// How many points to buffer before writing them to SQLite as a batch —
 /// keeps write volume sane on a long trip without losing much on a crash.
 const _flushEvery = 20;
-
-enum _BleState { none, connecting, connected, failed }
 
 class _RecordingScreenState extends State<RecordingScreen> {
   final _recorder = LocationRecorder();
@@ -41,13 +39,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
   StreamSubscription<TripPoint>? _pointSub;
   StreamSubscription<RecordingStats>? _statsSub;
 
-  // Optional live vehicle telemetry (see vehicle/kawasaki_connector.dart).
-  // Independent of GPS recording — a bike connection can fail or never be
-  // attempted and the trip is still saved as GPS-only.
-  _BleState _bleState = _BleState.none;
-  String? _bleError;
-  KawasakiClient? _bleClient;
-  RidingTelemetry? _bleLatest;
+  // Optional live vehicle telemetry over the connection shared with the
+  // Vehicle tab (see vehicle/ble_connection_service.dart) — independent
+  // of GPS recording, a bike connection can fail, never be attempted, or
+  // already be connected from the other tab, and the trip is still saved
+  // fine either way (GPS-only if so).
+  final _ble = BleConnectionService.instance;
+
+  // Trip-scoped subscription to every telemetry frame, for max/min
+  // tracking below — separate from _ble.telemetryNotifier (just the
+  // latest snapshot, for display), and only live while a trip is
+  // actually recording, so idle time connected-but-not-recording doesn't
+  // get folded into a trip's bike stats.
   StreamSubscription<RidingTelemetry>? _bleTelemetrySub;
   double? _bleMaxSpeedKph;
   int? _bleMaxRpm;
@@ -70,15 +73,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
     // staying stuck on whatever existed at the moment this tab first
     // mounted. See data/data_events.dart.
     DataEvents.instance.listenable.addListener(_loadVehicles);
+    // The bike connection is shared with the Vehicle tab (see
+    // vehicle/ble_connection_service.dart) — react to it changing from
+    // over there too, not just from this screen's own Connect/Disconnect
+    // buttons.
+    _ble.stateNotifier.addListener(_onBleStateChanged);
+    _ble.telemetryNotifier.addListener(_onBleTelemetryNotifierChanged);
   }
 
   @override
   void dispose() {
     DataEvents.instance.listenable.removeListener(_loadVehicles);
+    _ble.stateNotifier.removeListener(_onBleStateChanged);
+    _ble.telemetryNotifier.removeListener(_onBleTelemetryNotifierChanged);
     _pointSub?.cancel();
     _statsSub?.cancel();
     _bleTelemetrySub?.cancel();
-    _bleClient?.dispose();
+    // Deliberately doesn't call _ble.disconnect() — this is a shared
+    // connection (see vehicle/ble_connection_service.dart), so this
+    // screen going away shouldn't drop it out from under the Vehicle tab.
     _recorder.dispose();
     super.dispose();
   }
@@ -102,29 +115,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
     });
   }
 
-  Future<void> _connectBike() async {
-    setState(() {
-      _bleState = _BleState.connecting;
-      _bleError = null;
-    });
-    try {
-      await KawasakiConnector.ensurePermissions();
-      final result = await KawasakiConnector.findBike();
-      if (result == null) {
-        throw StateError('No Kawasaki-* bike found nearby.');
-      }
-      final client = await KawasakiConnector.connect(result: result);
-      _bleTelemetrySub = client.telemetry.listen(_onBleTelemetry);
-      setState(() {
-        _bleClient = client;
-        _bleState = _BleState.connected;
-      });
-    } catch (e) {
-      setState(() {
-        _bleState = _BleState.failed;
-        _bleError = e.toString();
-      });
+  /// Starts (or joins) the trip-scoped accumulation subscription whenever
+  /// the shared connection is up and a trip is actively recording, and
+  /// tears it down the moment either stops being true — whether that
+  /// change came from this screen's own buttons or from the Vehicle tab.
+  void _onBleStateChanged() {
+    final connected = _ble.isConnected;
+    if (connected && _activeTrip != null && _bleTelemetrySub == null) {
+      _bleTelemetrySub = _ble.telemetryStream!.listen(_onBleTelemetry);
+    } else if (!connected && _bleTelemetrySub != null) {
+      unawaited(_bleTelemetrySub!.cancel());
+      _bleTelemetrySub = null;
     }
+    if (mounted) setState(() {});
+  }
+
+  void _onBleTelemetryNotifierChanged() {
+    if (mounted) setState(() {});
   }
 
   void _onBleTelemetry(RidingTelemetry t) {
@@ -147,15 +154,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _bleMaxWaterTemp = t.waterTemperatureC;
       }
     }
-    if (mounted) setState(() => _bleLatest = t);
-  }
-
-  Future<void> _disconnectBike() async {
-    await _bleTelemetrySub?.cancel();
-    _bleTelemetrySub = null;
-    await _bleClient?.dispose();
-    _bleClient = null;
-    if (mounted) setState(() => _bleState = _BleState.none);
   }
 
   Future<void> _start() async {
@@ -174,6 +172,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _statsSub = _recorder.statsStream.listen((stats) {
         if (mounted) setState(() => _stats = stats);
       });
+
+      // The bike may already be connected from earlier (this tab or the
+      // Vehicle tab) — start folding its telemetry into this trip's
+      // max/min stats right away rather than waiting for a state change.
+      if (_ble.isConnected && _bleTelemetrySub == null) {
+        _bleTelemetrySub = _ble.telemetryStream!.listen(_onBleTelemetry);
+      }
 
       setState(() => _activeTrip = trip);
     } catch (e) {
@@ -195,6 +200,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final finalStats = await _recorder.stop();
     await _pointSub?.cancel();
     await _statsSub?.cancel();
+    await _bleTelemetrySub?.cancel();
+    _bleTelemetrySub = null;
     await _flushPoints();
 
     final finished = trip.finish(
@@ -212,7 +219,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
       bleMaxWaterTemperatureC: _bleMaxWaterTemp,
     );
     await TripRepository.instance.finishTrip(finished);
-    await _disconnectBike();
+    // Deliberately doesn't disconnect the bike here — the connection is
+    // shared with the Vehicle tab (vehicle/ble_connection_service.dart),
+    // so ending this trip shouldn't drop it out from under that tab if
+    // it's also being watched. Disconnecting is a user action (the
+    // "Disconnect" button on either tab), not a trip-lifecycle side
+    // effect.
 
     // Territory + trophies (gamification/gamification_service.dart) — best
     // done with this trip's own points before they're needed elsewhere, and
@@ -234,7 +246,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _bleMaxBrakeKpa = null;
       _bleMinWaterTemp = null;
       _bleMaxWaterTemp = null;
-      _bleLatest = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Trip saved: ${finished.distanceKm.toStringAsFixed(2)} km')),
@@ -285,18 +296,21 @@ class _RecordingScreenState extends State<RecordingScreen> {
               ? null
               : (v) {
                   if (v?.id == _selectedVehicle?.id) return;
-                  _disconnectBike();
+                  // A different vehicle means a different physical bike —
+                  // the current connection (shared with the Vehicle tab)
+                  // no longer corresponds to what's selected.
+                  _ble.disconnect();
                   setState(() => _selectedVehicle = v);
                 },
         ),
         if (_vehicleSupportsBle) ...[
           const SizedBox(height: 12),
           _BleConnectionCard(
-            state: _bleState,
-            error: _bleError,
-            telemetry: _bleLatest,
-            onConnect: _connectBike,
-            onDisconnect: _disconnectBike,
+            state: _ble.state,
+            error: _ble.lastError,
+            telemetry: _ble.telemetryNotifier.value,
+            onConnect: () => _ble.connect(),
+            onDisconnect: _ble.disconnect,
           ),
         ],
         const SizedBox(height: 24),
@@ -327,7 +341,7 @@ class _BleConnectionCard extends StatelessWidget {
     required this.onDisconnect,
   });
 
-  final _BleState state;
+  final BleConnectionState state;
   final String? error;
   final RidingTelemetry? telemetry;
   final VoidCallback onConnect;
@@ -341,8 +355,8 @@ class _BleConnectionCard extends StatelessWidget {
         child: Row(
           children: [
             Icon(
-              state == _BleState.connected ? Icons.bluetooth_connected : Icons.bluetooth,
-              color: state == _BleState.connected ? Colors.lightBlueAccent : Colors.grey,
+              state == BleConnectionState.connected ? Icons.bluetooth_connected : Icons.bluetooth,
+              color: state == BleConnectionState.connected ? Colors.lightBlueAccent : Colors.grey,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -350,19 +364,19 @@ class _BleConnectionCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(_statusText(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  if (state == _BleState.connected && telemetry != null)
+                  if (state == BleConnectionState.connected && telemetry != null)
                     Text(
                       '${telemetry!.rpm ?? '—'} rpm · gear ${telemetry!.gear ?? '—'}',
                       style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
-                  if (state == _BleState.failed && error != null)
+                  if (state == BleConnectionState.failed && error != null)
                     Text(error!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
                 ],
               ),
             ),
-            if (state == _BleState.connected)
+            if (state == BleConnectionState.connected)
               TextButton(onPressed: onDisconnect, child: const Text('Disconnect'))
-            else if (state == _BleState.connecting)
+            else if (state == BleConnectionState.scanning || state == BleConnectionState.connecting)
               const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
             else
               TextButton(onPressed: onConnect, child: const Text('Connect')),
@@ -373,10 +387,11 @@ class _BleConnectionCard extends StatelessWidget {
   }
 
   String _statusText() => switch (state) {
-    _BleState.none => 'Bike not connected (GPS only)',
-    _BleState.connecting => 'Connecting to bike…',
-    _BleState.connected => 'Bike connected',
-    _BleState.failed => 'Bike connection failed',
+    BleConnectionState.disconnected => 'Bike not connected (GPS only)',
+    BleConnectionState.scanning => 'Scanning for bike…',
+    BleConnectionState.connecting => 'Connecting to bike…',
+    BleConnectionState.connected => 'Bike connected',
+    BleConnectionState.failed => 'Bike connection failed',
   };
 }
 

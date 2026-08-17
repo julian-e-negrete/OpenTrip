@@ -1,16 +1,16 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
 import '../logging/log_buffer.dart';
-import '../vehicle/kawasaki_connector.dart';
+import '../vehicle/ble_connection_service.dart';
 import 'log_screen.dart';
 
 /// Minimal demo screen: scan for a Kawasaki Rideology-equipped bike,
-/// connect, run the startup handshake, and show live telemetry. This is
-/// the vehicle-connector slice only — see /docs/ROADMAP.md for how this
-/// plugs into GPS trip recording.
+/// connect, run the startup handshake, and show live telemetry. Drives
+/// the same shared connection the Record tab's "Connect bike" card uses
+/// (see vehicle/ble_connection_service.dart) — connecting here shows up
+/// there too, and vice versa, rather than each tab fighting over its own
+/// GATT connection to the same bike.
 class VehicleScreen extends StatefulWidget {
   const VehicleScreen({super.key});
 
@@ -18,64 +18,15 @@ class VehicleScreen extends StatefulWidget {
   State<VehicleScreen> createState() => _VehicleScreenState();
 }
 
-enum _ConnectionState { idle, scanning, connecting, connected, error }
-
 class _VehicleScreenState extends State<VehicleScreen> {
-  _ConnectionState _state = _ConnectionState.idle;
-  String? _errorMessage;
-  KawasakiClient? _client;
-  RidingTelemetry? _telemetry;
-  StreamSubscription<RidingTelemetry>? _telemetrySub;
-
-  @override
-  void dispose() {
-    _telemetrySub?.cancel();
-    _client?.dispose();
-    super.dispose();
-  }
+  final _ble = BleConnectionService.instance;
 
   Future<void> _scanAndConnect() async {
-    setState(() {
-      _state = _ConnectionState.scanning;
-      _errorMessage = null;
-    });
     logBuffer.add('--- New connection attempt ---');
-
-    try {
-      await KawasakiConnector.ensurePermissions();
-
-      logBuffer.add('Scan: looking for a device advertising as ${kAdvertisedNamePrefixes.join(" or ")}…');
-      final result = await KawasakiConnector.findBike(onLog: logBuffer.add);
-      if (result == null) {
-        logBuffer.add('Scan: timed out, no matching device found');
-        setState(() {
-          _state = _ConnectionState.error;
-          _errorMessage = 'No Kawasaki-* bike found nearby. Make sure it\'s on and in range.';
-        });
-        return;
-      }
-      logBuffer.add(
-        'Scan: found "${result.advertisementData.advName}" '
-        '(${result.device.remoteId}), RSSI ${result.rssi}',
-      );
-
-      setState(() => _state = _ConnectionState.connecting);
-      final client = await KawasakiConnector.connect(result: result, onLog: logBuffer.add);
-
-      _telemetrySub = client.telemetry.listen((t) {
-        if (mounted) setState(() => _telemetry = t);
-      });
-
-      setState(() {
-        _client = client;
-        _state = _ConnectionState.connected;
-      });
-    } catch (e) {
-      logBuffer.add('ERROR: $e');
-      setState(() {
-        _state = _ConnectionState.error;
-        _errorMessage = e.toString();
-      });
+    logBuffer.add('Scan: looking for a device advertising as ${kAdvertisedNamePrefixes.join(" or ")}…');
+    await _ble.connect(onLog: logBuffer.add);
+    if (_ble.state == BleConnectionState.failed) {
+      logBuffer.add('ERROR: ${_ble.lastError}');
     }
   }
 
@@ -96,12 +47,15 @@ class _VehicleScreenState extends State<VehicleScreen> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: switch (_state) {
-          _ConnectionState.connected => _TelemetryView(telemetry: _telemetry),
-          _ConnectionState.error => _ErrorView(message: _errorMessage, onRetry: _scanAndConnect),
-          _ConnectionState.idle => _IdleView(onScan: _scanAndConnect),
-          _ => const Center(child: CircularProgressIndicator()),
-        },
+        child: AnimatedBuilder(
+          animation: Listenable.merge([_ble.stateNotifier, _ble.telemetryNotifier]),
+          builder: (context, _) => switch (_ble.state) {
+            BleConnectionState.connected => _TelemetryView(telemetry: _ble.telemetryNotifier.value),
+            BleConnectionState.failed => _ErrorView(message: _ble.lastError, onRetry: _scanAndConnect),
+            BleConnectionState.disconnected => _IdleView(onScan: _scanAndConnect),
+            _ => const Center(child: CircularProgressIndicator()),
+          },
+        ),
       ),
     );
   }
