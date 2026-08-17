@@ -60,5 +60,15 @@ class AuthService {
     return _auth.verifyOTP(type: OtpType.email, email: email, token: code);
   }
 
+  /// Best-effort: stores the display name in Supabase's user metadata too
+  /// (`auth.users.raw_user_meta_data`), so it's already in the right place
+  /// once a cloud profile/leaderboard exists to show it (see
+  /// data/models/user_profile.dart — the local copy is authoritative for
+  /// display today). Failures here shouldn't block saving the local
+  /// profile, so callers should treat this as fire-and-forget.
+  Future<void> updateDisplayName(String name) {
+    return _auth.updateUser(UserAttributes(data: {'display_name': name}));
+  }
+
   Future<void> signOut() => _auth.signOut();
 }

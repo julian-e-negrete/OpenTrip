@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'auth/auth_service.dart';
-import 'auth/current_user.dart';
-import 'auth/login_screen.dart';
+import 'account/account_screen.dart';
 import 'screens/vehicle_screen.dart';
 import 'trip/recording_screen.dart';
 import 'trips/trip_history_screen.dart';
@@ -25,7 +23,7 @@ class _HomeShellState extends State<HomeShell> {
     RecordingScreen(),
     VehicleListScreen(),
     VehicleScreen(),
-    _AccountTab(),
+    AccountScreen(),
   ];
 
   @override
@@ -42,66 +40,6 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.bluetooth), label: 'BLE'),
           NavigationDestination(icon: Icon(Icons.person_outline), label: 'Account'),
         ],
-      ),
-    );
-  }
-}
-
-class _AccountTab extends StatefulWidget {
-  const _AccountTab();
-
-  @override
-  State<_AccountTab> createState() => _AccountTabState();
-}
-
-class _AccountTabState extends State<_AccountTab> {
-  Future<void> _signIn() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => LoginScreen(onContinueAsGuest: () => Navigator.of(context).pop()),
-      ),
-    );
-    if (mounted) setState(() {}); // reflect a sign-in that happened on the pushed screen
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final guest = CurrentUser.instance.isGuest;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(guest ? 'Status' : 'Signed in as', style: Theme.of(context).textTheme.labelMedium),
-            Text(CurrentUser.instance.displayLabel, style: Theme.of(context).textTheme.titleMedium),
-            if (guest) ...[
-              const SizedBox(height: 4),
-              const Text(
-                'Vehicles and trips on this device won\'t follow you to another '
-                'device until you sign in.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-            const SizedBox(height: 24),
-            if (guest)
-              OutlinedButton.icon(
-                onPressed: _signIn,
-                icon: const Icon(Icons.login),
-                label: const Text('Sign in'),
-              )
-            else
-              OutlinedButton.icon(
-                onPressed: () async {
-                  await AuthService.instance.signOut();
-                  if (mounted) setState(() {});
-                },
-                icon: const Icon(Icons.logout),
-                label: const Text('Sign out'),
-              ),
-          ],
-        ),
       ),
     );
   }

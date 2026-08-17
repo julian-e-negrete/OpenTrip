@@ -47,13 +47,25 @@ class CurrentUser {
 
   bool get isGuest => !_isReallySignedIn;
 
-  /// Display label for the Account tab — an email if really signed in,
-  /// otherwise a note that this is local-only test data.
-  String get displayLabel {
+  /// Debug/fallback label — never shown as the primary identity in the UI
+  /// (that's the local profile's display name; see
+  /// data/models/user_profile.dart and home_shell.dart's Account tab,
+  /// which deliberately never renders the raw email).
+  String get debugLabel {
     if (_isReallySignedIn) {
       final user = AuthService.instance.currentUser!;
       return user.email ?? user.id;
     }
-    return 'Not signed in (local testing mode)';
+    return 'Guest (local testing mode)';
+  }
+
+  /// Generates and persists a fresh guest id, discarding the old one.
+  /// Used after a guest deletes their local data, so a stray cached read
+  /// of the old id can't resurrect wiped rows.
+  Future<void> resetGuestId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final id = const Uuid().v4();
+    await prefs.setString(_guestIdKey, id);
+    _cachedGuestId = id;
   }
 }

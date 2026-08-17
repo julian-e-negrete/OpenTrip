@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -34,11 +34,22 @@ class LocalDatabase {
             user_id TEXT NOT NULL,
             name TEXT NOT NULL,
             type TEXT NOT NULL,
+            brand TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL DEFAULT '',
             ble_connector TEXT NOT NULL,
+            photo_path TEXT,
             created_at TEXT NOT NULL
           )
         ''');
         await db.execute('CREATE INDEX idx_vehicles_user ON vehicles(user_id)');
+
+        await db.execute('''
+          CREATE TABLE profiles (
+            user_id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            avatar_path TEXT
+          )
+        ''');
 
         await db.execute('''
           CREATE TABLE trips (
@@ -88,6 +99,18 @@ class LocalDatabase {
           ]) {
             await db.execute('ALTER TABLE trips ADD COLUMN $column');
           }
+        }
+        if (oldVersion < 3) {
+          await db.execute("ALTER TABLE vehicles ADD COLUMN brand TEXT NOT NULL DEFAULT ''");
+          await db.execute("ALTER TABLE vehicles ADD COLUMN model TEXT NOT NULL DEFAULT ''");
+          await db.execute('ALTER TABLE vehicles ADD COLUMN photo_path TEXT');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+              user_id TEXT PRIMARY KEY,
+              display_name TEXT NOT NULL,
+              avatar_path TEXT
+            )
+          ''');
         }
       },
     );

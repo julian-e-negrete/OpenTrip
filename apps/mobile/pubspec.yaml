@@ -30,6 +30,9 @@ dependencies:
   shared_preferences: ^2.3.2
   # GPS trip recording.
   geolocator: ^13.0.1
+  # Profile / vehicle photos.
+  image_picker: ^1.1.2
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:

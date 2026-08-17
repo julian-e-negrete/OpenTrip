@@ -15,10 +15,15 @@
   copy-to-clipboard for pulling logs off a phone with no computer.
 - **Auth** (`auth/`): Google sign-in (native ID-token flow) and
   passwordless email (6-digit OTP, no deep-linking needed) via Supabase
-  Auth. Fails loud with setup instructions
-  (`auth/supabase_not_configured_screen.dart`) rather than crashing when
-  no Supabase project is wired in yet — see `docs/AUTH_SETUP.md` for the
-  (unavoidable, you-bring-your-own-project) setup steps.
+  Auth, plus a local guest mode (`auth/current_user.dart`) so every
+  on-device feature works with zero backend setup — login is an optional
+  upgrade path, not a gate. Confirmed working end-to-end against a real
+  Supabase project, including tracking down a `DEVELOPER_ERROR (10)`
+  Google Sign-In failure to ephemeral CI runners auto-generating a fresh
+  debug-signing keystore on every run — fixed by pinning one
+  (`android/app/debug.keystore`, deliberately committed; see
+  `docs/AUTH_SETUP.md`). See that doc for the (unavoidable,
+  you-bring-your-own-project) setup steps.
 - **Multi-vehicle trip recording** (`data/`, `trip/`, `vehicles/`,
   `trips/`): on-device SQLite (vehicles / trips / trip_points tables,
   scoped per signed-in user), a vehicle CRUD screen, a GPS recorder
@@ -35,6 +40,27 @@
   `ble*` fields), shown in trip detail under "From the bike". A trip
   without a bike connection, or on a non-BLE vehicle, is unaffected —
   every `ble*` field just stays null.
+- **Catalog-driven vehicle creation** (`data/catalog/vehicle_catalog.dart`,
+  `vehicles/add_vehicle_screen.dart`): adding a car or motorcycle is now
+  brand -> model, not free text — a curated (not exhaustive) starting
+  catalog where a model can carry a known `VehicleBleConnector`, so
+  picking "Kawasaki" + "Z500 ABS" auto-wires the same connector this app
+  ships, no manual checkbox. Adding a future connector (CFMoto, another
+  Kawasaki model, etc.) means adding catalog entries, not touching the
+  creation UI. An "Other / not listed" escape hatch keeps free text
+  available for anything not in the catalog (with no connector).
+  Bicycle/other vehicle types skip the catalog entirely. Vehicles and
+  user profiles can now carry a locally-stored photo
+  (`data/local_image_store.dart`).
+- **Account tab** (`account/account_screen.dart`): editable display
+  name + avatar (never the email — that's stored but deliberately not
+  shown, since a display name is what's meant to identify you to other
+  users once social features exist), vehicle/trip/distance counts, and
+  "Delete account". That last one only wipes on-device data
+  (`data/account_data_service.dart`) — it can't delete the actual
+  Supabase auth account itself, since that needs a privileged
+  service-role operation (an Edge Function) a mobile client's anon key
+  can't perform; the confirmation dialog says so explicitly.
 
 ## Not done yet
 

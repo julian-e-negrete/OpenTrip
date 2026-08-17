@@ -1,9 +1,12 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
 import '../data/data_events.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/vehicle_repository.dart';
+import 'add_vehicle_screen.dart';
 
 class VehicleListScreen extends StatefulWidget {
   const VehicleListScreen({super.key});
@@ -44,19 +47,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   }
 
   Future<void> _addVehicle() async {
-    final result = await showDialog<({String name, VehicleType type, VehicleBleConnector connector})>(
-      context: context,
-      builder: (_) => const _AddVehicleDialog(),
-    );
-    if (result == null) return;
-
-    await VehicleRepository.instance.create(
-      userId: _userId,
-      name: result.name,
-      type: result.type,
-      bleConnector: result.connector,
-    );
-    await _load();
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddVehicleScreen()));
+    // No manual _load() needed here — VehicleRepository.create fires
+    // DataEvents, which this screen already listens to.
   }
 
   Future<void> _deleteVehicle(Vehicle vehicle) async {
@@ -73,7 +66,6 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
     );
     if (confirmed != true) return;
     await VehicleRepository.instance.delete(vehicle.id);
-    await _load();
   }
 
   IconData _iconFor(VehicleType type) => switch (type) {
@@ -112,7 +104,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
               itemBuilder: (context, i) {
                 final vehicle = _vehicles[i];
                 return ListTile(
-                  leading: Icon(_iconFor(vehicle.type)),
+                  leading: vehicle.photoPath != null
+                      ? CircleAvatar(backgroundImage: FileImage(File(vehicle.photoPath!)))
+                      : CircleAvatar(child: Icon(_iconFor(vehicle.type))),
                   title: Text(vehicle.name),
                   subtitle: Text(
                     vehicle.bleConnector == VehicleBleConnector.none
@@ -126,77 +120,6 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                 );
               },
             ),
-    );
-  }
-}
-
-class _AddVehicleDialog extends StatefulWidget {
-  const _AddVehicleDialog();
-
-  @override
-  State<_AddVehicleDialog> createState() => _AddVehicleDialogState();
-}
-
-class _AddVehicleDialogState extends State<_AddVehicleDialog> {
-  final _nameController = TextEditingController();
-  VehicleType _type = VehicleType.motorcycle;
-  bool _kawasakiBle = false;
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add vehicle'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(labelText: 'Name (e.g. "My Z500")'),
-            autofocus: true,
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<VehicleType>(
-            initialValue: _type,
-            decoration: const InputDecoration(labelText: 'Type'),
-            items: VehicleType.values
-                .map((t) => DropdownMenuItem(value: t, child: Text(t.name)))
-                .toList(),
-            onChanged: (v) => setState(() => _type = v ?? _type),
-          ),
-          if (_type == VehicleType.motorcycle) ...[
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              controlAffinity: ListTileControlAffinity.leading,
-              title: const Text('Kawasaki Rideology BLE (Z500/Z500 ABS/Ninja 500)'),
-              value: _kawasakiBle,
-              onChanged: (v) => setState(() => _kawasakiBle = v ?? false),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(
-          onPressed: () {
-            final name = _nameController.text.trim();
-            if (name.isEmpty) return;
-            Navigator.pop(context, (
-              name: name,
-              type: _type,
-              connector: _kawasakiBle ? VehicleBleConnector.kawasakiRideology : VehicleBleConnector.none,
-            ));
-          },
-          child: const Text('Add'),
-        ),
-      ],
     );
   }
 }
