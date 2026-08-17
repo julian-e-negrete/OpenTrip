@@ -11,6 +11,7 @@ import '../data/models/trip_point.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../gamification/gamification_service.dart';
+import '../trip/camera_alerts.dart';
 import '../trip/location_recorder.dart';
 
 /// The message autostart/auto_start_controller.dart sends when the user
@@ -58,6 +59,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
   LocationRecorder? _recorder;
   StreamSubscription<TripPoint>? _pointSub;
   StreamSubscription<RecordingStats>? _statsSub;
+  StreamSubscription<CameraAlert>? _cameraAlertSub;
   final _pointBuffer = <TripPoint>[];
 
   Trip? _activeTrip;
@@ -185,6 +187,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
       if (_pointBuffer.length >= 20) unawaited(_flushPoints());
     });
     _statsSub = recorder.statsStream.listen((stats) => _latestStats = stats);
+    _cameraAlertSub = recorder.cameraAlertStream.listen(_onCameraAlert);
     await FlutterForegroundTask.updateService(
       notificationTitle: 'OpenTrip is recording',
       notificationText: 'Auto-detected driving — tap to open',
@@ -206,6 +209,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     final finalStats = await recorder.stop();
     await _pointSub?.cancel();
     await _statsSub?.cancel();
+    await _cameraAlertSub?.cancel();
     await _flushPoints();
     await recorder.dispose();
 
@@ -236,6 +240,19 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     FlutterForegroundTask.sendDataToMain({'event': 'autoTripFinished', 'tripId': finished.id});
   }
 
+  void _onCameraAlert(CameraAlert alert) {
+    final label = alert.camera.type == CameraAlertType.redLightCamera ? 'Red light camera' : 'Speed camera';
+    // No screen to show this on — the notification text is the only
+    // surface available here, alongside the haptic buzz
+    // CameraAlertService already triggers itself. Gets overwritten by
+    // the next onRepeatEvent tick (up to 30s later) or the next alert;
+    // brief enough to be a nudge, not a persistent warning.
+    FlutterForegroundTask.updateService(
+      notificationTitle: 'OpenTrip is recording',
+      notificationText: '⚠ $label ahead',
+    );
+  }
+
   void _updateIdleNotification() {
     FlutterForegroundTask.updateService(
       notificationTitle: 'OpenTrip',
@@ -248,6 +265,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     await _activitySub?.cancel();
     await _pointSub?.cancel();
     await _statsSub?.cancel();
+    await _cameraAlertSub?.cancel();
     await _flushPoints();
     await _recorder?.dispose();
     // Deliberately doesn't finish an in-progress trip here — if this is a

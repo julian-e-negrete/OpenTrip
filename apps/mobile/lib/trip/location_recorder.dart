@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../data/models/trip_point.dart';
 import '../logging/log_buffer.dart';
+import 'camera_alerts.dart';
 import 'geo_math.dart';
 
 class RecordingStats {
@@ -64,6 +65,12 @@ const _maxPlausibleSpeedKph = 300.0;
 /// shows — see screens/log_screen.dart) since a silent GPS failure is
 /// otherwise invisible: unlike a BLE connect failure, there's no
 /// exception dialog, just a trip that saves with 0 km recorded.
+///
+/// Also drives speed/red-light-camera proximity alerts
+/// (trip/camera_alerts.dart) off the same position stream — built into
+/// the recorder itself, not each caller, so both
+/// trip/recording_screen.dart and autostart/driving_detector_task.dart
+/// get it automatically.
 class LocationRecorder {
   /// False when this recorder runs inside a process that's already kept
   /// alive by its own foreground service — autostart/driving_detector_task.dart,
@@ -79,6 +86,7 @@ class LocationRecorder {
 
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
+  final _cameraAlerts = CameraAlertService();
 
   StreamSubscription<Position>? _positionSub;
   String? _tripId;
@@ -92,6 +100,12 @@ class LocationRecorder {
 
   Stream<TripPoint> get pointStream => _pointsController.stream;
   Stream<RecordingStats> get statsStream => _statsController.stream;
+
+  /// Speed/red-light-camera proximity alerts — see trip/camera_alerts.dart.
+  /// Shared by every consumer of this recorder (trip/recording_screen.dart,
+  /// autostart/driving_detector_task.dart) automatically, since it's built
+  /// into the recorder itself rather than each caller wiring its own.
+  Stream<CameraAlert> get cameraAlertStream => _cameraAlerts.alerts;
 
   bool get isRecording => _positionSub != null;
 
@@ -160,6 +174,7 @@ class LocationRecorder {
     }
     _rejectedAccuracyCount = 0;
     _rejectedGlitchCount = 0;
+    _cameraAlerts.resetForNewTrip();
 
     logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
     _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
@@ -208,6 +223,12 @@ class LocationRecorder {
   }
 
   void _onPosition(Position position) {
+    // Camera-proximity checking gets every raw fix, independent of the
+    // stricter accuracy/glitch filtering below — a 500m alert radius
+    // (trip/camera_alerts.dart) doesn't need the same precision as
+    // distance accumulation does.
+    unawaited(_cameraAlerts.onPosition(position));
+
     if (position.accuracy > _maxAcceptableAccuracyMeters) {
       _rejectedAccuracyCount++;
       logBuffer.add(
@@ -297,5 +318,6 @@ class LocationRecorder {
     await _positionSub?.cancel();
     await _pointsController.close();
     await _statsController.close();
+    await _cameraAlerts.dispose();
   }
 }

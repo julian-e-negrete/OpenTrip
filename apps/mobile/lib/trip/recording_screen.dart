@@ -14,6 +14,7 @@ import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../gamification/gamification_service.dart';
 import '../vehicle/ble_connection_service.dart';
+import 'camera_alerts.dart';
 import 'location_recorder.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -48,6 +49,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   StreamSubscription<TripPoint>? _pointSub;
   StreamSubscription<RecordingStats>? _statsSub;
+  StreamSubscription<CameraAlert>? _cameraAlertSub;
 
   // Optional live vehicle telemetry over the connection shared with the
   // Vehicle tab (see vehicle/ble_connection_service.dart) — independent
@@ -89,6 +91,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     // buttons.
     _ble.stateNotifier.addListener(_onBleStateChanged);
     _ble.telemetryNotifier.addListener(_onBleTelemetryNotifierChanged);
+    _cameraAlertSub = _recorder.cameraAlertStream.listen(_onCameraAlert);
   }
 
   @override
@@ -98,6 +101,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _ble.telemetryNotifier.removeListener(_onBleTelemetryNotifierChanged);
     _pointSub?.cancel();
     _statsSub?.cancel();
+    _cameraAlertSub?.cancel();
     _bleTelemetrySub?.cancel();
     // Deliberately doesn't call _ble.disconnect() — this is a shared
     // connection (see vehicle/ble_connection_service.dart), so this
@@ -164,6 +168,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   void _onBleTelemetryNotifierChanged() {
     if (mounted) setState(() {});
+  }
+
+  void _onCameraAlert(CameraAlert alert) {
+    if (!mounted) return;
+    final label = alert.camera.type == CameraAlertType.redLightCamera ? 'Red light camera' : 'Speed camera';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('⚠ $label ahead — ${alert.distanceMeters.toStringAsFixed(0)}m'),
+        backgroundColor: Colors.orange.shade800,
+      ),
+    );
   }
 
   void _onBleTelemetry(RidingTelemetry t) {

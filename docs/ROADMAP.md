@@ -250,6 +250,30 @@
   happened during the gap — recomputing it exactly would mean
   reconstructing pre-restart state with more precision than seemed worth
   the complexity for an edge case this narrow.
+- **Speed-camera & red-light-camera alerts** (`trip/camera_alerts.dart`):
+  a haptic buzz (works whether or not anyone's looking at the screen —
+  the point, while driving) plus a SnackBar
+  (`trip/recording_screen.dart`) or a brief notification-text flash
+  (`autostart/driving_detector_task.dart`, since a background isolate
+  has no screen to show a SnackBar on) when passing within 500m of a
+  camera. Deliberately doesn't alert on plain traffic signals —
+  OpenStreetMap's `highway=traffic_signals` tag exists at nearly every
+  intersection in a city, and alerting on all of them would be noise,
+  not safety information, and isn't what real navigation apps do
+  either. Only actual enforcement points: fixed speed cameras
+  (`highway=speed_camera` / `enforcement=maxspeed`) and red-light
+  cameras (`enforcement=traffic_signals`). Built as a capability of
+  `LocationRecorder` itself, so both the manual recording flow and the
+  auto-start detector get it automatically rather than each wiring
+  their own. Data comes from the public Overpass API — same
+  OpenStreetMap source as the map tiles
+  (`trips/trip_detail_screen.dart`), same fair-use caveat that comment
+  already documents, kept well inside it by querying once per trip and
+  again only every 15km of travel, never per GPS fix. No new
+  permission (`INTERNET` was already declared), on by default —
+  network failures just mean no alerts for that stretch, never a
+  failed recording. Coverage is only as good as OpenStreetMap's for a
+  given area, which varies a lot by region.
 
 ## Not done yet
 
@@ -257,42 +281,37 @@ Ordered by priority, from a feature comparison against TripRank (see
 `/README.md` for what TripRank is) — highest-value gaps first. An item
 being here means "identified and worth doing," not "in progress."
 
-1. **Speed-camera & traffic-signal alerts.** Buildable on the same
-   OpenStreetMap data the app's maps already depend on (`flutter_map`,
-   `trips/trip_detail_screen.dart`) — no new data source required, just
-   proximity queries against OSM's camera/signal tags during an active
-   recording.
-2. **Phone-sensor driving-behavior analytics** (acceleration, braking,
+1. **Phone-sensor driving-behavior analytics** (acceleration, braking,
    cornering, G-force) — currently `trip/location_recorder.dart` only
    derives speed/distance from GPS fixes; this would need the
    accelerometer/gyroscope, a new sensor pipeline alongside the existing
    GPS one. Vehicles with a BLE connector already get a version of this
    (lean angle, brake pressure) for free — this would extend it to every
    vehicle, not just BLE-equipped bikes.
-3. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+2. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
-4. **Animated trip replay on satellite map.** Trip detail currently
+3. **Animated trip replay on satellite map.** Trip detail currently
    shows a static route line over OpenStreetMap street tiles
    (`trips/trip_detail_screen.dart`); TripRank animates the route over
    satellite imagery. Satellite tiles alone are a tile-provider swap
    (see that file's doc comment); the playback animation is new work.
-5. **Monthly recap.** A generated summary of a rider's month — would
+4. **Monthly recap.** A generated summary of a rider's month — would
    reuse `gamification_repository.dart`'s existing aggregation
    patterns, just windowed by date instead of all-time.
-6. **Shareable trip stat-card image.** Render a trip's key numbers as a
+5. **Shareable trip stat-card image.** Render a trip's key numbers as a
    shareable image (e.g. via Flutter's `RepaintBoundary` capture) —
    useful for organic growth, no backend changes needed.
-7. **iOS, actually shippable.** The `ios/` project is scaffolded and
+6. **iOS, actually shippable.** The `ios/` project is scaffolded and
    wired for feature parity (Info.plist entries, `AppleSettings` in
    `trip/location_recorder.dart`) but has never been built or run —
    this project has no Mac. Everything iOS-related in this roadmap is
    unverified until that changes.
-8. **Car clubs / groups.** Lowest priority of the identified gaps —
+7. **Car clubs / groups.** Lowest priority of the identified gaps —
    TripRank's own description of what a "car club" actually does
    (chat? shared challenges? just a named group on the leaderboard?)
    couldn't be confirmed even from its own marketing pages, so there's
    not yet a clear feature to build toward.
-9. **AI car-modification visualizer.** Also low priority — a novelty
+8. **AI car-modification visualizer.** Also low priority — a novelty
    feature with an external paid image-generation API dependency
    (TripRank uses fal.ai), not core to trip tracking or vehicle
    connectivity, which is where this project's actual differentiation
