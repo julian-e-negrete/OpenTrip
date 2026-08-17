@@ -12,6 +12,7 @@ import '../data/data_events.dart';
 import '../data/local_image_store.dart';
 import '../data/models/user_profile.dart';
 import '../data/repositories/profile_repository.dart';
+import '../data/repositories/gamification_repository.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../sync/sync_service.dart';
@@ -20,12 +21,10 @@ import '../sync/sync_service.dart';
 /// the "other users should be able to identify you without seeing your
 /// email" requirement), local stats, and account management.
 ///
-/// The display name isn't shown to any other user *yet* — there's no
-/// social/leaderboard feature built to show it in (see docs/ROADMAP.md) —
-/// but it's stored as the identity that eventually will be, once cloud
-/// sync exists. It's saved locally now and best-effort mirrored into
-/// Supabase's user metadata for real accounts, so it's already in the
-/// right place for that later.
+/// The display name is what shows up on the leaderboard
+/// (leaderboard/leaderboard_screen.dart) for a real signed-in account —
+/// it's saved locally and best-effort mirrored into Supabase's user
+/// metadata too.
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -38,6 +37,7 @@ class _AccountScreenState extends State<AccountScreen> {
   UserProfile? _profile;
   int _vehicleCount = 0;
   int _tripCount = 0;
+  int _trophyCount = 0;
   double _totalDistanceMeters = 0;
   bool _loading = true;
   bool _busy = false;
@@ -64,6 +64,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final profile = await ProfileRepository.instance.get(userId);
     final vehicles = await VehicleRepository.instance.listForUser(userId);
     final trips = await TripRepository.instance.listForUser(userId);
+    final trophyCount = await GamificationRepository.instance.trophyCount(userId);
     final totalDistance = trips.fold<double>(0, (sum, t) => sum + t.distanceMeters);
     if (!mounted) return;
     setState(() {
@@ -71,6 +72,7 @@ class _AccountScreenState extends State<AccountScreen> {
       _profile = profile;
       _vehicleCount = vehicles.length;
       _tripCount = trips.length;
+      _trophyCount = trophyCount;
       _totalDistanceMeters = totalDistance;
       _loading = false;
     });
@@ -242,6 +244,7 @@ class _AccountScreenState extends State<AccountScreen> {
               _StatTile(label: 'Vehicles', value: '$_vehicleCount'),
               _StatTile(label: 'Trips', value: '$_tripCount'),
               _StatTile(label: 'Distance', value: '${(_totalDistanceMeters / 1000).toStringAsFixed(0)} km'),
+              _StatTile(label: 'Trophies', value: '$_trophyCount'),
             ],
           ),
           if (!guest) ...[

@@ -6,6 +6,7 @@ import '../data/models/trip.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../leaderboard/leaderboard_screen.dart';
 import 'trip_detail_screen.dart';
 
 class TripHistoryScreen extends StatefulWidget {
@@ -57,7 +58,18 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Trips')),
+      appBar: AppBar(
+        title: const Text('Trips'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.leaderboard_outlined),
+            tooltip: 'Leaderboard',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+            ),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _trips.isEmpty

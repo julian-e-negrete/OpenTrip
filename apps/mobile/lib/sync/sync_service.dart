@@ -12,6 +12,7 @@ import '../data/models/trip_point.dart';
 import '../data/models/user_profile.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
+import '../leaderboard/leaderboard_entry.dart';
 
 /// Mirrors local vehicles/trips/trip_points/profile (display name only)
 /// to Supabase Postgres — see /supabase/schema.sql for the tables this
@@ -135,6 +136,54 @@ class SyncService {
         final profile = UserProfile.fromRow(row);
         await _client.from('profiles').upsert(profile.toSupabaseRow());
         await db.update('profiles', {'synced': 1}, where: 'user_id = ?', whereArgs: [profile.userId]);
+      }
+
+      // Territory/trophies (gamification/) — same unsynced-row pattern,
+      // pushed in bulk since a finished trip can add many cells at once.
+      final cellRows = await db.query(
+        'territory_cells',
+        where: 'user_id = ? AND synced = 0',
+        whereArgs: [userId],
+      );
+      if (cellRows.isNotEmpty) {
+        await _client.from('territory_cells').upsert(
+          cellRows
+              .map((r) => {'user_id': r['user_id'], 'cell_key': r['cell_key'], 'first_seen_at': r['first_seen_at']})
+              .toList(),
+        );
+        final cellBatch = db.batch();
+        for (final row in cellRows) {
+          cellBatch.update(
+            'territory_cells',
+            {'synced': 1},
+            where: 'user_id = ? AND cell_key = ?',
+            whereArgs: [row['user_id'], row['cell_key']],
+          );
+        }
+        await cellBatch.commit(noResult: true);
+      }
+
+      final trophyRows = await db.query(
+        'trophies',
+        where: 'user_id = ? AND synced = 0',
+        whereArgs: [userId],
+      );
+      if (trophyRows.isNotEmpty) {
+        await _client.from('trophies').upsert(
+          trophyRows
+              .map((r) => {'user_id': r['user_id'], 'trophy_key': r['trophy_key'], 'earned_at': r['earned_at']})
+              .toList(),
+        );
+        final trophyBatch = db.batch();
+        for (final row in trophyRows) {
+          trophyBatch.update(
+            'trophies',
+            {'synced': 1},
+            where: 'user_id = ? AND trophy_key = ?',
+            whereArgs: [row['user_id'], row['trophy_key']],
+          );
+        }
+        await trophyBatch.commit(noResult: true);
       }
 
       lastSyncAt = DateTime.now();
@@ -336,8 +385,31 @@ class SyncService {
     try {
       await _client.from('vehicles').delete().eq('user_id', userId);
       await _client.from('profiles').delete().eq('user_id', userId);
+      // Not cascaded from vehicles/profiles — territory_cells and
+      // trophies (supabase/leaderboard.sql) are independent tables keyed
+      // only off auth.users, so they need their own explicit delete.
+      await _client.from('territory_cells').delete().eq('user_id', userId);
+      await _client.from('trophies').delete().eq('user_id', userId);
     } catch (e) {
       lastError = e.toString();
+    }
+  }
+
+  /// Calls supabase/leaderboard.sql's get_leaderboard() function. Only
+  /// ever returns aggregated numbers + display names — see that file for
+  /// why a `security definer` function, not a view, was necessary to
+  /// show cross-user data at all given every table's RLS. Returns an
+  /// empty list (not a thrown error) if the function doesn't exist yet
+  /// (leaderboard.sql not applied) or the caller isn't signed in — the
+  /// UI shows an explanatory state for both, see leaderboard/.
+  Future<List<LeaderboardEntry>> fetchLeaderboard() async {
+    if (!_canSync) return const [];
+    try {
+      final rows = await _client.rpc('get_leaderboard') as List;
+      return rows.map((row) => LeaderboardEntry.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
     }
   }
 }

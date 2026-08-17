@@ -35,6 +35,8 @@ class AccountDataService {
       await txn.delete('trips', where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('vehicles', where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('profiles', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('territory_cells', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('trophies', where: 'user_id = ?', whereArgs: [userId]);
     });
 
     DataEvents.instance.notifyChanged();

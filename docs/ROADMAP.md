@@ -108,14 +108,26 @@
   scale but subject to OSM's tile usage policy (not for heavy/production
   traffic); self-hosting tiles or a paid provider (Stadia Maps, MapTiler,
   Thunderforest) is the documented upgrade path if that ever matters.
+- **Territory/leaderboard/trophies** (`gamification/`, `leaderboard/`,
+  `supabase/leaderboard.sql`): mirrors TripRank's four ranked categories
+  (distance, longest drive, territory explored, trophies) — deliberately
+  *not* speed-based. Territory is a simple visited-grid-cell count
+  (`gamification/territory.dart` — ~1.1km cells, not equal-area, a
+  deliberate simplification for a bragging-rights stat, not a GIS tool);
+  trophies are a small, extensible, condition-based catalog
+  (`gamification/trophies.dart`) re-evaluated after every finished trip,
+  with a dialog celebrating anything newly earned. The leaderboard itself
+  needed a new kind of Supabase object: every other table's RLS means a
+  user can only ever see their own rows, so cross-user rankings needed a
+  `security definer` Postgres function (the standard pattern for
+  "expose an aggregate without exposing the private rows behind it") —
+  see `supabase/leaderboard.sql`'s comment. Reachable via a leaderboard
+  icon on the Trips tab; guests see a "sign in to compare" message
+  instead, since there's no account to rank.
 
 ## Not done yet
 
-1. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
-   ranked categories (distance, longest drive, territory explored,
-   trophies) — deliberately *not* speed-based. Cloud sync now exists to
-   build this on top of.
-2. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+1. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
 
 ## Explicitly deferred inside the Kawasaki connector itself

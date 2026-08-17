@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -89,6 +89,26 @@ class LocalDatabase {
             PRIMARY KEY (trip_id, seq)
           )
         ''');
+
+        await db.execute('''
+          CREATE TABLE territory_cells (
+            user_id TEXT NOT NULL,
+            cell_key TEXT NOT NULL,
+            first_seen_at TEXT NOT NULL,
+            synced INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, cell_key)
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE trophies (
+            user_id TEXT NOT NULL,
+            trophy_key TEXT NOT NULL,
+            earned_at TEXT NOT NULL,
+            synced INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (user_id, trophy_key)
+          )
+        ''');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -132,6 +152,26 @@ class LocalDatabase {
           if (!hasSynced) {
             await db.execute('ALTER TABLE profiles ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
           }
+        }
+        if (oldVersion < 5) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS territory_cells (
+              user_id TEXT NOT NULL,
+              cell_key TEXT NOT NULL,
+              first_seen_at TEXT NOT NULL,
+              synced INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (user_id, cell_key)
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS trophies (
+              user_id TEXT NOT NULL,
+              trophy_key TEXT NOT NULL,
+              earned_at TEXT NOT NULL,
+              synced INTEGER NOT NULL DEFAULT 0,
+              PRIMARY KEY (user_id, trophy_key)
+            )
+          ''');
         }
       },
     );

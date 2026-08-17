@@ -33,7 +33,23 @@ first until you sign in again or tap "Sync now." With it, a change on one
 device reaches every other signed-in device in about a second, no action
 needed.
 
-## 3. That's it
+## 3. Enable the leaderboard
+
+1. Same SQL Editor, another **New query**.
+2. Paste [`supabase/leaderboard.sql`](../supabase/leaderboard.sql).
+3. **Run**.
+
+Creates `territory_cells` and `trophies` (same per-user RLS as everything
+else), plus a `get_leaderboard()` function. That function is the one
+exception to "every table only shows you your own rows" — see the
+comment at the top of `leaderboard.sql` for why a `security definer`
+function, not a view, was necessary to show cross-user rankings at all
+without a plain view accidentally being able to expose raw private data.
+It only ever returns already-aggregated numbers (sums/counts) and a
+display name. Skipping this step just means the Leaderboard screen shows
+"no data yet" instead of rankings — nothing else is affected.
+
+## 4. That's it
 
 No new dart-defines, no new secrets. The app already has everything it
 needs (the same `SUPABASE_URL`/`SUPABASE_ANON_KEY` used for login).

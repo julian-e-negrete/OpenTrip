@@ -10,6 +10,7 @@ import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../gamification/gamification_service.dart';
 import '../vehicle/kawasaki_connector.dart';
 import 'location_recorder.dart';
 
@@ -213,6 +214,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
     await TripRepository.instance.finishTrip(finished);
     await _disconnectBike();
 
+    // Territory + trophies (gamification/gamification_service.dart) — best
+    // done with this trip's own points before they're needed elsewhere, and
+    // cheap even for a long trip since it's all local reads/writes.
+    final points = await TripRepository.instance.pointsForTrip(finished.id);
+    final newTrophies = await GamificationService.processFinishedTrip(
+      userId: _userId,
+      trip: finished,
+      points: points,
+    );
+
     if (!mounted) return;
     setState(() {
       _activeTrip = null;
@@ -228,6 +239,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Trip saved: ${finished.distanceKm.toStringAsFixed(2)} km')),
     );
+    for (final trophy in newTrophies) {
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          icon: Icon(trophy.icon, size: 40, color: Colors.amber),
+          title: Text('Trophy earned: ${trophy.name}'),
+          content: Text(trophy.description),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Nice')),
+          ],
+        ),
+      );
+    }
   }
 
   @override
