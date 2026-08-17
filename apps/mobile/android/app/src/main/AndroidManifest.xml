@@ -29,6 +29,11 @@
          foreground service declaring the "location" type. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Android 13+ (API 33+) requires this as a runtime-requested
+         permission for any app that shows a notification — including the
+         foreground-service one above. Requested in
+         trip/location_recorder.dart's ensureReady(). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />

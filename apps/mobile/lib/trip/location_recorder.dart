@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../data/models/trip_point.dart';
+import '../logging/log_buffer.dart';
 import 'geo_math.dart';
 
 class RecordingStats {
@@ -57,6 +59,11 @@ const _maxPlausibleSpeedKph = 300.0;
 /// friction: Play Store policy requires a background-location
 /// declaration/review for apps that use `ACCESS_BACKGROUND_LOCATION`,
 /// which the foreground-service approach avoids entirely.
+///
+/// Every stage logs to logBuffer (the same buffer the BLE "Logs" screen
+/// shows — see screens/log_screen.dart) since a silent GPS failure is
+/// otherwise invisible: unlike a BLE connect failure, there's no
+/// exception dialog, just a trip that saves with 0 km recorded.
 class LocationRecorder {
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
@@ -68,6 +75,8 @@ class LocationRecorder {
   double _distanceMeters = 0;
   double? _maxSpeedKph;
   TripPoint? _lastAcceptedPoint;
+  int _rejectedAccuracyCount = 0;
+  int _rejectedGlitchCount = 0;
 
   Stream<TripPoint> get pointStream => _pointsController.stream;
   Stream<RecordingStats> get statsStream => _statsController.stream;
@@ -78,14 +87,31 @@ class LocationRecorder {
   /// descriptive [StateError] instead of surfacing a raw plugin exception.
   static Future<void> ensureReady() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
+      logBuffer.add('GPS: location services are OFF');
       throw StateError('Location services are off — enable them in system settings.');
     }
     var permission = await Geolocator.checkPermission();
+    logBuffer.add('GPS: location permission is $permission');
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+      logBuffer.add('GPS: location permission after request: $permission');
     }
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
       throw StateError('Location permission denied — grant it in system settings to record a trip.');
+    }
+
+    // Android 13+ requires this to actually show the foreground-service
+    // notification (see _buildLocationSettings) — without it, some
+    // geolocator/Android versions fail the whole foreground service
+    // startup silently, which stops position updates from ever arriving
+    // even though permission and location services are otherwise fine.
+    if (Platform.isAndroid) {
+      final notificationStatus = await Permission.notification.status;
+      logBuffer.add('GPS: notification permission is $notificationStatus');
+      if (notificationStatus.isDenied) {
+        final result = await Permission.notification.request();
+        logBuffer.add('GPS: notification permission after request: $result');
+      }
     }
   }
 
@@ -99,8 +125,19 @@ class LocationRecorder {
     _distanceMeters = 0;
     _maxSpeedKph = null;
     _lastAcceptedPoint = null;
+    _rejectedAccuracyCount = 0;
+    _rejectedGlitchCount = 0;
 
-    _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(_onPosition);
+    logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
+    _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
+      _onPosition,
+      onError: (Object error, StackTrace stack) {
+        logBuffer.add('GPS: position stream ERROR: $error');
+      },
+      onDone: () {
+        logBuffer.add('GPS: position stream closed (accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount glitch-rejected=$_rejectedGlitchCount)');
+      },
+    );
   }
 
   /// Platform-specific settings so a recording keeps streaming positions
@@ -136,7 +173,15 @@ class LocationRecorder {
   }
 
   void _onPosition(Position position) {
-    if (position.accuracy > _maxAcceptableAccuracyMeters) return;
+    if (position.accuracy > _maxAcceptableAccuracyMeters) {
+      _rejectedAccuracyCount++;
+      logBuffer.add(
+        'GPS: fix rejected, accuracy ${position.accuracy.toStringAsFixed(0)}m '
+        '> ${_maxAcceptableAccuracyMeters.toStringAsFixed(0)}m threshold '
+        '(${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)})',
+      );
+      return;
+    }
 
     final speedKph = position.speed >= 0 ? position.speed * 3.6 : null;
     final now = DateTime.now();
@@ -151,6 +196,10 @@ class LocationRecorder {
       );
       final seconds = now.difference(last.timestamp).inMilliseconds / 1000.0;
       if (seconds > 0 && (segmentMeters / seconds) * 3.6 > _maxPlausibleSpeedKph) {
+        _rejectedGlitchCount++;
+        logBuffer.add(
+          'GPS: fix rejected as a glitch, implied ${((segmentMeters / seconds) * 3.6).toStringAsFixed(0)} km/h',
+        );
         return; // GPS glitch — skip this fix entirely rather than pollute the trip
       }
       _distanceMeters += segmentMeters;
@@ -171,6 +220,13 @@ class LocationRecorder {
       _maxSpeedKph = speedKph;
     }
 
+    if (_seq == 1 || _seq % 20 == 0) {
+      logBuffer.add(
+        'GPS: fix #$_seq accepted, accuracy ${position.accuracy.toStringAsFixed(0)}m, '
+        'distance so far ${(_distanceMeters / 1000).toStringAsFixed(2)}km',
+      );
+    }
+
     _pointsController.add(point);
     _statsController.add(
       RecordingStats(
@@ -186,6 +242,10 @@ class LocationRecorder {
   /// Stops the GPS stream and returns final stats for the caller to persist
   /// via TripRepository.finishTrip.
   Future<RecordingStats> stop() async {
+    logBuffer.add(
+      'GPS: stopping — accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount '
+      'glitch-rejected=$_rejectedGlitchCount distance=${(_distanceMeters / 1000).toStringAsFixed(2)}km',
+    );
     await _positionSub?.cancel();
     _positionSub = null;
     final elapsed = _startedAt == null ? Duration.zero : DateTime.now().difference(_startedAt!);
