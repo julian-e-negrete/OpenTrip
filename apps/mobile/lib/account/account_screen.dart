@@ -17,6 +17,7 @@ import '../data/repositories/profile_repository.dart';
 import '../data/repositories/gamification_repository.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../gamification/monthly_recap_screen.dart';
 import '../sync/sync_service.dart';
 import 'country_picker.dart';
 
@@ -314,6 +315,16 @@ class _AccountScreenState extends State<AccountScreen> {
               _StatTile(label: 'Distance', value: '${(_totalDistanceMeters / 1000).toStringAsFixed(0)} km'),
               _StatTile(label: 'Trophies', value: '$_trophyCount'),
             ],
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const MonthlyRecapScreen()),
+              ),
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: const Text('Monthly recap'),
+            ),
           ),
           if (!guest) ...[
             const SizedBox(height: 24),

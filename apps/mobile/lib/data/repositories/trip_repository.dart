@@ -109,6 +109,20 @@ class TripRepository {
     return rows.map(Trip.fromRow).toList();
   }
 
+  /// Trips started within [start, end) — used by
+  /// gamification/monthly_recap_screen.dart to window an otherwise
+  /// all-time aggregation by a single month.
+  Future<List<Trip>> listForUserInRange(String userId, {required DateTime start, required DateTime end}) async {
+    final db = await LocalDatabase.instance.database;
+    final rows = await db.query(
+      'trips',
+      where: 'user_id = ? AND started_at >= ? AND started_at < ?',
+      whereArgs: [userId, start.toIso8601String(), end.toIso8601String()],
+      orderBy: 'started_at DESC',
+    );
+    return rows.map(Trip.fromRow).toList();
+  }
+
   Future<List<TripPoint>> pointsForTrip(String tripId) async {
     final db = await LocalDatabase.instance.database;
     final rows = await db.query(

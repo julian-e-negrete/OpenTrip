@@ -43,6 +43,7 @@ dependencies:
   # service in trip/location_recorder.dart (see that file's doc comment).
   flutter_activity_recognition: ^4.0.0
   flutter_foreground_task: ^10.0.0
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

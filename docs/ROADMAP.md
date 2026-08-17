@@ -302,6 +302,37 @@
   and camera-alert radius above. Not tied to any leaderboard or
   trophy — TripRank's own positioning is explicit that speed/behavior
   is "for reference," never ranked, and this mirrors that.
+- **Animated trip replay + satellite tiles** (`trips/trip_detail_screen.dart`):
+  a play/pause control animates a marker along the route, and a
+  satellite/street toggle switches `TileLayer` between
+  `tile.openstreetmap.org` and Esri's public World Imagery service
+  (`server.arcgisonline.com` — no API key, same "fine at this app's
+  scale, not for heavy production traffic" posture as the street tiles
+  already had). Replay is fixed at 18 seconds regardless of actual trip
+  length (nobody would watch an hour-long drive played back in real
+  time), but the *marker* within that window is still paced by the
+  trip's real elapsed time (`trip/route_replay.dart`,
+  `positionAtProgress`/`pointCountAtProgress` — tested), not by point
+  index: a stretch where you idled at a light plays slower than the
+  open road, exactly as it happened, rather than both taking the same
+  slice of the 18 seconds just because they have similar point counts.
+- **Monthly recap** (`gamification/monthly_recap_screen.dart`): the
+  same all-time aggregations the Account tab and leaderboard already
+  show, windowed to one month via new range-scoped queries
+  (`TripRepository.listForUserInRange`,
+  `GamificationRepository.territoryCellCountInRange`/
+  `trophyKeysEarnedInRange`) instead of new data collection. Distance,
+  trip count, time driving, longest trip, new territory explored, and
+  any trophies earned that month, with prev/next month navigation.
+  Reachable from the Account tab; works for guests too, since it's all
+  local and keyed by whichever id `CurrentUser` resolves to — unlike
+  the leaderboard/friends screens, nothing here needs another user's
+  data.
+- **Shareable trip stat-card image** (`trips/stat_card_screen.dart`): a
+  branded card (distance, time, avg/max speed, vehicle, date) rendered
+  via `RepaintBoundary.toImage()` and handed to the OS share sheet via
+  `share_plus` — reachable via a share icon on trip detail. Purely
+  client-side, no backend involved in generating or hosting the image.
 
 ## Not done yet
 
@@ -311,28 +342,17 @@ being here means "identified and worth doing," not "in progress."
 
 1. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
-2. **Animated trip replay on satellite map.** Trip detail currently
-   shows a static route line over OpenStreetMap street tiles
-   (`trips/trip_detail_screen.dart`); TripRank animates the route over
-   satellite imagery. Satellite tiles alone are a tile-provider swap
-   (see that file's doc comment); the playback animation is new work.
-3. **Monthly recap.** A generated summary of a rider's month — would
-   reuse `gamification_repository.dart`'s existing aggregation
-   patterns, just windowed by date instead of all-time.
-4. **Shareable trip stat-card image.** Render a trip's key numbers as a
-   shareable image (e.g. via Flutter's `RepaintBoundary` capture) —
-   useful for organic growth, no backend changes needed.
-5. **iOS, actually shippable.** The `ios/` project is scaffolded and
+2. **iOS, actually shippable.** The `ios/` project is scaffolded and
    wired for feature parity (Info.plist entries, `AppleSettings` in
    `trip/location_recorder.dart`) but has never been built or run —
    this project has no Mac. Everything iOS-related in this roadmap is
    unverified until that changes.
-6. **Car clubs / groups.** Lowest priority of the identified gaps —
+3. **Car clubs / groups.** Lowest priority of the identified gaps —
    TripRank's own description of what a "car club" actually does
    (chat? shared challenges? just a named group on the leaderboard?)
    couldn't be confirmed even from its own marketing pages, so there's
    not yet a clear feature to build toward.
-7. **AI car-modification visualizer.** Also low priority — a novelty
+4. **AI car-modification visualizer.** Also low priority — a novelty
    feature with an external paid image-generation API dependency
    (TripRank uses fal.ai), not core to trip tracking or vehicle
    connectivity, which is where this project's actual differentiation

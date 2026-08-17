@@ -6,6 +6,8 @@ import '../data/models/trip.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
+import '../trip/route_replay.dart';
+import 'stat_card_screen.dart';
 
 class TripDetailScreen extends StatefulWidget {
   const TripDetailScreen({super.key, required this.trip, required this.vehicle});
@@ -69,6 +71,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       appBar: AppBar(
         title: Text(widget.vehicle?.name ?? 'Trip'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            tooltip: 'Share',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => StatCardScreen(trip: trip, vehicle: widget.vehicle)),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Delete trip',
@@ -153,19 +162,62 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 }
 
-/// Route polyline over OpenStreetMap raster tiles. Uses the public
-/// tile.openstreetmap.org server, which is fine for this app's current
-/// scale but comes with OSM's tile usage policy (low volume, no heavy
-/// production traffic) — see docs/ROADMAP.md. Self-hosting tiles or
-/// switching to a paid provider (Stadia Maps, MapTiler, Thunderforest)
-/// is the documented upgrade path if that ever becomes a real concern.
-class _RouteMap extends StatelessWidget {
+/// Route polyline (or an animated replay, see [_playing]) over either
+/// OpenStreetMap street tiles or Esri's public World Imagery satellite
+/// tiles — the street server (tile.openstreetmap.org) is fine for this
+/// app's current scale but comes with OSM's tile usage policy (low
+/// volume, no heavy production traffic); the satellite one
+/// (server.arcgisonline.com) is Esri's community-shared service, used
+/// the same way here — no API key, fine at this scale, not meant for
+/// heavy/production traffic, attribution shown. Self-hosting either or
+/// switching to a paid provider is the documented upgrade path if that
+/// ever becomes a real concern. See docs/ROADMAP.md.
+///
+/// Replay pace is fixed at [_playbackDuration] regardless of how long
+/// the actual trip was — an hours-long drive played back in real time
+/// wouldn't be watched by anyone; [positionAtProgress] still paces the
+/// *marker* by the trip's real elapsed time within that fixed window
+/// (see trip/route_replay.dart), so a stretch where you idled at a
+/// light plays slower than the open road, not identically fast.
+class _RouteMap extends StatefulWidget {
   const _RouteMap({required this.points});
   final List<TripPoint>? points;
 
   @override
+  State<_RouteMap> createState() => _RouteMapState();
+}
+
+class _RouteMapState extends State<_RouteMap> with SingleTickerProviderStateMixin {
+  static const _playbackDuration = Duration(seconds: 18);
+
+  late final AnimationController _controller;
+  bool _satellite = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(vsync: this, duration: _playbackDuration);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    if (_controller.isAnimating) {
+      _controller.stop();
+    } else {
+      if (_controller.isCompleted) _controller.value = 0;
+      _controller.forward();
+    }
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final pts = points;
+    final pts = widget.points;
     if (pts == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -179,39 +231,106 @@ class _RouteMap extends StatelessWidget {
     final routePoints = pts.map((p) => LatLng(p.latitude, p.longitude)).toList();
     final bounds = LatLngBounds.fromPoints(routePoints);
 
-    return FlutterMap(
-      options: MapOptions(
-        initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
-      ),
+    return Stack(
       children: [
-        TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'co.opentrip.opentrip_mobile',
-        ),
-        PolylineLayer(
-          polylines: [Polyline(points: routePoints, strokeWidth: 4, color: Colors.tealAccent)],
-        ),
-        MarkerLayer(
-          markers: [
-            Marker(
-              point: routePoints.first,
-              width: 16,
-              height: 16,
-              child: const DecoratedBox(
-                decoration: BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+        AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final traveled = pts.length < 2 ? pts.length : pointCountAtProgress(pts, _controller.value);
+            final (curLat, curLon) = positionAtProgress(pts, _controller.value);
+            final current = LatLng(curLat, curLon);
+            final traveledPoints = [...routePoints.take(traveled), current];
+
+            return FlutterMap(
+              options: MapOptions(
+                initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
               ),
-            ),
-            Marker(
-              point: routePoints.last,
-              width: 16,
-              height: 16,
-              child: const DecoratedBox(
-                decoration: BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-              ),
-            ),
-          ],
+              children: [
+                TileLayer(
+                  urlTemplate: _satellite
+                      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'co.opentrip.opentrip_mobile',
+                ),
+                PolylineLayer(
+                  polylines: [
+                    // Full route, dim — context for where the animated
+                    // portion is headed while replaying.
+                    Polyline(points: routePoints, strokeWidth: 3, color: Colors.white.withValues(alpha: 0.35)),
+                    Polyline(points: traveledPoints, strokeWidth: 4, color: Colors.tealAccent),
+                  ],
+                ),
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: routePoints.first,
+                      width: 16,
+                      height: 16,
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+                      ),
+                    ),
+                    Marker(
+                      point: routePoints.last,
+                      width: 16,
+                      height: 16,
+                      child: const DecoratedBox(
+                        decoration: BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                      ),
+                    ),
+                    if (_controller.isAnimating || _controller.value > 0)
+                      Marker(
+                        point: current,
+                        width: 22,
+                        height: 22,
+                        child: const Icon(Icons.navigation, color: Colors.white, shadows: [
+                          Shadow(color: Colors.black, blurRadius: 4),
+                        ]),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
+        if (pts.length >= 2)
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _MapChip(
+                  icon: _satellite ? Icons.map_outlined : Icons.satellite_alt_outlined,
+                  tooltip: _satellite ? 'Street map' : 'Satellite',
+                  onPressed: () => setState(() => _satellite = !_satellite),
+                ),
+                const SizedBox(width: 8),
+                _MapChip(
+                  icon: _controller.isAnimating ? Icons.pause : Icons.play_arrow,
+                  tooltip: _controller.isAnimating ? 'Pause replay' : 'Play replay',
+                  onPressed: _togglePlay,
+                ),
+              ],
+            ),
+          ),
       ],
+    );
+  }
+}
+
+class _MapChip extends StatelessWidget {
+  const _MapChip({required this.icon, required this.tooltip, required this.onPressed});
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54,
+      shape: const CircleBorder(),
+      child: IconButton(icon: Icon(icon, color: Colors.white), tooltip: tooltip, onPressed: onPressed),
     );
   }
 }

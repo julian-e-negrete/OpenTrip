@@ -60,4 +60,31 @@ class GamificationRepository {
     );
     return result ?? 0;
   }
+
+  /// Territory cells first claimed within [start, end) — used for
+  /// gamification/monthly_recap_screen.dart's "new ground this month",
+  /// distinct from [territoryCellCount]'s all-time total.
+  Future<int> territoryCellCountInRange(String userId, {required DateTime start, required DateTime end}) async {
+    final db = await LocalDatabase.instance.database;
+    final result = Sqflite.firstIntValue(
+      await db.rawQuery(
+        'SELECT COUNT(*) FROM territory_cells WHERE user_id = ? AND first_seen_at >= ? AND first_seen_at < ?',
+        [userId, start.toIso8601String(), end.toIso8601String()],
+      ),
+    );
+    return result ?? 0;
+  }
+
+  /// Trophy keys earned within [start, end) — for the same monthly
+  /// recap use as [territoryCellCountInRange].
+  Future<List<String>> trophyKeysEarnedInRange(String userId, {required DateTime start, required DateTime end}) async {
+    final db = await LocalDatabase.instance.database;
+    final rows = await db.query(
+      'trophies',
+      columns: ['trophy_key'],
+      where: 'user_id = ? AND earned_at >= ? AND earned_at < ?',
+      whereArgs: [userId, start.toIso8601String(), end.toIso8601String()],
+    );
+    return rows.map((r) => r['trophy_key'] as String).toList();
+  }
 }
