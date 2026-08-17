@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
 import 'account/account_screen.dart';
+import 'gamification/territory_map_screen.dart';
 import 'screens/vehicle_screen.dart';
 import 'trip/recording_screen.dart';
 import 'trips/trip_history_screen.dart';
 import 'vehicles/vehicle_list_screen.dart';
 
 /// Post-login (or post-guest) shell. Tabs: trip history, recording,
-/// vehicle management, the Kawasaki BLE telemetry demo, and account.
+/// vehicle management, the Kawasaki BLE telemetry demo, the global/
+/// friends territory map, and account.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -23,6 +25,7 @@ class _HomeShellState extends State<HomeShell> {
     RecordingScreen(),
     VehicleListScreen(),
     VehicleScreen(),
+    TerritoryMapScreen(),
     AccountScreen(),
   ];
 
@@ -38,6 +41,7 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(icon: Icon(Icons.fiber_manual_record_outlined), label: 'Record'),
           NavigationDestination(icon: Icon(Icons.two_wheeler_outlined), label: 'Vehicles'),
           NavigationDestination(icon: Icon(Icons.bluetooth), label: 'BLE'),
+          NavigationDestination(icon: Icon(Icons.map_outlined), label: 'Map'),
           NavigationDestination(icon: Icon(Icons.person_outline), label: 'Account'),
         ],
       ),

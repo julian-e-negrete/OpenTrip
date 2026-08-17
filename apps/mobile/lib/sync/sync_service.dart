@@ -442,6 +442,19 @@ class SyncService {
     }
   }
 
+  /// Same shape as [fetchTerritoryMap], scoped to you plus your accepted
+  /// friends — see get_friends_territory_map() in supabase/friends.sql.
+  Future<List<TerritoryMapCell>> fetchFriendsTerritoryMap() async {
+    if (!_canSync) return const [];
+    try {
+      final rows = await _client.rpc('get_friends_territory_map') as List;
+      return rows.map((row) => TerritoryMapCell.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
+    }
+  }
+
   /// Riders whose display name contains [query] (case-insensitive),
   /// excluding yourself — see search_riders() in supabase/friends.sql.
   Future<List<RiderSummary>> searchRiders(String query) async {

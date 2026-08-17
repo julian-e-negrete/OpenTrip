@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
 import '../friends/friends_screen.dart';
-import '../gamification/territory_map_screen.dart';
 import '../sync/sync_service.dart';
 import 'leaderboard_entry.dart';
 
@@ -89,13 +88,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FriendsScreen()));
                 if (mounted) _load();
               },
-            ),
-            IconButton(
-              icon: const Icon(Icons.map_outlined),
-              tooltip: 'Territory map',
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TerritoryMapScreen()),
-              ),
             ),
           ],
           bottom: PreferredSize(

@@ -83,10 +83,22 @@ Creates `friendships` (a request/accept model — see the comment at the
 top of `friends.sql` for why every write to it goes through a function
 rather than a direct insert/update/delete) plus the functions the
 Friends screen needs: searching for a rider by name, sending/accepting/
-removing a friendship, and `get_friends_leaderboard()` — the same shape
-as `get_leaderboard()`, scoped to you and your accepted friends.
-Skipping this step means the people icon on the Leaderboard screen still
-opens, but search and every list on it come back empty.
+removing a friendship, `get_friends_leaderboard()` — the same shape as
+`get_leaderboard()`, scoped to you and your accepted friends — and
+`get_friends_territory_map()`, the same relationship to
+`get_territory_map()`. Skipping this step means the people icon on the
+Leaderboard screen still opens, but search and every list on it (and
+the Map tab's "Friends" toggle) come back empty.
+
+**Already ran `friends.sql` before `get_friends_territory_map()`
+existed, or before every function in it revoked `anon` execute access?**
+Re-run the current file — every statement is safe to run again, and the
+`anon` revoke matters: Supabase grants `EXECUTE` on new functions to the
+unauthenticated `anon` role by default (sometimes via an explicit grant,
+sometimes via the `public` pseudo-role — both got closed here), so an
+earlier run of this file may have left these callable without signing
+in. They only ever return the same aggregated, non-sensitive data the
+app itself shows once signed in, but re-running closes the gap regardless.
 
 ## 5. That's it
 

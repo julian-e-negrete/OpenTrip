@@ -140,17 +140,21 @@
   see `supabase/leaderboard.sql`'s comment. Reachable via a leaderboard
   icon on the Trips tab; guests see a "sign in to compare" message
   instead, since there's no account to rank.
-- **Territory map** (`gamification/territory_map_screen.dart`,
-  `get_territory_map()` in `supabase/leaderboard.sql`): a world map of
-  conquered zones — every rider's claimed grid cells drawn as filled
-  rectangles over OpenStreetMap tiles, yours highlighted, everyone
-  else's colored by a stable per-rider hash so the same person always
-  reads as the same color across loads. Needed its own `security
-  definer` function for the same reason the leaderboard did (RLS blocks
-  cross-user reads even through a view) — but deliberately returns only
-  `(cell_key, user_id, display_name)`, never a raw trip route or
-  timestamp, so it can't be used to reconstruct anyone's actual path.
-  Reachable via a map icon on the Leaderboard screen; guests get the
+- **Territory map, as its own tab** (`gamification/territory_map_screen.dart`,
+  `get_territory_map()`/`get_friends_territory_map()` in
+  `supabase/leaderboard.sql`/`friends.sql`): a world map of conquered
+  zones — every rider's claimed grid cells drawn as filled rectangles
+  over OpenStreetMap tiles, yours highlighted, everyone else's colored
+  by a stable per-rider hash so the same person always reads as the
+  same color across loads. A Global/Friends `SegmentedButton` (same
+  pattern as the Leaderboard tab's) switches between every non-opted-out
+  rider and just you plus your accepted friends. Needed its own
+  `security definer` functions for the same reason the leaderboard did
+  (RLS blocks cross-user reads even through a view) — but deliberately
+  return only `(cell_key, user_id, display_name)`, never a raw trip
+  route or timestamp, so they can't be used to reconstruct anyone's
+  actual path. Promoted from an icon buried on the Leaderboard screen to
+  a full bottom-nav tab (`home_shell.dart`) on request; guests get the
   same "sign in" gate as the leaderboard itself.
 - **One shared BLE connection, not two** (`vehicle/ble_connection_service.dart`):
   the standalone Vehicle tab (`screens/vehicle_screen.dart`) and the

@@ -50,7 +50,7 @@ as $$
 $$;
 
 grant execute on function public.search_riders(text) to authenticated;
-revoke execute on function public.search_riders(text) from anon;
+revoke execute on function public.search_riders(text) from anon, public;
 
 
 -- Sends a friend request — or, if the target already sent *you* one
@@ -96,7 +96,7 @@ end;
 $$;
 
 grant execute on function public.send_or_accept_friend_request(uuid) to authenticated;
-revoke execute on function public.send_or_accept_friend_request(uuid) from anon;
+revoke execute on function public.send_or_accept_friend_request(uuid) from anon, public;
 
 
 -- Accepts an incoming request. A no-op (no error) if there's no such
@@ -115,7 +115,7 @@ end;
 $$;
 
 grant execute on function public.accept_friend_request(uuid) to authenticated;
-revoke execute on function public.accept_friend_request(uuid) from anon;
+revoke execute on function public.accept_friend_request(uuid) from anon, public;
 
 
 -- Removes a friendship in either direction — also how you decline a
@@ -135,7 +135,7 @@ end;
 $$;
 
 grant execute on function public.remove_friendship(uuid) to authenticated;
-revoke execute on function public.remove_friendship(uuid) from anon;
+revoke execute on function public.remove_friendship(uuid) from anon, public;
 
 
 -- Your accepted friends.
@@ -154,7 +154,7 @@ as $$
 $$;
 
 grant execute on function public.get_friends() to authenticated;
-revoke execute on function public.get_friends() from anon;
+revoke execute on function public.get_friends() from anon, public;
 
 
 -- Requests sent *to* you, still pending your response.
@@ -172,7 +172,7 @@ as $$
 $$;
 
 grant execute on function public.get_pending_friend_requests() to authenticated;
-revoke execute on function public.get_pending_friend_requests() from anon;
+revoke execute on function public.get_pending_friend_requests() from anon, public;
 
 
 -- Same shape as get_leaderboard() (leaderboard.sql), scoped to you plus
@@ -228,4 +228,37 @@ as $$
 $$;
 
 grant execute on function public.get_friends_leaderboard() to authenticated;
-revoke execute on function public.get_friends_leaderboard() from anon;
+revoke execute on function public.get_friends_leaderboard() from anon, public;
+
+
+-- Same shape as get_territory_map() (leaderboard.sql), scoped to you
+-- plus your accepted friends instead of every rider — the map-view
+-- counterpart to get_friends_leaderboard() above. Same
+-- leaderboard_visible + "never a raw route, just cell ownership"
+-- posture as get_territory_map()'s own comment explains.
+create or replace function public.get_friends_territory_map()
+returns table (
+  cell_key text,
+  user_id uuid,
+  display_name text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  with friend_ids as (
+    select case when requester_id = auth.uid() then addressee_id else requester_id end as friend_id
+    from public.friendships
+    where status = 'accepted' and (requester_id = auth.uid() or addressee_id = auth.uid())
+    union
+    select auth.uid()
+  )
+  select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name
+  from public.territory_cells tc
+  join public.profiles p on p.user_id = tc.user_id
+  join friend_ids f on f.friend_id = tc.user_id
+  where coalesce(p.leaderboard_visible, true);
+$$;
+
+grant execute on function public.get_friends_territory_map() to authenticated;
+revoke execute on function public.get_friends_territory_map() from anon, public;
