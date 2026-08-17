@@ -179,7 +179,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           ],
           const SizedBox(height: 24),
           if (_error != null) ...[
-            Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             const SizedBox(height: 12),
           ],
           FilledButton(

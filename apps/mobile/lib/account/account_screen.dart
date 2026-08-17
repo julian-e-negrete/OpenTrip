@@ -196,7 +196,7 @@ class _AccountScreenState extends State<AccountScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete everything'),
           ),
         ],
@@ -274,10 +274,10 @@ class _AccountScreenState extends State<AccountScreen> {
             ),
           ),
           if (guest)
-            const Center(
+            Center(
               child: Text(
                 'Local testing mode — not signed in',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
             ),
           const SizedBox(height: 16),
@@ -328,7 +328,10 @@ class _AccountScreenState extends State<AccountScreen> {
                     label: Text(_syncing ? 'Syncing…' : 'Sync now'),
                   ),
                   const SizedBox(height: 4),
-                  Text(_syncStatusText(), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    _syncStatusText(),
+                    style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
                 ],
               ),
             ),
@@ -345,7 +348,7 @@ class _AccountScreenState extends State<AccountScreen> {
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _busy ? null : _deleteAccount,
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
+            style: OutlinedButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
             icon: const Icon(Icons.delete_forever_outlined),
             label: Text(_busy ? 'Deleting…' : 'Delete account'),
           ),
@@ -364,8 +367,8 @@ class _StatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        Text(label, style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }

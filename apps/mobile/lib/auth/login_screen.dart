@@ -101,10 +101,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Text('Continue without an account'),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Vehicles and trips stay on this device only, until you sign in.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                  style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                 ),
                 if (_busy) ...[
                   const SizedBox(height: 16),
@@ -112,7 +112,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 16),
-                  Text(_error!, style: const TextStyle(color: Colors.redAccent), textAlign: TextAlign.center),
+                  Text(
+                    _error!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ],
             ),

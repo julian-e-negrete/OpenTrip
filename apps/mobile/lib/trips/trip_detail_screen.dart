@@ -52,7 +52,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -106,11 +106,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 ),
                 _Row('GPS points recorded', '${trip.pointCount}'),
                 if (trip.hasBleTelemetry) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16, bottom: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 4),
                     child: Text(
                       'From the bike',
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.secondary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                   ),
                   if (trip.bleMaxSpeedKph != null)
@@ -127,11 +131,15 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     ),
                 ],
                 if (trip.hasBehaviorStats) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(top: 16, bottom: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 4),
                     child: Text(
                       'Driving behavior',
-                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.tertiary,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
                     ),
                   ),
                   if (trip.behaviorMaxAccelG != null)
@@ -259,7 +267,11 @@ class _RouteMapState extends State<_RouteMap> with SingleTickerProviderStateMixi
                     // Full route, dim — context for where the animated
                     // portion is headed while replaying.
                     Polyline(points: routePoints, strokeWidth: 3, color: Colors.white.withValues(alpha: 0.35)),
-                    Polyline(points: traveledPoints, strokeWidth: 4, color: Colors.tealAccent),
+                    Polyline(
+                      points: traveledPoints,
+                      strokeWidth: 4,
+                      color: Theme.of(context).colorScheme.secondary,
+                    ),
                   ],
                 ),
                 MarkerLayer(
@@ -349,8 +361,8 @@ class _Row extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.grey)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),
     );

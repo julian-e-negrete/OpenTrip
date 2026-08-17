@@ -158,6 +158,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       SnackBar(
         content: Text('⚠ $label ahead — ${alert.distanceMeters.toStringAsFixed(0)}m'),
         backgroundColor: Colors.orange.shade800,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -389,14 +390,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
         if (recording) _StatsView(stats: _stats, currentLeanDeg: _currentLeanDeg) else const Spacer(),
         const SizedBox(height: 24),
         if (_error != null) ...[
-          Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           const SizedBox(height: 12),
         ],
         FilledButton.icon(
           onPressed: recording ? _stop : _start,
           icon: Icon(recording ? Icons.stop_circle_outlined : Icons.play_circle_outline),
           label: Text(recording ? 'Stop & save' : 'Start recording'),
-          style: recording ? FilledButton.styleFrom(backgroundColor: Colors.redAccent) : null,
+          style: recording
+              ? FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error)
+              : null,
         ),
         if (!recording) const Spacer(),
       ],
@@ -421,6 +424,7 @@ class _BleConnectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -428,7 +432,7 @@ class _BleConnectionCard extends StatelessWidget {
           children: [
             Icon(
               state == BleConnectionState.connected ? Icons.bluetooth_connected : Icons.bluetooth,
-              color: state == BleConnectionState.connected ? Colors.lightBlueAccent : Colors.grey,
+              color: state == BleConnectionState.connected ? scheme.secondary : scheme.onSurfaceVariant,
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -439,10 +443,10 @@ class _BleConnectionCard extends StatelessWidget {
                   if (state == BleConnectionState.connected && telemetry != null)
                     Text(
                       '${telemetry!.rpm ?? '—'} rpm · gear ${telemetry!.gear ?? '—'}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
                     ),
                   if (state == BleConnectionState.failed && error != null)
-                    Text(error!, style: const TextStyle(fontSize: 12, color: Colors.redAccent)),
+                    Text(error!, style: TextStyle(fontSize: 12, color: scheme.error)),
                 ],
               ),
             ),
@@ -480,17 +484,32 @@ class _StatsView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = stats;
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
-            Text(
-              s == null ? '0.00' : (s.distanceMeters / 1000).toStringAsFixed(2),
-              style: const TextStyle(fontSize: 40, fontWeight: FontWeight.bold),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: s == null ? '0.00' : (s.distanceMeters / 1000).toStringAsFixed(2),
+                    style: TextStyle(
+                      fontSize: 48,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -1,
+                      color: scheme.secondary,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' km',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
             ),
-            const Text('km'),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -498,13 +517,15 @@ class _StatsView extends StatelessWidget {
                 _Stat(
                   label: 'Speed',
                   value: s?.currentSpeedKph == null ? '—' : '${s!.currentSpeedKph!.toStringAsFixed(0)} km/h',
+                  color: scheme.primary,
                 ),
                 _Stat(
                   label: 'Max',
                   value: s?.maxSpeedKph == null ? '—' : '${s!.maxSpeedKph!.toStringAsFixed(0)} km/h',
+                  color: scheme.primary,
                 ),
                 if (currentLeanDeg != null)
-                  _Stat(label: 'Lean', value: '${currentLeanDeg!.toStringAsFixed(0)}°'),
+                  _Stat(label: 'Lean', value: '${currentLeanDeg!.toStringAsFixed(0)}°', color: scheme.tertiary),
               ],
             ),
           ],
@@ -515,16 +536,29 @@ class _StatsView extends StatelessWidget {
 }
 
 class _Stat extends StatelessWidget {
-  const _Stat({required this.label, required this.value});
+  const _Stat({required this.label, required this.value, this.color});
   final String label;
   final String value;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Column(
       children: [
-        Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        Text(
+          value,
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: color ?? scheme.onSurface),
+        ),
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            color: scheme.onSurfaceVariant,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
       ],
     );
   }

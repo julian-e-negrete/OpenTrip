@@ -10,6 +10,7 @@ import 'config/app_config.dart';
 import 'home_shell.dart';
 import 'logging/log_buffer.dart';
 import 'sync/sync_service.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   // Capture every print() in the app — including flutter_blue_plus's own
@@ -46,7 +47,9 @@ class OpenTripApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OpenTrip',
-      theme: ThemeData(colorSchemeSeed: Colors.teal, useMaterial3: true, brightness: Brightness.dark),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       home: const _AuthGate(),
     );
   }

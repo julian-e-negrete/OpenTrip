@@ -65,7 +65,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -96,32 +96,51 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                 itemCount: _trips.length,
                 itemBuilder: (context, i) {
                   final trip = _trips[i];
                   final vehicle = _vehiclesById[trip.vehicleId];
+                  final scheme = Theme.of(context).colorScheme;
                   return Dismissible(
                     key: ValueKey(trip.id),
                     direction: DismissDirection.endToStart,
                     background: Container(
-                      color: Colors.redAccent,
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(color: scheme.error, borderRadius: BorderRadius.circular(18)),
                       alignment: Alignment.centerRight,
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: const Icon(Icons.delete_outline, color: Colors.white),
+                      child: Icon(Icons.delete_outline, color: scheme.onError),
                     ),
                     confirmDismiss: (_) => _confirmDelete(trip),
                     onDismissed: (_) => TripRepository.instance.deleteTrip(trip.id),
-                    child: ListTile(
-                      leading: const Icon(Icons.route_outlined),
-                      title: Text('${trip.distanceKm.toStringAsFixed(2)} km'),
-                      subtitle: Text(
-                        '${vehicle?.name ?? 'Unknown vehicle'} · '
-                        '${trip.startedAt.toLocal().toString().substring(0, 16)} · '
-                        '${_fmtDuration(trip.durationSeconds)}',
-                      ),
-                      trailing: trip.isFinished ? null : const Chip(label: Text('In progress')),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle)),
+                    child: Card(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          radius: 20,
+                          backgroundColor: scheme.secondary.withValues(alpha: 0.16),
+                          child: Icon(Icons.route_outlined, color: scheme.secondary),
+                        ),
+                        title: Text(
+                          '${trip.distanceKm.toStringAsFixed(2)} km',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+                        ),
+                        subtitle: Text(
+                          '${vehicle?.name ?? 'Unknown vehicle'} · '
+                          '${trip.startedAt.toLocal().toString().substring(0, 16)} · '
+                          '${_fmtDuration(trip.durationSeconds)}',
+                        ),
+                        trailing: trip.isFinished
+                            ? null
+                            : Chip(
+                                label: const Text('In progress'),
+                                backgroundColor: scheme.primary.withValues(alpha: 0.16),
+                                labelStyle: TextStyle(color: scheme.primary, fontWeight: FontWeight.w700),
+                                side: BorderSide.none,
+                              ),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle)),
+                        ),
                       ),
                     ),
                   );
