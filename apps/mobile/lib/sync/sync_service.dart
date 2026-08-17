@@ -16,22 +16,39 @@ import '../data/repositories/trip_repository.dart';
 /// Mirrors local vehicles/trips/trip_points/profile (display name only)
 /// to Supabase Postgres — see /supabase/schema.sql for the tables this
 /// pushes to and pulls from, and /docs/CLOUD_SYNC_SETUP.md for the setup
-/// step only you can do (running that SQL once in your project).
+/// steps only you can do (running that SQL, and enabling Realtime
+/// replication, once in your project).
 ///
-/// Strategy, deliberately simple rather than a full offline sync engine:
+/// Strategy:
 /// - **Push**: every local vehicle/trip/profile write marks itself
 ///   `synced = 0` (see the `synced` field on those models). This service
 ///   listens to the same DataEvents bus the UI already reloads from, and
 ///   after any change, upserts every unsynced row for the signed-in user,
 ///   marking it synced on success. A trip's points are pushed in bulk
 ///   alongside it, once, the same moment the trip itself is pushed.
-/// - **Pull**: [pullAll] fetches every vehicle/trip/profile row for the
-///   signed-in user and upserts them into local SQLite (remote always
-///   wins on conflict — there's no per-field merge). Called once right
-///   after sign-in, not continuously, so this isn't real-time multi-device
-///   sync; it's "catch this device up." Trip points are pulled lazily,
-///   per-trip, from TripRepository.pointsForTrip, since eagerly pulling
-///   every point of every trip up front doesn't scale.
+/// - **Pull (catch-up)**: [pullAll] fetches every vehicle/trip/profile row
+///   for the signed-in user and upserts them into local SQLite. Runs once
+///   right after sign-in (including "already signed in" on a cold app
+///   start) to catch this device up on anything that happened while it
+///   wasn't running — a websocket subscription can't deliver events from
+///   before it existed.
+/// - **Live (continuous)**: [_startRealtimeSync] subscribes to Postgres
+///   Changes (a Supabase Realtime feature — logical replication over a
+///   websocket, not polling) on vehicles/trips/profiles, filtered to the
+///   signed-in user, for as long as the app is running and signed in. A
+///   change made on another device lands here within roughly a second,
+///   applied straight to local SQLite, no button or reconnect needed.
+///   Trip points are deliberately **not** part of this subscription — a
+///   finished trip can push hundreds of point rows in one go, which would
+///   mean hundreds of individual realtime events on every other device;
+///   they stay on the existing lazy-pull-per-trip model instead (see
+///   TripRepository.pointsForTrip), which is the right shape for
+///   "load this trip's route when I open it," not a live feed.
+///
+/// Remote-applied rows go straight into SQLite (bypassing the
+/// repositories' create/update methods, the same way [pullAll] already
+/// does) specifically so they don't re-trigger a push of the row that was
+/// just pulled — see [_applyRemoteRow].
 ///
 /// Only ever runs for a real signed-in user — guest-mode data
 /// (auth/current_user.dart) has no Supabase session to authenticate
@@ -45,6 +62,7 @@ class SyncService {
   bool _busy = false;
   DateTime? lastSyncAt;
   String? lastError;
+  RealtimeChannel? _channel;
 
   SupabaseClient get _client => Supabase.instance.client;
 
@@ -57,15 +75,21 @@ class SyncService {
     DataEvents.instance.listenable.addListener(_onLocalChange);
 
     if (!AppConfig.isSupabaseConfigured) return;
-    // Trigger the "catch this device up" pull off the actual sign-in
-    // event, not a screen's initState — a screen inside HomeShell's
-    // IndexedStack only initializes once (see data/data_events.dart's doc
-    // comment for the same issue on the UI side), so it would miss a
-    // sign-in that happens later in the same session (e.g. guest ->
-    // "Sign in" from the Account tab).
+    // Trigger catch-up + live sync off the actual auth-state stream, not
+    // a screen's initState — a screen inside HomeShell's IndexedStack
+    // only initializes once (see data/data_events.dart's doc comment for
+    // the same issue on the UI side), so it would miss a sign-in that
+    // happens later in the same session (e.g. guest -> "Sign in" from the
+    // Account tab). `initialSession` covers the "already signed in" case
+    // on a cold app start, when `signedIn` never fires because there's no
+    // new sign-in to report.
     AuthService.instance.onAuthStateChange.listen((state) {
-      if (state.event == AuthChangeEvent.signedIn) {
-        unawaited(pullAll());
+      if (state.event == AuthChangeEvent.signedIn || state.event == AuthChangeEvent.initialSession) {
+        if (AuthService.instance.isSignedIn) {
+          unawaited(pullAll().then((_) => _startRealtimeSync()));
+        }
+      } else if (state.event == AuthChangeEvent.signedOut) {
+        unawaited(_stopRealtimeSync());
       }
     });
   }
@@ -196,6 +220,94 @@ class SyncService {
     } catch (e) {
       lastError = e.toString();
     }
+  }
+
+  /// Subscribes to live Postgres Changes for the signed-in user's
+  /// vehicles/trips/profile row. Requires Realtime replication to be
+  /// enabled for these tables in the Supabase project (see
+  /// supabase/enable_realtime.sql + docs/CLOUD_SYNC_SETUP.md) — if it
+  /// isn't, this subscribes successfully but simply never receives
+  /// events, which fails silently by design (same posture as the rest of
+  /// this file when the schema itself hasn't been applied yet).
+  Future<void> _startRealtimeSync() async {
+    if (!_canSync) return;
+    await _stopRealtimeSync();
+
+    final userId = AuthService.instance.currentUser!.id;
+    final channel = _client.channel('opentrip-user-$userId');
+
+    channel
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'vehicles',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: userId),
+          callback: (payload) => _applyRemoteRow('vehicles', payload),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'trips',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: userId),
+          callback: (payload) => _applyRemoteRow('trips', payload),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: userId),
+          callback: (payload) => _applyRemoteRow('profiles', payload),
+        )
+        .subscribe();
+
+    _channel = channel;
+  }
+
+  Future<void> _stopRealtimeSync() async {
+    final channel = _channel;
+    if (channel == null) return;
+    _channel = null;
+    await _client.removeChannel(channel);
+  }
+
+  /// Applies one Postgres Changes event straight to local SQLite —
+  /// deliberately not via the repositories' create/update methods (which
+  /// would mark the row `synced = 0` again and cause this device to
+  /// immediately push back a row it just received). Marked `synced = 1`
+  /// here instead, since it's already on the server by definition.
+  Future<void> _applyRemoteRow(String table, PostgresChangePayload payload) async {
+    final db = await LocalDatabase.instance.database;
+    try {
+      if (payload.eventType == PostgresChangeEvent.delete) {
+        // profiles' primary key is user_id, not id — read whichever
+        // column this table actually uses so oldRecord lookup succeeds.
+        final idColumn = table == 'profiles' ? 'user_id' : 'id';
+        final id = payload.oldRecord[idColumn] as String?;
+        if (id == null) return;
+        await db.delete(table, where: '$idColumn = ?', whereArgs: [id]);
+      } else {
+        final row = payload.newRecord;
+        final Map<String, Object?> localRow = switch (table) {
+          'vehicles' => Vehicle.fromSupabaseRow(row).toRow(),
+          'trips' => Trip.fromSupabaseRow(row).toRow(),
+          'profiles' => await _mergeRemoteProfile(db, row),
+          _ => throw StateError('Unexpected realtime table: $table'),
+        };
+        await db.insert(table, localRow, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      DataEvents.instance.notifyChanged();
+    } catch (e) {
+      lastError = e.toString();
+    }
+  }
+
+  /// A remote profile row has no avatar (that's local-only) — preserve
+  /// whatever this device already has on disk rather than clearing it.
+  Future<Map<String, Object?>> _mergeRemoteProfile(Database db, Map<String, dynamic> row) async {
+    final userId = row['user_id'] as String;
+    final existing = await db.query('profiles', where: 'user_id = ?', whereArgs: [userId], limit: 1);
+    final localAvatar = existing.isNotEmpty ? existing.first['avatar_path'] as String? : null;
+    return UserProfile.fromSupabaseRow(row, localAvatarPath: localAvatar).toRow();
   }
 
   /// Deletes a vehicle's remote row (and, via Postgres's real `ON DELETE

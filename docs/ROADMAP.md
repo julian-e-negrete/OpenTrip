@@ -61,19 +61,28 @@
   registration itself, since that needs a privileged service-role
   operation (an Edge Function) a mobile client's anon key can't perform;
   the confirmation dialog says so explicitly.
-- **Cloud sync** (`sync/sync_service.dart`, `supabase/schema.sql`):
-  vehicles, trips, trip points, and profile display name now sync to
-  Supabase Postgres for real signed-in accounts — push after every local
-  write, pull once right after sign-in, plus a manual "Sync now" button.
-  Guest-mode data stays local-only on purpose (no `auth.uid()` session to
-  authenticate a sync write with, and RLS would reject it anyway). Needs
-  a one-time setup step only the project owner can do — running
-  `supabase/schema.sql` in the Supabase SQL Editor — see
-  `docs/CLOUD_SYNC_SETUP.md`. Deliberately not a full offline-sync
-  engine: last-write-wins (no per-field conflict merge), not real-time
-  across devices (pull is once-at-sign-in, not a live subscription), and
-  vehicle/profile **photos don't sync yet** (needs a Supabase Storage
-  bucket, separate setup not included here).
+- **Cloud sync — continuous, not on-demand** (`sync/sync_service.dart`,
+  `supabase/schema.sql`, `supabase/enable_realtime.sql`): vehicles,
+  trips, trip points, and profile display name sync to Supabase Postgres
+  for real signed-in accounts. Three layers: push after every local
+  write; a catch-up pull right after sign-in (including an already-active
+  session on cold app start); and a live Postgres Changes (Realtime)
+  websocket subscription on vehicles/trips/profiles for as long as the
+  app is running signed in, so a change on one device reaches every other
+  signed-in device in about a second with no button or reconnect needed.
+  A manual "Sync now" button remains for forcing a pass or checking
+  status. Trip points deliberately stay off the live feed (a finished
+  trip can push hundreds of point rows at once — not a good fit for
+  per-row realtime events) and use the pre-existing lazy pull-per-trip
+  instead. Guest-mode data stays local-only on purpose (no `auth.uid()`
+  session to authenticate a sync write with, and RLS would reject it
+  anyway). Needs two one-time setup steps only the project owner can do
+  — running `supabase/schema.sql` then `supabase/enable_realtime.sql` in
+  the Supabase SQL Editor — see `docs/CLOUD_SYNC_SETUP.md`; sync still
+  works without the second step, just falls back to pull-at-sign-in
+  only. Still not a full offline-sync engine: last-write-wins (no
+  per-field conflict merge), and vehicle/profile **photos don't sync yet**
+  (needs a Supabase Storage bucket, separate setup not included here).
 
 ## Not done yet
 

@@ -1,11 +1,10 @@
 # Setting up cloud sync
 
-Cloud sync needs tables that don't exist in your Supabase project yet —
-this is the one step only you can do; I can't run SQL against your
-project without direct database credentials. Everything else (the app
-code, the push/pull logic) is already wired up and does nothing harmful
-if you skip this — it just fails quietly and your data stays local-only,
-exactly like today.
+Cloud sync needs two things set up in your Supabase project that I can't
+do myself without direct database credentials. Everything else (the app
+code, the push/pull/live-sync logic) is already wired up and does nothing
+harmful if you skip these — sync just fails quietly and your data stays
+local-only, exactly like before.
 
 ## 1. Run the schema
 
@@ -19,37 +18,43 @@ each with row-level security scoped to `auth.uid()` — a user can only
 ever read/write their own rows, enforced by Postgres itself, not just app
 code.
 
-## 2. That's it
+## 2. Enable Realtime (for continuous, not on-demand, sync)
+
+1. Same SQL Editor, another **New query**.
+2. Paste [`supabase/enable_realtime.sql`](../supabase/enable_realtime.sql).
+3. **Run**.
+
+This adds `vehicles`, `trips`, and `profiles` to Supabase's Realtime
+publication — Postgres's logical replication feed, pushed to the app over
+a websocket. Without this step, sync still works, but only "pull once at
+sign-in + push after each local change" (see `sync/sync_service.dart`'s
+doc comment) — a change made on a second device wouldn't show up on the
+first until you sign in again or tap "Sync now." With it, a change on one
+device reaches every other signed-in device in about a second, no action
+needed.
+
+## 3. That's it
 
 No new dart-defines, no new secrets. The app already has everything it
-needs (the same `SUPABASE_URL`/`SUPABASE_ANON_KEY` used for login). Once
-the tables exist:
-
-- Signing in pulls any existing cloud data for that account onto the
-  device automatically.
-- Adding/editing/deleting a vehicle or finishing a trip pushes it in the
-  background — no button needed. There's also a manual **"Sync now"**
-  button on the Account tab if you want to force it or check status.
-- Guest mode (no account) stays local-only, on purpose — there's no
-  Supabase session to authenticate a sync write with.
+needs (the same `SUPABASE_URL`/`SUPABASE_ANON_KEY` used for login).
 
 ## What doesn't sync (yet)
 
 - **Photos** (vehicle photos, your avatar) — these are local file paths.
   Syncing them needs a Supabase Storage bucket and its own policies,
   which is a separate piece of setup not included here.
-- **Real-time / multi-device live updates** — sync is "pull once at
-  sign-in, push after each local change," not a continuous background
-  subscription. If you use the app on two devices at once, the second
-  device won't see the first device's changes until you sign in again or
-  tap "Sync now."
+- **Trip points aren't part of the live feed.** A finished trip can push
+  hundreds of GPS points in one go, which isn't a good fit for individual
+  realtime events on every other device. They stay on a lazy pull —
+  fetched the first time you open that trip's detail screen on a device
+  that doesn't have them locally yet (see `TripRepository.pointsForTrip`).
 - **Conflict resolution** — if the same row is somehow edited on two
-  devices, whichever pushes/pulls last simply overwrites the other. No
-  merge logic. Unlikely to matter for one person's own vehicles/trips,
-  but worth knowing.
+  devices at nearly the same moment, whichever write lands last on the
+  server simply overwrites the other. No per-field merge. Unlikely to
+  matter for one person's own vehicles/trips, but worth knowing.
 - **Deleting a vehicle while offline** removes it locally immediately,
   and the remote delete is attempted best-effort — if that fails (no
-  network), the remote copy can resurrect on your next pull. Deleting
-  again once you're back online clears it for good.
+  network), the remote copy can resurrect on your next pull/live update.
+  Deleting again once you're back online clears it for good.
 
 See `docs/ROADMAP.md` for what's still open around this.
