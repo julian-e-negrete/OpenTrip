@@ -63,6 +63,16 @@ before step 1's `leaderboard_visible` column existed?** Just re-run the
 current file — every statement in it is safe to run again (`create
 table if not exists`, `create or replace function`).
 
+**Already ran an earlier version of this file (or `friends.sql`) before
+they revoked `anon` execute access?** Definitely re-run both — Supabase
+grants `EXECUTE` on every new function to the unauthenticated `anon`
+role by default, and the earlier versions of these files only granted
+to `authenticated` without revoking that default, so `get_leaderboard()`
+and friends' functions were callable without signing in (still only
+ever returning the same aggregated, non-sensitive data the app itself
+shows — but callable directly against the REST API by anyone with your
+project URL regardless). Re-running the current files closes that.
+
 ## 4. Enable friends
 
 1. Same SQL Editor, another **New query**.

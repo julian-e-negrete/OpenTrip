@@ -10,6 +10,12 @@
 -- second, contradictory row?" are exactly the kind of check-then-act
 -- logic RLS's per-row `using`/`with check` clauses can't express — a
 -- `security definer` function can, atomically, in one statement.
+--
+-- Every function below pairs its `grant ... to authenticated` with a
+-- `revoke ... from anon` — Supabase grants EXECUTE on every new
+-- public-schema function to anon and authenticated by default (a
+-- per-project ALTER DEFAULT PRIVILEGES rule), so the explicit grant
+-- alone doesn't stop an unauthenticated caller from reaching these.
 
 create table if not exists public.friendships (
   requester_id uuid not null references auth.users(id) on delete cascade,
@@ -44,6 +50,7 @@ as $$
 $$;
 
 grant execute on function public.search_riders(text) to authenticated;
+revoke execute on function public.search_riders(text) from anon;
 
 
 -- Sends a friend request — or, if the target already sent *you* one
@@ -89,6 +96,7 @@ end;
 $$;
 
 grant execute on function public.send_or_accept_friend_request(uuid) to authenticated;
+revoke execute on function public.send_or_accept_friend_request(uuid) from anon;
 
 
 -- Accepts an incoming request. A no-op (no error) if there's no such
@@ -107,6 +115,7 @@ end;
 $$;
 
 grant execute on function public.accept_friend_request(uuid) to authenticated;
+revoke execute on function public.accept_friend_request(uuid) from anon;
 
 
 -- Removes a friendship in either direction — also how you decline a
@@ -126,6 +135,7 @@ end;
 $$;
 
 grant execute on function public.remove_friendship(uuid) to authenticated;
+revoke execute on function public.remove_friendship(uuid) from anon;
 
 
 -- Your accepted friends.
@@ -144,6 +154,7 @@ as $$
 $$;
 
 grant execute on function public.get_friends() to authenticated;
+revoke execute on function public.get_friends() from anon;
 
 
 -- Requests sent *to* you, still pending your response.
@@ -161,6 +172,7 @@ as $$
 $$;
 
 grant execute on function public.get_pending_friend_requests() to authenticated;
+revoke execute on function public.get_pending_friend_requests() from anon;
 
 
 -- Same shape as get_leaderboard() (leaderboard.sql), scoped to you plus
@@ -216,3 +228,4 @@ as $$
 $$;
 
 grant execute on function public.get_friends_leaderboard() to authenticated;
+revoke execute on function public.get_friends_leaderboard() from anon;

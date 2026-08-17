@@ -89,7 +89,12 @@ as $$
 $$;
 
 -- Only signed-in app users can call this — not the public "anon" role.
+-- Supabase grants EXECUTE on every new public-schema function to anon
+-- and authenticated by default (via a per-project ALTER DEFAULT
+-- PRIVILEGES rule); the explicit grant below doesn't undo that, so the
+-- revoke is required too, not just belt-and-suspenders.
 grant execute on function public.get_leaderboard() to authenticated;
+revoke execute on function public.get_leaderboard() from anon;
 
 
 -- Same "security definer to safely expose cross-user data" pattern as
@@ -119,3 +124,4 @@ as $$
 $$;
 
 grant execute on function public.get_territory_map() to authenticated;
+revoke execute on function public.get_territory_map() from anon;
