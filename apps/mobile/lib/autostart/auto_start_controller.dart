@@ -2,6 +2,7 @@ import 'package:flutter_activity_recognition/flutter_activity_recognition.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import '../data/data_events.dart';
+import '../logging/log_buffer.dart';
 import '../trip/location_recorder.dart';
 import 'auto_start_prefs.dart';
 import 'driving_detector_task.dart';
@@ -56,9 +57,20 @@ class AutoStartController {
     _ensureInitialized();
   }
 
+  /// The other end of trip/location_recorder.dart's `onLog` bridge and
+  /// autostart/driving_detector_task.dart's own `_log` calls — everything
+  /// that isolate reports lands here and gets folded into the same
+  /// [logBuffer] screens/log_screen.dart shows, prefixed so it's obvious
+  /// in the log which subsystem is background vs. foreground.
   void _onTaskData(Object data) {
-    if (data is Map && (data['event'] == 'autoTripStarted' || data['event'] == 'autoTripFinished')) {
-      DataEvents.instance.notifyChanged();
+    if (data is! Map) return;
+    switch (data['event']) {
+      case 'autoTripStarted':
+      case 'autoTripFinished':
+        DataEvents.instance.notifyChanged();
+      case 'log':
+        final message = data['message'];
+        if (message is String) logBuffer.add('[bg] $message');
     }
   }
 
@@ -89,6 +101,18 @@ class AutoStartController {
     var notificationPermission = await FlutterForegroundTask.checkNotificationPermission();
     if (notificationPermission != NotificationPermission.granted) {
       notificationPermission = await FlutterForegroundTask.requestNotificationPermission();
+    }
+
+    // Not required for the service to start, but several OEMs (Xiaomi,
+    // Huawei, Samsung, OnePlus, and others) kill background services
+    // more aggressively than stock Android's own Doze/App Standby does,
+    // regardless of stopWithTask/foreground-service status — exemption
+    // from battery optimization is the one lever available in-app
+    // against that. Best-effort: declining this doesn't block enabling
+    // the feature, it just means it's more likely to get killed on an
+    // aggressive OEM skin.
+    if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
     }
 
     if (await FlutterForegroundTask.isRunningService) {

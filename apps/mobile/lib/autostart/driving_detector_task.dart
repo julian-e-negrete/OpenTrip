@@ -68,8 +68,18 @@ class DrivingDetectorTaskHandler extends TaskHandler {
   DateTime? _inVehicleSince;
   DateTime? _stillSince;
 
+  /// Bridges a log line to the main isolate's [logBuffer] via
+  /// FlutterForegroundTask's inter-isolate port — see
+  /// trip/location_recorder.dart's `onLog` field doc comment for why
+  /// this can't just call `logBuffer.add` directly. Every state-machine
+  /// decision this class makes goes through this, since none of it is
+  /// otherwise observable while the app is closed — which is exactly
+  /// when this class is doing the most interesting work.
+  void _log(String message) => FlutterForegroundTask.sendDataToMain({'event': 'log', 'message': message});
+
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    _log('AutoStart: task started (starter: ${starter.name})');
     if (AppConfig.isSupabaseConfigured) {
       // A fresh isolate — main.dart's own Supabase.initialize() ran in a
       // different root isolate and isn't visible here. This restores the
@@ -78,6 +88,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     }
 
     final permission = await FlutterActivityRecognition.instance.checkPermission();
+    _log('AutoStart: activity permission is ${permission.name}');
     if (permission != ActivityPermission.GRANTED) {
       // Can't request it from here — no foreground Activity to show the
       // dialog. autostart/auto_start_controller.dart requests it before
@@ -97,6 +108,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
       // resume it rather than starting a second, competing trip. See
       // LocationRecorder.start's priorPoints doc comment for what this
       // does and doesn't recover.
+      _log('AutoStart: resuming trip ${existing.id}, restarted mid-recording');
       await _resumeTrip(existing);
     }
 
@@ -107,6 +119,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
   @override
   void onReceiveData(Object data) {
     if (data == kStopAutoTripMessage) {
+      _log('AutoStart: stop requested from the app');
       unawaited(_stopAutoTrip());
     }
   }
@@ -123,6 +136,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
   }
 
   void _onActivity(Activity activity) {
+    _log('AutoStart: activity ${activity.type.name} (confidence ${activity.confidence.name})');
     if (activity.confidence == ActivityConfidence.LOW) return;
 
     final now = DateTime.now();
@@ -130,7 +144,9 @@ class DrivingDetectorTaskHandler extends TaskHandler {
       case ActivityType.IN_VEHICLE:
         _stillSince = null;
         _inVehicleSince ??= now;
-        if (_activeTrip == null && now.difference(_inVehicleSince!) >= _startDebounce) {
+        final elapsed = now.difference(_inVehicleSince!);
+        if (_activeTrip == null && elapsed >= _startDebounce) {
+          _log('AutoStart: IN_VEHICLE sustained ${elapsed.inSeconds}s — starting a trip');
           unawaited(_startAutoTrip());
         }
         break;
@@ -139,7 +155,9 @@ class DrivingDetectorTaskHandler extends TaskHandler {
       case ActivityType.RUNNING:
         _inVehicleSince = null;
         _stillSince ??= now;
-        if (_activeTrip != null && now.difference(_stillSince!) >= _stopDebounce) {
+        final elapsed = now.difference(_stillSince!);
+        if (_activeTrip != null && elapsed >= _stopDebounce) {
+          _log('AutoStart: ${activity.type.name} sustained ${elapsed.inSeconds}s — stopping the trip');
           unawaited(_stopAutoTrip());
         }
         break;
@@ -154,7 +172,10 @@ class DrivingDetectorTaskHandler extends TaskHandler {
 
   Future<void> _startAutoTrip() async {
     final userId = await CurrentUser.instance.id();
-    if (await TripRepository.instance.activeTripFor(userId) != null) return;
+    if (await TripRepository.instance.activeTripFor(userId) != null) {
+      _log('AutoStart: a trip is already active — not starting a second one');
+      return;
+    }
 
     var vehicleId = await TripRepository.instance.mostRecentVehicleId(userId);
     if (vehicleId == null) {
@@ -164,10 +185,12 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     if (vehicleId == null) {
       // Nothing to record onto — stay watching, try again on the next
       // sustained IN_VEHICLE reading (e.g. once a vehicle's been added).
+      _log('AutoStart: no vehicle to record onto — add one from the Vehicles tab');
       return;
     }
 
     final trip = await TripRepository.instance.startTrip(userId: userId, vehicleId: vehicleId, autoStarted: true);
+    _log('AutoStart: trip ${trip.id} started on vehicle $vehicleId');
     await _attachRecorder(trip);
     FlutterForegroundTask.sendDataToMain({'event': 'autoTripStarted', 'tripId': trip.id});
   }
@@ -179,7 +202,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
 
   Future<void> _attachRecorder(Trip trip, {List<TripPoint> priorPoints = const []}) async {
     _activeTrip = trip;
-    final recorder = LocationRecorder(showForegroundNotification: false);
+    final recorder = LocationRecorder(showForegroundNotification: false, onLog: _log);
     _recorder = recorder;
     await recorder.start(trip.id, priorPoints: priorPoints);
     _pointSub = recorder.pointStream.listen((point) {
@@ -206,6 +229,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     final recorder = _recorder;
     if (trip == null || recorder == null) return;
 
+    _log('AutoStart: stopping trip ${trip.id}');
     final finalStats = await recorder.stop();
     await _pointSub?.cancel();
     await _statsSub?.cancel();
@@ -235,6 +259,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
     // the in-app dialog trip/recording_screen.dart shows for a manual
     // stop — there's no screen open to show it to.
     await GamificationService.processFinishedTrip(userId: userId, trip: finished, points: points);
+    _log('AutoStart: trip ${finished.id} saved — ${finished.distanceKm.toStringAsFixed(2)} km, ${finished.pointCount} points');
 
     _activeTrip = null;
     _recorder = null;
@@ -268,6 +293,7 @@ class DrivingDetectorTaskHandler extends TaskHandler {
 
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {
+    _log('AutoStart: task destroyed (timeout: $isTimeout)');
     await _activitySub?.cancel();
     await _pointSub?.cancel();
     await _statsSub?.cancel();

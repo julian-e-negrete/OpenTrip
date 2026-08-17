@@ -3,11 +3,17 @@ import 'package:flutter/services.dart';
 
 import '../logging/log_buffer.dart';
 
-/// Shows everything captured in [logBuffer]: BLE scan/connect lifecycle,
-/// every protocol frame sent/received (hex + decoded name), handshake
-/// progress, and uncaught errors. The "Copy all" button puts the full log
-/// on the clipboard so it can be pasted straight into a chat/issue from
-/// the phone — no computer or adb needed for the common case.
+/// Shows everything captured in [logBuffer]: BLE scan/connect lifecycle
+/// and protocol frames, GPS recording (fix accept/reject reasons,
+/// permission checks), camera-proximity alerts, driving-behavior
+/// detection, auto-start's activity-recognition decisions (prefixed
+/// `[bg]` — bridged over from its background isolate, see
+/// trip/location_recorder.dart's `onLog` field and
+/// autostart/auto_start_controller.dart's data callback for why that
+/// bridge exists), and uncaught errors. The "Copy all" button puts the
+/// full log on the clipboard so it can be pasted straight into a
+/// chat/issue from the phone — no computer or adb needed for the common
+/// case.
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
 
@@ -53,7 +59,7 @@ class _LogScreenState extends State<LogScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BLE Logs'),
+        title: const Text('Logs'),
         actions: [
           IconButton(
             icon: const Icon(Icons.copy_all_outlined),
@@ -72,9 +78,10 @@ class _LogScreenState extends State<LogScreen> {
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'No logs yet. Go back and tap "Scan & connect" — every '
-                  'permission request, scan result, and BLE frame sent or '
-                  'received will show up here as it happens.',
+                  'No logs yet. Connect a bike, record a trip, or turn on '
+                  'auto-start — every permission request, GPS fix, BLE '
+                  'frame, camera alert, and background auto-start decision '
+                  'shows up here as it happens.',
                   textAlign: TextAlign.center,
                 ),
               ),

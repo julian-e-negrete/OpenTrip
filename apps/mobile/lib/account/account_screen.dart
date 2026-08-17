@@ -18,6 +18,7 @@ import '../data/repositories/gamification_repository.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../gamification/monthly_recap_screen.dart';
+import '../screens/log_screen.dart';
 import '../sync/sync_service.dart';
 import 'country_picker.dart';
 
@@ -256,7 +257,18 @@ class _AccountScreenState extends State<AccountScreen> {
 
     final guest = CurrentUser.instance.isGuest;
     return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
+      appBar: AppBar(
+        title: const Text('Account'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.article_outlined),
+            tooltip: 'Logs',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const LogScreen()),
+            ),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

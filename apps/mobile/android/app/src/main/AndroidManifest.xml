@@ -44,6 +44,13 @@
          own manifest. -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
     <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
+    <!-- Lets the Account tab's auto-start toggle ask to be exempted from
+         battery optimization — several OEM battery managers kill
+         background services more aggressively than stock Android does,
+         regardless of the foreground-service/stopWithTask setup above.
+         Best-effort: declining this doesn't block the feature, see
+         autostart/auto_start_controller.dart's enable(). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />
