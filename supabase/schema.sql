@@ -109,16 +109,22 @@ create policy "trip_points_delete_own" on public.trip_points
 -- RLS below still means only its own owner can read it until/unless a
 -- security-definer function (like get_leaderboard()) deliberately
 -- exposes it, the same pattern supabase/leaderboard.sql already uses.
+-- leaderboard_visible is that opt-out: get_leaderboard(),
+-- get_territory_map(), and get_friends_leaderboard() (leaderboard.sql,
+-- friends.sql) all exclude a profile with this set to false, so signing
+-- in and syncing no longer has to mean being ranked.
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default '',
   country_code text,
+  leaderboard_visible boolean not null default true,
   updated_at timestamptz not null default now()
 );
 
--- Safe to re-run on a project that already had this table before
--- country_code existed.
+-- Safe to re-run on a project that already had this table before these
+-- columns existed.
 alter table public.profiles add column if not exists country_code text;
+alter table public.profiles add column if not exists leaderboard_visible boolean not null default true;
 
 alter table public.profiles enable row level security;
 

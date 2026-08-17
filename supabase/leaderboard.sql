@@ -81,7 +81,11 @@ as $$
     select user_id, count(*) as trophy_count
     from public.trophies
     group by user_id
-  ) tr on tr.user_id = p.user_id;
+  ) tr on tr.user_id = p.user_id
+  -- profiles.leaderboard_visible (schema.sql) — a rider who's opted out
+  -- of rankings via the Account tab's privacy toggle is excluded from
+  -- every ranking view, this one included. See that column's comment.
+  where coalesce(p.leaderboard_visible, true);
 $$;
 
 -- Only signed-in app users can call this — not the public "anon" role.
@@ -110,7 +114,8 @@ set search_path = public
 as $$
   select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name
   from public.territory_cells tc
-  join public.profiles p on p.user_id = tc.user_id;
+  join public.profiles p on p.user_id = tc.user_id
+  where coalesce(p.leaderboard_visible, true);
 $$;
 
 grant execute on function public.get_territory_map() to authenticated;

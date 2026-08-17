@@ -12,6 +12,7 @@ import '../data/models/trip_point.dart';
 import '../data/models/user_profile.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
+import '../friends/friend_models.dart';
 import '../gamification/territory_map_cell.dart';
 import '../leaderboard/leaderboard_entry.dart';
 
@@ -435,6 +436,94 @@ class SyncService {
     try {
       final rows = await _client.rpc('get_territory_map') as List;
       return rows.map((row) => TerritoryMapCell.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
+    }
+  }
+
+  /// Riders whose display name contains [query] (case-insensitive),
+  /// excluding yourself — see search_riders() in supabase/friends.sql.
+  Future<List<RiderSummary>> searchRiders(String query) async {
+    if (!_canSync || query.trim().isEmpty) return const [];
+    try {
+      final rows = await _client.rpc('search_riders', params: {'query': query.trim()}) as List;
+      return rows.map((row) => RiderSummary.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
+    }
+  }
+
+  /// Sends a friend request to [userId] — or accepts theirs, if they'd
+  /// already sent one to you. Returns the outcome string
+  /// send_or_accept_friend_request() reports ('requested', 'accepted',
+  /// 'already_friends', 'already_requested'), or null on failure.
+  Future<String?> sendOrAcceptFriendRequest(String userId) async {
+    if (!_canSync) return null;
+    try {
+      final result = await _client.rpc('send_or_accept_friend_request', params: {'target_user_id': userId});
+      return result as String?;
+    } catch (e) {
+      lastError = e.toString();
+      return null;
+    }
+  }
+
+  Future<bool> acceptFriendRequest(String requesterId) async {
+    if (!_canSync) return false;
+    try {
+      await _client.rpc('accept_friend_request', params: {'requester_user_id': requesterId});
+      return true;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
+  /// Removes a friendship in either direction — also how a pending
+  /// incoming request is declined, or one you sent is cancelled, since
+  /// both are just rows in the same table server-side.
+  Future<bool> removeFriendship(String otherUserId) async {
+    if (!_canSync) return false;
+    try {
+      await _client.rpc('remove_friendship', params: {'other_user_id': otherUserId});
+      return true;
+    } catch (e) {
+      lastError = e.toString();
+      return false;
+    }
+  }
+
+  Future<List<RiderSummary>> fetchFriends() async {
+    if (!_canSync) return const [];
+    try {
+      final rows = await _client.rpc('get_friends') as List;
+      return rows.map((row) => RiderSummary.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
+    }
+  }
+
+  Future<List<PendingFriendRequest>> fetchPendingFriendRequests() async {
+    if (!_canSync) return const [];
+    try {
+      final rows = await _client.rpc('get_pending_friend_requests') as List;
+      return rows.map((row) => PendingFriendRequest.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
+    }
+  }
+
+  /// Same shape as [fetchLeaderboard], scoped to you plus your accepted
+  /// friends — see get_friends_leaderboard() in supabase/friends.sql.
+  Future<List<LeaderboardEntry>> fetchFriendsLeaderboard() async {
+    if (!_canSync) return const [];
+    try {
+      final rows = await _client.rpc('get_friends_leaderboard') as List;
+      return rows.map((row) => LeaderboardEntry.fromRow(row as Map<String, dynamic>)).toList();
     } catch (e) {
       lastError = e.toString();
       return const [];

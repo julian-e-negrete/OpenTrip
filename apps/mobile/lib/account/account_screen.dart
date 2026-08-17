@@ -149,6 +149,15 @@ class _AccountScreenState extends State<AccountScreen> {
     await ProfileRepository.instance.upsert(updated);
   }
 
+  Future<void> _setLeaderboardVisible(bool visible) async {
+    // synced: false explicitly — see the same note in _editName above.
+    final updated = (_profile ?? UserProfile(userId: _userId, displayName: '')).copyWith(
+      leaderboardVisible: visible,
+      synced: false,
+    );
+    await ProfileRepository.instance.upsert(updated);
+  }
+
   Future<void> _editAvatar() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800);
     if (picked == null) return;
@@ -270,6 +279,17 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           if (!guest) ...[
             const SizedBox(height: 24),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Show me on leaderboards'),
+              subtitle: const Text(
+                'Off hides you from the global leaderboard, friends leaderboard, '
+                'and territory map — your trips still sync either way.',
+              ),
+              value: _profile?.leaderboardVisible ?? true,
+              onChanged: _setLeaderboardVisible,
+            ),
+            const SizedBox(height: 8),
             Center(
               child: Column(
                 children: [

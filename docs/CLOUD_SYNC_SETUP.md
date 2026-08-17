@@ -18,10 +18,10 @@ each with row-level security scoped to `auth.uid()` — a user can only
 ever read/write their own rows, enforced by Postgres itself, not just app
 code.
 
-**Already ran this before `profiles.country_code` existed?** Just re-run
-the current `schema.sql` — every statement in it, including the new
-column, is safe to run again (`create table if not exists`,
-`add column if not exists`).
+**Already ran this before `profiles.country_code` or
+`profiles.leaderboard_visible` existed?** Just re-run the current
+`schema.sql` — every statement in it, including both columns, is safe to
+run again (`create table if not exists`, `add column if not exists`).
 
 ## 2. Enable Realtime (for continuous, not on-demand, sync)
 
@@ -57,11 +57,27 @@ route. Skipping this step just means the Leaderboard screen shows "no
 data yet" and the territory map (the map icon on that screen) shows
 nothing — nothing else is affected.
 
-**Already ran `leaderboard.sql` before `get_territory_map()` existed?**
-Just re-run the current file — every statement in it is safe to run
-again (`create table if not exists`, `create or replace function`).
+**Already ran `leaderboard.sql` before `get_territory_map()` existed, or
+before step 1's `leaderboard_visible` column existed?** Just re-run the
+current file — every statement in it is safe to run again (`create
+table if not exists`, `create or replace function`).
 
-## 4. That's it
+## 4. Enable friends
+
+1. Same SQL Editor, another **New query**.
+2. Paste [`supabase/friends.sql`](../supabase/friends.sql).
+3. **Run**.
+
+Creates `friendships` (a request/accept model — see the comment at the
+top of `friends.sql` for why every write to it goes through a function
+rather than a direct insert/update/delete) plus the functions the
+Friends screen needs: searching for a rider by name, sending/accepting/
+removing a friendship, and `get_friends_leaderboard()` — the same shape
+as `get_leaderboard()`, scoped to you and your accepted friends.
+Skipping this step means the people icon on the Leaderboard screen still
+opens, but search and every list on it come back empty.
+
+## 5. That's it
 
 No new dart-defines, no new secrets. The app already has everything it
 needs (the same `SUPABASE_URL`/`SUPABASE_ANON_KEY` used for login).
