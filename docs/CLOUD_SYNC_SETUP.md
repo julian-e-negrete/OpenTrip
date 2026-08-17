@@ -18,10 +18,11 @@ each with row-level security scoped to `auth.uid()` — a user can only
 ever read/write their own rows, enforced by Postgres itself, not just app
 code.
 
-**Already ran this before `profiles.country_code` or
-`profiles.leaderboard_visible` existed?** Just re-run the current
-`schema.sql` — every statement in it, including both columns, is safe to
-run again (`create table if not exists`, `add column if not exists`).
+**Already ran this before `profiles.country_code`,
+`profiles.leaderboard_visible`, or `trips.behavior_*` existed?** Just
+re-run the current `schema.sql` — every statement in it, including all
+of these columns, is safe to run again (`create table if not exists`,
+`add column if not exists`).
 
 ## 2. Enable Realtime (for continuous, not on-demand, sync)
 

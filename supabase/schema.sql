@@ -55,8 +55,25 @@ create table if not exists public.trips (
   ble_max_brake_kpa double precision,
   ble_min_water_temp_c integer,
   ble_max_water_temp_c integer,
+  -- GPS-derived driving-behavior stats (apps/mobile/lib/trip/driving_math.dart)
+  -- — available for every trip, not just BLE-equipped vehicles.
+  behavior_max_accel_g double precision,
+  behavior_max_brake_g double precision,
+  behavior_max_cornering_g double precision,
+  behavior_hard_accel_count integer,
+  behavior_hard_brake_count integer,
+  behavior_hard_cornering_count integer,
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run on a project that already had this table before these
+-- columns existed.
+alter table public.trips add column if not exists behavior_max_accel_g double precision;
+alter table public.trips add column if not exists behavior_max_brake_g double precision;
+alter table public.trips add column if not exists behavior_max_cornering_g double precision;
+alter table public.trips add column if not exists behavior_hard_accel_count integer;
+alter table public.trips add column if not exists behavior_hard_brake_count integer;
+alter table public.trips add column if not exists behavior_hard_cornering_count integer;
 
 alter table public.trips enable row level security;
 

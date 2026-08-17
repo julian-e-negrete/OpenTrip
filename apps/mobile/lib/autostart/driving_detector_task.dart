@@ -220,6 +220,12 @@ class DrivingDetectorTaskHandler extends TaskHandler {
       avgSpeedKph: finalStats.avgSpeedKph,
       maxSpeedKph: finalStats.maxSpeedKph,
       pointCount: finalStats.pointCount,
+      behaviorMaxAccelG: recorder.behaviorMaxAccelG,
+      behaviorMaxBrakeG: recorder.behaviorMaxBrakeG,
+      behaviorMaxCorneringG: recorder.behaviorMaxCorneringG,
+      behaviorHardAccelCount: recorder.behaviorHardAccelCount,
+      behaviorHardBrakeCount: recorder.behaviorHardBrakeCount,
+      behaviorHardCorneringCount: recorder.behaviorHardCorneringCount,
     );
     await TripRepository.instance.finishTrip(finished);
 

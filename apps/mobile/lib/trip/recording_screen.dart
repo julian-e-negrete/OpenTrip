@@ -293,6 +293,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
       bleMaxBrakePressureKpa: _bleMaxBrakeKpa,
       bleMinWaterTemperatureC: _bleMinWaterTemp,
       bleMaxWaterTemperatureC: _bleMaxWaterTemp,
+      behaviorMaxAccelG: _recorder.behaviorMaxAccelG,
+      behaviorMaxBrakeG: _recorder.behaviorMaxBrakeG,
+      behaviorMaxCorneringG: _recorder.behaviorMaxCorneringG,
+      behaviorHardAccelCount: _recorder.behaviorHardAccelCount,
+      behaviorHardBrakeCount: _recorder.behaviorHardBrakeCount,
+      behaviorHardCorneringCount: _recorder.behaviorHardCorneringCount,
     );
     await TripRepository.instance.finishTrip(finished);
     // Deliberately doesn't disconnect the bike here — the connection is

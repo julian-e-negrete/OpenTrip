@@ -24,6 +24,19 @@ class Trip {
   final int? bleMinWaterTemperatureC;
   final int? bleMaxWaterTemperatureC;
 
+  // GPS-derived driving-behavior stats (trip/driving_math.dart) —
+  // available for every trip regardless of vehicle, unlike the BLE
+  // fields above. See that file's doc comment for why these come from
+  // GPS speed/course-over-ground rather than the phone's accelerometer.
+  // Null only if the trip had too few accepted GPS fixes to compute
+  // them from (e.g. it ended almost immediately).
+  final double? behaviorMaxAccelG;
+  final double? behaviorMaxBrakeG;
+  final double? behaviorMaxCorneringG;
+  final int? behaviorHardAccelCount;
+  final int? behaviorHardBrakeCount;
+  final int? behaviorHardCorneringCount;
+
   /// Whether this trip (and its points) has been pushed to Supabase. See
   /// sync/sync_service.dart. Always true for a trip that came from a pull.
   final bool synced;
@@ -55,11 +68,19 @@ class Trip {
     this.bleMaxBrakePressureKpa,
     this.bleMinWaterTemperatureC,
     this.bleMaxWaterTemperatureC,
+    this.behaviorMaxAccelG,
+    this.behaviorMaxBrakeG,
+    this.behaviorMaxCorneringG,
+    this.behaviorHardAccelCount,
+    this.behaviorHardBrakeCount,
+    this.behaviorHardCorneringCount,
     this.synced = false,
     this.autoStarted = false,
   });
 
   bool get hasBleTelemetry => bleMaxSpeedKph != null || bleMaxRpm != null;
+
+  bool get hasBehaviorStats => behaviorMaxAccelG != null || behaviorMaxBrakeG != null || behaviorMaxCorneringG != null;
 
   bool get isFinished => endedAt != null;
 
@@ -78,6 +99,12 @@ class Trip {
     double? bleMaxBrakePressureKpa,
     int? bleMinWaterTemperatureC,
     int? bleMaxWaterTemperatureC,
+    double? behaviorMaxAccelG,
+    double? behaviorMaxBrakeG,
+    double? behaviorMaxCorneringG,
+    int? behaviorHardAccelCount,
+    int? behaviorHardBrakeCount,
+    int? behaviorHardCorneringCount,
   }) {
     return Trip(
       id: id,
@@ -96,6 +123,12 @@ class Trip {
       bleMaxBrakePressureKpa: bleMaxBrakePressureKpa,
       bleMinWaterTemperatureC: bleMinWaterTemperatureC,
       bleMaxWaterTemperatureC: bleMaxWaterTemperatureC,
+      behaviorMaxAccelG: behaviorMaxAccelG,
+      behaviorMaxBrakeG: behaviorMaxBrakeG,
+      behaviorMaxCorneringG: behaviorMaxCorneringG,
+      behaviorHardAccelCount: behaviorHardAccelCount,
+      behaviorHardBrakeCount: behaviorHardBrakeCount,
+      behaviorHardCorneringCount: behaviorHardCorneringCount,
       autoStarted: autoStarted,
     );
   }
@@ -117,6 +150,12 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'behavior_max_accel_g': behaviorMaxAccelG,
+    'behavior_max_brake_g': behaviorMaxBrakeG,
+    'behavior_max_cornering_g': behaviorMaxCorneringG,
+    'behavior_hard_accel_count': behaviorHardAccelCount,
+    'behavior_hard_brake_count': behaviorHardBrakeCount,
+    'behavior_hard_cornering_count': behaviorHardCorneringCount,
     'auto_started': autoStarted ? 1 : 0,
     'synced': synced ? 1 : 0,
   };
@@ -138,6 +177,12 @@ class Trip {
     bleMaxBrakePressureKpa: row['ble_max_brake_kpa'] as double?,
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    behaviorMaxAccelG: row['behavior_max_accel_g'] as double?,
+    behaviorMaxBrakeG: row['behavior_max_brake_g'] as double?,
+    behaviorMaxCorneringG: row['behavior_max_cornering_g'] as double?,
+    behaviorHardAccelCount: row['behavior_hard_accel_count'] as int?,
+    behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
+    behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
     autoStarted: (row['auto_started'] as int? ?? 0) != 0,
     synced: (row['synced'] as int? ?? 0) != 0,
   );
@@ -160,6 +205,12 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'behavior_max_accel_g': behaviorMaxAccelG,
+    'behavior_max_brake_g': behaviorMaxBrakeG,
+    'behavior_max_cornering_g': behaviorMaxCorneringG,
+    'behavior_hard_accel_count': behaviorHardAccelCount,
+    'behavior_hard_brake_count': behaviorHardBrakeCount,
+    'behavior_hard_cornering_count': behaviorHardCorneringCount,
   };
 
   /// A row pulled from Supabase — always synced.
@@ -180,6 +231,12 @@ class Trip {
     bleMaxBrakePressureKpa: (row['ble_max_brake_kpa'] as num?)?.toDouble(),
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    behaviorMaxAccelG: (row['behavior_max_accel_g'] as num?)?.toDouble(),
+    behaviorMaxBrakeG: (row['behavior_max_brake_g'] as num?)?.toDouble(),
+    behaviorMaxCorneringG: (row['behavior_max_cornering_g'] as num?)?.toDouble(),
+    behaviorHardAccelCount: row['behavior_hard_accel_count'] as int?,
+    behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
+    behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
     synced: true,
   );
 }

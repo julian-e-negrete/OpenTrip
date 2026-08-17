@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -73,6 +73,12 @@ class LocalDatabase {
             ble_max_brake_kpa REAL,
             ble_min_water_temp_c INTEGER,
             ble_max_water_temp_c INTEGER,
+            behavior_max_accel_g REAL,
+            behavior_max_brake_g REAL,
+            behavior_max_cornering_g REAL,
+            behavior_hard_accel_count INTEGER,
+            behavior_hard_brake_count INTEGER,
+            behavior_hard_cornering_count INTEGER,
             auto_started INTEGER NOT NULL DEFAULT 0,
             synced INTEGER NOT NULL DEFAULT 0
           )
@@ -195,6 +201,23 @@ class LocalDatabase {
           final hasAutoStarted = columns.any((c) => c['name'] == 'auto_started');
           if (!hasAutoStarted) {
             await db.execute('ALTER TABLE trips ADD COLUMN auto_started INTEGER NOT NULL DEFAULT 0');
+          }
+        }
+        if (oldVersion < 9) {
+          final columns = await db.rawQuery('PRAGMA table_info(trips)');
+          final existing = columns.map((c) => c['name']).toSet();
+          for (final column in [
+            'behavior_max_accel_g REAL',
+            'behavior_max_brake_g REAL',
+            'behavior_max_cornering_g REAL',
+            'behavior_hard_accel_count INTEGER',
+            'behavior_hard_brake_count INTEGER',
+            'behavior_hard_cornering_count INTEGER',
+          ]) {
+            final name = column.split(' ').first;
+            if (!existing.contains(name)) {
+              await db.execute('ALTER TABLE trips ADD COLUMN $column');
+            }
           }
         }
       },

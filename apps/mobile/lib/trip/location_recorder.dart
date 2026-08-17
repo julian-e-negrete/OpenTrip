@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../data/models/trip_point.dart';
 import '../logging/log_buffer.dart';
 import 'camera_alerts.dart';
+import 'driving_math.dart';
 import 'geo_math.dart';
 
 class RecordingStats {
@@ -40,6 +41,23 @@ const _maxAcceptableAccuracyMeters = 30.0;
 /// distance total (though still recorded as a point).
 const _maxPlausibleSpeedKph = 300.0;
 
+/// Driving-behavior thresholds (trip/driving_math.dart) — first guesses,
+/// not measurements. Roughly in line with what published telematics
+/// literature calls "harsh" (typically 0.3-0.4g), but there's no way to
+/// actually tune numbers like these without real driving data, the same
+/// caveat autostart/driving_detector_task.dart's debounce windows have.
+const _hardAccelThresholdMps2 = 3.5;
+const _hardBrakeThresholdMps2 = 4.0;
+const _hardCorneringThresholdMps2 = 4.0;
+
+/// Below this speed, GPS course-over-ground is too unreliable to treat a
+/// heading change as real cornering rather than noise (see
+/// Position.heading's own doc comment) — longitudinal (accel/brake)
+/// detection has no such gate, since GPS speed itself stays meaningful
+/// down to a stop, and pulling away hard from a stop is exactly the kind
+/// of event worth catching.
+const _minSpeedForCorneringKph = 8.0;
+
 /// Wraps geolocator's position stream into trip-shaped output: a stream of
 /// [TripPoint]s to persist and a stream of running [RecordingStats] for
 /// the UI. Distance is accumulated incrementally rather than recomputed
@@ -67,10 +85,11 @@ const _maxPlausibleSpeedKph = 300.0;
 /// exception dialog, just a trip that saves with 0 km recorded.
 ///
 /// Also drives speed/red-light-camera proximity alerts
-/// (trip/camera_alerts.dart) off the same position stream — built into
-/// the recorder itself, not each caller, so both
-/// trip/recording_screen.dart and autostart/driving_detector_task.dart
-/// get it automatically.
+/// (trip/camera_alerts.dart) and driving-behavior stats
+/// (trip/driving_math.dart — acceleration, braking, cornering) off the
+/// same position stream — built into the recorder itself, not each
+/// caller, so both trip/recording_screen.dart and
+/// autostart/driving_detector_task.dart get both automatically.
 class LocationRecorder {
   /// False when this recorder runs inside a process that's already kept
   /// alive by its own foreground service — autostart/driving_detector_task.dart,
@@ -97,6 +116,25 @@ class LocationRecorder {
   TripPoint? _lastAcceptedPoint;
   int _rejectedAccuracyCount = 0;
   int _rejectedGlitchCount = 0;
+
+  // Driving-behavior stats (trip/driving_math.dart) — GPS-derived, so
+  // available for every vehicle, not just BLE-equipped bikes. _lastHeadingDeg
+  // is tracked separately from _lastAcceptedPoint since TripPoint itself
+  // doesn't persist heading (only needed transiently for this).
+  double? _lastHeadingDeg;
+  double? _maxAccelMps2;
+  double? _maxBrakeMps2;
+  double? _maxCorneringMps2;
+  int _hardAccelCount = 0;
+  int _hardBrakeCount = 0;
+  int _hardCorneringCount = 0;
+
+  double? get behaviorMaxAccelG => _maxAccelMps2 == null ? null : mps2ToG(_maxAccelMps2!);
+  double? get behaviorMaxBrakeG => _maxBrakeMps2 == null ? null : mps2ToG(_maxBrakeMps2!);
+  double? get behaviorMaxCorneringG => _maxCorneringMps2 == null ? null : mps2ToG(_maxCorneringMps2!);
+  int get behaviorHardAccelCount => _hardAccelCount;
+  int get behaviorHardBrakeCount => _hardBrakeCount;
+  int get behaviorHardCorneringCount => _hardCorneringCount;
 
   Stream<TripPoint> get pointStream => _pointsController.stream;
   Stream<RecordingStats> get statsStream => _statsController.stream;
@@ -175,6 +213,13 @@ class LocationRecorder {
     _rejectedAccuracyCount = 0;
     _rejectedGlitchCount = 0;
     _cameraAlerts.resetForNewTrip();
+    _lastHeadingDeg = null;
+    _maxAccelMps2 = null;
+    _maxBrakeMps2 = null;
+    _maxCorneringMps2 = null;
+    _hardAccelCount = 0;
+    _hardBrakeCount = 0;
+    _hardCorneringCount = 0;
 
     logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
     _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
@@ -259,6 +304,38 @@ class LocationRecorder {
         return; // GPS glitch — skip this fix entirely rather than pollute the trip
       }
       _distanceMeters += segmentMeters;
+
+      if (seconds > 0 && speedKph != null && last.speedKph != null) {
+        final longAccel = longitudinalAccelMps2(
+          speedBeforeKph: last.speedKph!,
+          speedAfterKph: speedKph,
+          dtSeconds: seconds,
+        );
+        if (longAccel > _hardAccelThresholdMps2) {
+          _hardAccelCount++;
+          if (_maxAccelMps2 == null || longAccel > _maxAccelMps2!) _maxAccelMps2 = longAccel;
+        } else if (longAccel < -_hardBrakeThresholdMps2) {
+          _hardBrakeCount++;
+          final magnitude = longAccel.abs();
+          if (_maxBrakeMps2 == null || magnitude > _maxBrakeMps2!) _maxBrakeMps2 = magnitude;
+        }
+
+        final lastHeading = _lastHeadingDeg;
+        final avgSpeedKph = (last.speedKph! + speedKph) / 2;
+        if (lastHeading != null && avgSpeedKph >= _minSpeedForCorneringKph) {
+          final lateralAccel = lateralAccelMps2(
+            headingBeforeDeg: lastHeading,
+            headingAfterDeg: position.heading,
+            avgSpeedKph: avgSpeedKph,
+            dtSeconds: seconds,
+          );
+          if (lateralAccel > _hardCorneringThresholdMps2) {
+            _hardCorneringCount++;
+            if (_maxCorneringMps2 == null || lateralAccel > _maxCorneringMps2!) _maxCorneringMps2 = lateralAccel;
+          }
+        }
+      }
+      _lastHeadingDeg = position.heading;
     }
 
     final point = TripPoint(

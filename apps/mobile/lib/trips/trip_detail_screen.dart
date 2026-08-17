@@ -117,6 +117,33 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                       '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC} °C',
                     ),
                 ],
+                if (trip.hasBehaviorStats) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16, bottom: 4),
+                    child: Text(
+                      'Driving behavior',
+                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (trip.behaviorMaxAccelG != null)
+                    _Row(
+                      'Hardest acceleration',
+                      '${trip.behaviorMaxAccelG!.toStringAsFixed(2)}g'
+                      '${trip.behaviorHardAccelCount == null ? '' : ' · ${trip.behaviorHardAccelCount} hard'}',
+                    ),
+                  if (trip.behaviorMaxBrakeG != null)
+                    _Row(
+                      'Hardest braking',
+                      '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g'
+                      '${trip.behaviorHardBrakeCount == null ? '' : ' · ${trip.behaviorHardBrakeCount} hard'}',
+                    ),
+                  if (trip.behaviorMaxCorneringG != null)
+                    _Row(
+                      'Hardest cornering',
+                      '${trip.behaviorMaxCorneringG!.toStringAsFixed(2)}g'
+                      '${trip.behaviorHardCorneringCount == null ? '' : ' · ${trip.behaviorHardCorneringCount} hard'}',
+                    ),
+                ],
               ],
             ),
           ),

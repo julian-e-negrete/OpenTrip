@@ -274,6 +274,34 @@
   network failures just mean no alerts for that stretch, never a
   failed recording. Coverage is only as good as OpenStreetMap's for a
   given area, which varies a lot by region.
+- **Driving-behavior stats** (`trip/driving_math.dart`): hardest
+  acceleration, hardest braking, hardest cornering — each as a max
+  g-force plus a count of "hard" events — for every trip, on every
+  vehicle, not just BLE-equipped bikes (which already got a version of
+  this — lean angle, brake pressure — straight from the bike itself).
+  Deliberately computed from the GPS stream already flowing through
+  `LocationRecorder` (speed for accel/braking, course-over-ground turn
+  rate for cornering — a·v = v·dθ/dt) rather than the phone's
+  accelerometer. A raw accelerometer reading is in the *phone's own*
+  reference frame — mounted upright, flat in a cupholder, in a pocket,
+  its axes point in completely different real-world directions each
+  time, and telling "that jolt was braking" from "that jolt was a hard
+  right turn" needs knowing the phone's orientation relative to the
+  vehicle, a calibration problem this project didn't take on. Reporting
+  confident-looking directional numbers built on data that can't
+  actually distinguish them would have been worse than not having the
+  stat. GPS course-over-ground is already in a real-world (compass)
+  reference frame regardless of phone orientation, at the cost of being
+  noisier than a real IMU — traded deliberately for numbers that are
+  honestly what they claim to be. Shown on trip detail under "Driving
+  behavior" whenever a trip has enough accepted GPS fixes to compute
+  it. Thresholds for what counts as "hard" (`_hardAccelThresholdMps2`
+  etc. in `location_recorder.dart`) are a first guess from published
+  telematics ranges, not a measurement — same "needs real-device
+  tuning, no way around that" caveat as the auto-start debounce windows
+  and camera-alert radius above. Not tied to any leaderboard or
+  trophy — TripRank's own positioning is explicit that speed/behavior
+  is "for reference," never ranked, and this mirrors that.
 
 ## Not done yet
 
@@ -281,37 +309,30 @@ Ordered by priority, from a feature comparison against TripRank (see
 `/README.md` for what TripRank is) — highest-value gaps first. An item
 being here means "identified and worth doing," not "in progress."
 
-1. **Phone-sensor driving-behavior analytics** (acceleration, braking,
-   cornering, G-force) — currently `trip/location_recorder.dart` only
-   derives speed/distance from GPS fixes; this would need the
-   accelerometer/gyroscope, a new sensor pipeline alongside the existing
-   GPS one. Vehicles with a BLE connector already get a version of this
-   (lean angle, brake pressure) for free — this would extend it to every
-   vehicle, not just BLE-equipped bikes.
-2. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+1. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
-3. **Animated trip replay on satellite map.** Trip detail currently
+2. **Animated trip replay on satellite map.** Trip detail currently
    shows a static route line over OpenStreetMap street tiles
    (`trips/trip_detail_screen.dart`); TripRank animates the route over
    satellite imagery. Satellite tiles alone are a tile-provider swap
    (see that file's doc comment); the playback animation is new work.
-4. **Monthly recap.** A generated summary of a rider's month — would
+3. **Monthly recap.** A generated summary of a rider's month — would
    reuse `gamification_repository.dart`'s existing aggregation
    patterns, just windowed by date instead of all-time.
-5. **Shareable trip stat-card image.** Render a trip's key numbers as a
+4. **Shareable trip stat-card image.** Render a trip's key numbers as a
    shareable image (e.g. via Flutter's `RepaintBoundary` capture) —
    useful for organic growth, no backend changes needed.
-6. **iOS, actually shippable.** The `ios/` project is scaffolded and
+5. **iOS, actually shippable.** The `ios/` project is scaffolded and
    wired for feature parity (Info.plist entries, `AppleSettings` in
    `trip/location_recorder.dart`) but has never been built or run —
    this project has no Mac. Everything iOS-related in this roadmap is
    unverified until that changes.
-7. **Car clubs / groups.** Lowest priority of the identified gaps —
+6. **Car clubs / groups.** Lowest priority of the identified gaps —
    TripRank's own description of what a "car club" actually does
    (chat? shared challenges? just a named group on the leaderboard?)
    couldn't be confirmed even from its own marketing pages, so there's
    not yet a clear feature to build toward.
-8. **AI car-modification visualizer.** Also low priority — a novelty
+7. **AI car-modification visualizer.** Also low priority — a novelty
    feature with an external paid image-generation API dependency
    (TripRank uses fal.ai), not core to trip tracking or vehicle
    connectivity, which is where this project's actual differentiation
