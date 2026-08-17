@@ -63,6 +63,10 @@ create table if not exists public.trips (
   behavior_hard_accel_count integer,
   behavior_hard_brake_count integer,
   behavior_hard_cornering_count integer,
+  -- Phone-accelerometer max lean angle (apps/mobile/lib/trip/lean_angle_tracker.dart)
+  -- — opt-in per recording, independent of ble_max_lean_deg above (two
+  -- different sensors; a BLE-connected bike can have both).
+  phone_lean_max_deg double precision,
   updated_at timestamptz not null default now()
 );
 
@@ -74,6 +78,7 @@ alter table public.trips add column if not exists behavior_max_cornering_g doubl
 alter table public.trips add column if not exists behavior_hard_accel_count integer;
 alter table public.trips add column if not exists behavior_hard_brake_count integer;
 alter table public.trips add column if not exists behavior_hard_cornering_count integer;
+alter table public.trips add column if not exists phone_lean_max_deg double precision;
 
 alter table public.trips enable row level security;
 

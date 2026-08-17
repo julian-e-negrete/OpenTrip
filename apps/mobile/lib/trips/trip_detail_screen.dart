@@ -152,6 +152,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                       '${trip.behaviorMaxCorneringG!.toStringAsFixed(2)}g'
                       '${trip.behaviorHardCorneringCount == null ? '' : ' · ${trip.behaviorHardCorneringCount} hard'}',
                     ),
+                  if (trip.phoneLeanMaxDeg != null)
+                    _Row('Max lean angle (phone)', '${trip.phoneLeanMaxDeg!.toStringAsFixed(0)}°'),
                 ],
               ],
             ),

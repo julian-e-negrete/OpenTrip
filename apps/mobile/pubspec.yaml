@@ -37,13 +37,10 @@ dependencies:
   # Profile / vehicle photos.
   image_picker: ^1.1.2
   path_provider: ^2.1.4
-  # Auto-start drive detection (autostart/) — activity_recognition detects
-  # "you're now in a vehicle"; foreground_task keeps that detection alive
-  # even after the app is swiped away, unlike the recording foreground
-  # service in trip/location_recorder.dart (see that file's doc comment).
-  flutter_activity_recognition: ^4.0.0
-  flutter_foreground_task: ^10.0.0
   share_plus: ^13.3.0
+  # Phone-based lean angle tracking (trip/lean_angle_tracker.dart) — the
+  # accelerometer, not activity/location sensors, so no runtime permission.
+  sensors_plus: ^6.1.1
 
 dev_dependencies:
   flutter_test:

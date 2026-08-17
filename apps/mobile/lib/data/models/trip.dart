@@ -37,19 +37,18 @@ class Trip {
   final int? behaviorHardBrakeCount;
   final int? behaviorHardCorneringCount;
 
+  /// Phone-accelerometer-derived max lean angle (trip/lean_angle_tracker.dart)
+  /// — opt-in per recording (the "Track lean angle" toggle on
+  /// trip/recording_screen.dart), unlike the GPS-derived behavior fields
+  /// above, since it only means anything if the phone was actually
+  /// mounted to the bike. Independent of [bleMaxLeanDeg] — a
+  /// BLE-connected bike can have both, from two different sensors, and
+  /// they won't necessarily agree.
+  final double? phoneLeanMaxDeg;
+
   /// Whether this trip (and its points) has been pushed to Supabase. See
   /// sync/sync_service.dart. Always true for a trip that came from a pull.
   final bool synced;
-
-  /// Whether autostart/driving_detector_task.dart created this trip
-  /// itself (detected via ActivityRecognition, no one tapped "Start
-  /// recording") rather than a manual recording. Purely local bookkeeping
-  /// — it's how the detector task tells "a trip I own and should
-  /// auto-stop" apart from a manual one it must leave alone, and how
-  /// trip/recording_screen.dart tells "adopt this already-running trip"
-  /// apart from "let me start a new one." Not synced — another device
-  /// doesn't need to know which button (or lack of one) started a trip.
-  final bool autoStarted;
 
   const Trip({
     required this.id,
@@ -74,13 +73,17 @@ class Trip {
     this.behaviorHardAccelCount,
     this.behaviorHardBrakeCount,
     this.behaviorHardCorneringCount,
+    this.phoneLeanMaxDeg,
     this.synced = false,
-    this.autoStarted = false,
   });
 
   bool get hasBleTelemetry => bleMaxSpeedKph != null || bleMaxRpm != null;
 
-  bool get hasBehaviorStats => behaviorMaxAccelG != null || behaviorMaxBrakeG != null || behaviorMaxCorneringG != null;
+  bool get hasBehaviorStats =>
+      behaviorMaxAccelG != null ||
+      behaviorMaxBrakeG != null ||
+      behaviorMaxCorneringG != null ||
+      phoneLeanMaxDeg != null;
 
   bool get isFinished => endedAt != null;
 
@@ -105,6 +108,7 @@ class Trip {
     int? behaviorHardAccelCount,
     int? behaviorHardBrakeCount,
     int? behaviorHardCorneringCount,
+    double? phoneLeanMaxDeg,
   }) {
     return Trip(
       id: id,
@@ -129,7 +133,7 @@ class Trip {
       behaviorHardAccelCount: behaviorHardAccelCount,
       behaviorHardBrakeCount: behaviorHardBrakeCount,
       behaviorHardCorneringCount: behaviorHardCorneringCount,
-      autoStarted: autoStarted,
+      phoneLeanMaxDeg: phoneLeanMaxDeg,
     );
   }
 
@@ -156,7 +160,7 @@ class Trip {
     'behavior_hard_accel_count': behaviorHardAccelCount,
     'behavior_hard_brake_count': behaviorHardBrakeCount,
     'behavior_hard_cornering_count': behaviorHardCorneringCount,
-    'auto_started': autoStarted ? 1 : 0,
+    'phone_lean_max_deg': phoneLeanMaxDeg,
     'synced': synced ? 1 : 0,
   };
 
@@ -183,7 +187,7 @@ class Trip {
     behaviorHardAccelCount: row['behavior_hard_accel_count'] as int?,
     behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
     behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
-    autoStarted: (row['auto_started'] as int? ?? 0) != 0,
+    phoneLeanMaxDeg: row['phone_lean_max_deg'] as double?,
     synced: (row['synced'] as int? ?? 0) != 0,
   );
 
@@ -211,6 +215,7 @@ class Trip {
     'behavior_hard_accel_count': behaviorHardAccelCount,
     'behavior_hard_brake_count': behaviorHardBrakeCount,
     'behavior_hard_cornering_count': behaviorHardCorneringCount,
+    'phone_lean_max_deg': phoneLeanMaxDeg,
   };
 
   /// A row pulled from Supabase — always synced.
@@ -237,6 +242,7 @@ class Trip {
     behaviorHardAccelCount: row['behavior_hard_accel_count'] as int?,
     behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
     behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
+    phoneLeanMaxDeg: (row['phone_lean_max_deg'] as num?)?.toDouble(),
     synced: true,
   );
 }

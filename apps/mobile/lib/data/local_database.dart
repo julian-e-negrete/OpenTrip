@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 9,
+      version: 10,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -79,7 +79,12 @@ class LocalDatabase {
             behavior_hard_accel_count INTEGER,
             behavior_hard_brake_count INTEGER,
             behavior_hard_cornering_count INTEGER,
+            -- No longer written by the app (auto-start drive detection
+            -- was removed) — column stays for anyone upgrading from a
+            -- build that had it, rather than a destructive migration for
+            -- a harmless, always-0 leftover.
             auto_started INTEGER NOT NULL DEFAULT 0,
+            phone_lean_max_deg REAL,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -218,6 +223,13 @@ class LocalDatabase {
             if (!existing.contains(name)) {
               await db.execute('ALTER TABLE trips ADD COLUMN $column');
             }
+          }
+        }
+        if (oldVersion < 10) {
+          final columns = await db.rawQuery('PRAGMA table_info(trips)');
+          final hasLean = columns.any((c) => c['name'] == 'phone_lean_max_deg');
+          if (!hasLean) {
+            await db.execute('ALTER TABLE trips ADD COLUMN phone_lean_max_deg REAL');
           }
         }
       },

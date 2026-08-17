@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../logging/log_buffer.dart';
 import 'geo_math.dart';
 
 enum CameraAlertType { speedCamera, redLightCamera }
@@ -48,14 +49,6 @@ class CameraAlert {
 /// Coverage is only as good as OpenStreetMap's in a given area, which
 /// varies a lot by country/region, same as the map tiles themselves.
 class CameraAlertService {
-  /// Optional — a silent no-op logger by default. trip/location_recorder.dart
-  /// always passes its own [LocationRecorder.onLog] through, so in
-  /// practice this is only ever null in a test constructing this class
-  /// directly.
-  final void Function(String message) onLog;
-
-  CameraAlertService({void Function(String message)? onLog}) : onLog = onLog ?? ((_) {});
-
   final _alertController = StreamController<CameraAlert>.broadcast();
   Stream<CameraAlert> get alerts => _alertController.stream;
 
@@ -98,7 +91,7 @@ class CameraAlertService {
   Future<void> _query(Position position) async {
     _queryInFlight = true;
     _lastQueriedAt = position;
-    onLog(
+    logBuffer.add(
       'Camera: querying Overpass around '
       '(${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})',
     );
@@ -124,7 +117,7 @@ class CameraAlertService {
       request.write('data=${Uri.encodeQueryComponent(query)}');
       final response = await request.close().timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
-        onLog('Camera: Overpass returned HTTP ${response.statusCode}, keeping previous cache');
+        logBuffer.add('Camera: Overpass returned HTTP ${response.statusCode}, keeping previous cache');
         return;
       }
 
@@ -146,12 +139,12 @@ class CameraAlertService {
           })
           .whereType<CameraPoint>()
           .toList();
-      onLog('Camera: loaded ${_cameras.length} camera(s) for this stretch');
+      logBuffer.add('Camera: loaded ${_cameras.length} camera(s) for this stretch');
     } catch (e) {
       // Best-effort — no network, Overpass unavailable/rate-limiting, or a
       // malformed response just means no alerts for this stretch of the
       // trip, not a failed recording.
-      onLog('Camera: query failed, no alerts for this stretch — $e');
+      logBuffer.add('Camera: query failed, no alerts for this stretch — $e');
     } finally {
       client?.close();
       _queryInFlight = false;
@@ -169,7 +162,7 @@ class CameraAlertService {
       );
       if (distance <= _alertRadiusMeters) {
         _alertedIds.add(camera.id);
-        onLog('Camera: ${camera.type.name} alert — ${distance.toStringAsFixed(0)}m away');
+        logBuffer.add('Camera: ${camera.type.name} alert — ${distance.toStringAsFixed(0)}m away');
         // A physical cue works whether or not anyone's looking at a
         // screen right now — the point of a driving alert.
         unawaited(HapticFeedback.vibrate());

@@ -208,68 +208,19 @@
   second row," but a function can, atomically. Reachable via the people
   icon on the Leaderboard screen. Sign-in only, like the rest of the
   social features — no cross-device "friends" concept for a local guest.
-- **Auto-start drive detection** (`autostart/`): a trip starts and stops
-  itself once driving is detected — no tapping "Start recording," and it
-  works even if OpenTrip was fully closed, matching what TripRank/Google
-  Maps do. Given the choice between that and a lighter "only while the
-  app is open" version, this was built as the full always-on kind
-  deliberately, at real architectural cost — see below.
-
-  Two cooperating pieces: `flutter_activity_recognition` wraps Android's
-  `ActivityRecognitionClient` to report `IN_VEHICLE`/`STILL`/etc.
-  transitions; `flutter_foreground_task` runs that subscription inside
-  its own persistent background isolate (a second foreground-service
-  notification, independent of `trip/location_recorder.dart`'s own —
-  the two never run at once, and this one has `stopWithTask: false` and
-  `autoRunOnBoot: true`, which is what actually gets it past a swipe-away
-  or a reboot). `IN_VEHICLE` sustained 45s starts a trip (against the
-  most-recently-used vehicle — there's no UI to ask which one);
-  `STILL`/`WALKING`/`RUNNING` sustained 3 minutes ends it. Both numbers
-  are a first guess, not a measurement — there's no way to tune a
-  debounce window like this without a real device actually driving
-  around, the same caveat every background-service change in this
-  project has needed.
-
-  A trip this task starts is GPS-only — connecting a bike over BLE still
-  needs the scan/connect flow on the Vehicle tab, which a background
-  isolate has no reasonable way to drive unattended. The two isolates
-  (this background one, and the main UI one `trip/recording_screen.dart`
-  runs in) don't share Dart memory even though they're the same OS
-  process, so "is a trip currently active" is answered from the database
-  (`TripRepository.activeTripFor`, keyed on `ended_at IS NULL`) rather
-  than in-memory state — both the detector and the manual Start button
-  check it first, so they can't ever race into two competing recordings.
-  Opening the app while an auto-started trip is running shows it as
-  "Recording automatically" on the Record tab; stopping it from there
-  sends a message to the background isolate rather than calling a local
-  recorder, since that isolate is the one actually holding it.
-
-  **Known limitations, accepted rather than built around:** the
-  start/stop debounce windows above will very likely need retuning once
-  this actually runs on a bike or in a car. Activity Recognition can't
-  distinguish your own vehicle from being a passenger in a bus or train
-  — there's no way around that with this API. If the background service
-  itself gets killed and restarted mid-trip (rare, but possible under
-  memory pressure), the resumed trip's distance undercounts whatever
-  happened during the gap — recomputing it exactly would mean
-  reconstructing pre-restart state with more precision than seemed worth
-  the complexity for an edge case this narrow.
 - **Speed-camera & red-light-camera alerts** (`trip/camera_alerts.dart`):
   a haptic buzz (works whether or not anyone's looking at the screen —
   the point, while driving) plus a SnackBar
-  (`trip/recording_screen.dart`) or a brief notification-text flash
-  (`autostart/driving_detector_task.dart`, since a background isolate
-  has no screen to show a SnackBar on) when passing within 500m of a
-  camera. Deliberately doesn't alert on plain traffic signals —
+  (`trip/recording_screen.dart`) when passing within 500m of a camera.
+  Deliberately doesn't alert on plain traffic signals —
   OpenStreetMap's `highway=traffic_signals` tag exists at nearly every
   intersection in a city, and alerting on all of them would be noise,
   not safety information, and isn't what real navigation apps do
   either. Only actual enforcement points: fixed speed cameras
   (`highway=speed_camera` / `enforcement=maxspeed`) and red-light
   cameras (`enforcement=traffic_signals`). Built as a capability of
-  `LocationRecorder` itself, so both the manual recording flow and the
-  auto-start detector get it automatically rather than each wiring
-  their own. Data comes from the public Overpass API — same
+  `LocationRecorder` itself rather than `trip/recording_screen.dart`
+  wiring its own. Data comes from the public Overpass API — same
   OpenStreetMap source as the map tiles
   (`trips/trip_detail_screen.dart`), same fair-use caveat that comment
   already documents, kept well inside it by querying once per trip and
@@ -302,8 +253,8 @@
   it. Thresholds for what counts as "hard" (`_hardAccelThresholdMps2`
   etc. in `location_recorder.dart`) are a first guess from published
   telematics ranges, not a measurement — same "needs real-device
-  tuning, no way around that" caveat as the auto-start debounce windows
-  and camera-alert radius above. Not tied to any leaderboard or
+  tuning, no way around that" caveat as the camera-alert radius above.
+  Not tied to any leaderboard or
   trophy — TripRank's own positioning is explicit that speed/behavior
   is "for reference," never ranked, and this mirrors that.
 - **Animated trip replay + satellite tiles** (`trips/trip_detail_screen.dart`):
@@ -337,6 +288,55 @@
   via `RepaintBoundary.toImage()` and handed to the OS share sheet via
   `share_plus` — reachable via a share icon on trip detail. Purely
   client-side, no backend involved in generating or hosting the image.
+- **Phone-based lean angle tracking** (`trip/lean_angle_tracker.dart`):
+  an opt-in "Track lean angle" toggle on the Record tab (motorcycles
+  only) uses the phone's own accelerometer to track max lean for any
+  bike, not just BLE-connected Kawasakis (which already get a real
+  lean reading from the bike's own IMU — `bleMaxLeanDeg`, independent
+  of this and shown separately on trip detail if both exist). A
+  fundamentally different problem from the driving-behavior stats
+  above: lean angle only needs the phone rigidly mounted to the bike,
+  not knowledge of which way it's traveling, so — unlike accel/braking/
+  cornering — an accelerometer-only approach is actually the right
+  tool here, not a compromise. Method:
+  `angleBetweenVectorsDeg` (tested) measures the angle between the
+  live (smoothed) gravity vector and a reference vector calibrated
+  from the first ~800ms of readings when a tracked trip starts
+  (assumes the bike is upright and roughly stationary at that moment)
+  — orientation-agnostic by construction, so it doesn't matter exactly
+  how the phone is mounted, only that it's mounted at all. Deliberately
+  doesn't isolate roll from pitch or fuse in the gyroscope (a wheelie
+  or hard-braking dive reads as "lean" too) — a single accelerometer
+  reading can't cleanly separate those, and a fake-precise filter
+  pretending otherwise would be worse than an honestly-approximate
+  one. Opt-in rather than always-on (unlike camera alerts/driving
+  behavior) because a phone that *isn't* mounted — in a pocket, say —
+  would still produce numbers that look like a real reading, which is
+  worse than not having the feature. No new permission (motion
+  sensors don't need one on Android, unlike the activity-recognition
+  signal the now-removed auto-start feature used).
+
+## Removed
+
+- **Auto-start drive detection.** Built, shipped, then rolled back on
+  request. It worked as designed (activity-recognition transitions
+  driving a background `flutter_foreground_task` isolate that started/
+  stopped trips on its own), but its actual reliability was always
+  going to depend on how aggressively a given phone's OEM kills
+  background services under memory pressure — worse than stock
+  Android's own Doze/App Standby on some devices, and worse still on
+  Android Go edition phones (common on low-RAM budget hardware), which
+  are specifically tuned to reclaim background processes harder than
+  standard Android. That tradeoff stopped being worth the real
+  architectural cost it added (a second persistent background service,
+  a second plugin dependency, cross-isolate state coordination
+  throughout trip recording) for a feature whose reliability isn't
+  fully in this project's control. `TripRepository.activeTripFor` and
+  the cross-isolate log-bridging in `trip/location_recorder.dart` that
+  existed only to support it were removed along with it;
+  `trips.auto_started` stays in the local SQLite schema as a harmless,
+  always-0 column rather than a destructive migration for anyone
+  upgrading from a build that had it.
 
 ## Not done yet
 

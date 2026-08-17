@@ -2,12 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'auth/auth_service.dart';
 import 'auth/login_screen.dart';
-import 'autostart/auto_start_controller.dart';
 import 'config/app_config.dart';
 import 'home_shell.dart';
 import 'logging/log_buffer.dart';
@@ -28,13 +26,6 @@ void main() {
         await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
       }
       SyncService.instance.startListening();
-
-      // Auto-start drive detection (autostart/) runs its own background
-      // isolate independent of this one — this just wires up this
-      // isolate's end of the two-way channel to it. Safe to call
-      // regardless of whether the feature is actually on.
-      FlutterForegroundTask.initCommunicationPort();
-      AutoStartController.instance.attachAtStartup();
 
       runApp(const OpenTripApp());
     },

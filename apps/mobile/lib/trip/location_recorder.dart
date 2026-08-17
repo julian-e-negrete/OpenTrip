@@ -44,8 +44,7 @@ const _maxPlausibleSpeedKph = 300.0;
 /// Driving-behavior thresholds (trip/driving_math.dart) — first guesses,
 /// not measurements. Roughly in line with what published telematics
 /// literature calls "harsh" (typically 0.3-0.4g), but there's no way to
-/// actually tune numbers like these without real driving data, the same
-/// caveat autostart/driving_detector_task.dart's debounce windows have.
+/// actually tune numbers like these without real driving data.
 const _hardAccelThresholdMps2 = 3.5;
 const _hardBrakeThresholdMps2 = 4.0;
 const _hardCorneringThresholdMps2 = 4.0;
@@ -79,48 +78,31 @@ const _minSpeedForCorneringKph = 8.0;
 /// declaration/review for apps that use `ACCESS_BACKGROUND_LOCATION`,
 /// which the foreground-service approach avoids entirely.
 ///
-/// Every stage logs (see [onLog]) since a silent GPS failure is otherwise
-/// invisible: unlike a BLE connect failure, there's no exception dialog,
-/// just a trip that saves with 0 km recorded.
+/// Every stage logs to [logBuffer] (the same buffer screens/log_screen.dart
+/// shows) since a silent GPS failure is otherwise invisible: unlike a BLE
+/// connect failure, there's no exception dialog, just a trip that saves
+/// with 0 km recorded.
 ///
 /// Also drives speed/red-light-camera proximity alerts
 /// (trip/camera_alerts.dart) and driving-behavior stats
 /// (trip/driving_math.dart — acceleration, braking, cornering) off the
-/// same position stream — built into the recorder itself, not each
-/// caller, so both trip/recording_screen.dart and
-/// autostart/driving_detector_task.dart get both automatically.
+/// same position stream — built into the recorder itself, not
+/// trip/recording_screen.dart, so both come for free.
 class LocationRecorder {
   /// False when this recorder runs inside a process that's already kept
-  /// alive by its own foreground service — autostart/driving_detector_task.dart,
-  /// which is itself a flutter_foreground_task-hosted service. Asking
-  /// geolocator to *also* promote a second Android foreground service in
-  /// that case would be redundant (and Android only needs one to keep the
-  /// process alive), so this just skips
-  /// AndroidSettings.foregroundNotificationConfig entirely rather than
-  /// showing a second, confusing notification alongside the detector's own.
+  /// alive by its own foreground service. Currently always true — every
+  /// caller today is trip/recording_screen.dart's own manually-driven
+  /// recording — but kept as a parameter rather than hardcoded, since
+  /// AndroidSettings.foregroundNotificationConfig genuinely does need to
+  /// be skippable for any future caller that already owns its own
+  /// foreground service.
   final bool showForegroundNotification;
 
-  /// Where log lines go — defaults to the app-wide [logBuffer] (what
-  /// screens/log_screen.dart shows), which is correct for every caller
-  /// running in the main UI isolate (trip/recording_screen.dart). A
-  /// caller running in a *different* isolate — specifically
-  /// autostart/driving_detector_task.dart, a flutter_foreground_task
-  /// background isolate — must pass its own bridging logger instead:
-  /// isolates don't share Dart memory even within the same OS process,
-  /// so `logBuffer.add(...)` called from that isolate would silently
-  /// write to a copy of logBuffer no screen ever reads, and every log
-  /// line from a background-detected trip would vanish. See
-  /// AutoStartController's data callback for the other end of that
-  /// bridge (FlutterForegroundTask.sendDataToMain/addTaskDataCallback).
-  final void Function(String message) onLog;
-
-  LocationRecorder({this.showForegroundNotification = true, void Function(String message)? onLog})
-    : onLog = onLog ?? logBuffer.add,
-      _cameraAlerts = CameraAlertService(onLog: onLog ?? logBuffer.add);
+  LocationRecorder({this.showForegroundNotification = true});
 
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
-  final CameraAlertService _cameraAlerts;
+  final _cameraAlerts = CameraAlertService();
 
   StreamSubscription<Position>? _positionSub;
   String? _tripId;
@@ -155,29 +137,24 @@ class LocationRecorder {
   Stream<RecordingStats> get statsStream => _statsController.stream;
 
   /// Speed/red-light-camera proximity alerts — see trip/camera_alerts.dart.
-  /// Shared by every consumer of this recorder (trip/recording_screen.dart,
-  /// autostart/driving_detector_task.dart) automatically, since it's built
-  /// into the recorder itself rather than each caller wiring its own.
+  /// Built into the recorder itself rather than trip/recording_screen.dart
+  /// wiring its own.
   Stream<CameraAlert> get cameraAlertStream => _cameraAlerts.alerts;
 
   bool get isRecording => _positionSub != null;
 
   /// Checks location services + permission, requesting if needed. Throws a
   /// descriptive [StateError] instead of surfacing a raw plugin exception.
-  /// [onLog] defaults to [logBuffer] — pass a bridging logger when calling
-  /// this from a non-main isolate (see the [onLog] field doc comment on
-  /// this class); [start] already does this for you via its own instance.
-  static Future<void> ensureReady({void Function(String message)? onLog}) async {
-    final log = onLog ?? logBuffer.add;
+  static Future<void> ensureReady() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      log('GPS: location services are OFF');
+      logBuffer.add('GPS: location services are OFF');
       throw StateError('Location services are off — enable them in system settings.');
     }
     var permission = await Geolocator.checkPermission();
-    log('GPS: location permission is $permission');
+    logBuffer.add('GPS: location permission is $permission');
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      log('GPS: location permission after request: $permission');
+      logBuffer.add('GPS: location permission after request: $permission');
     }
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
       throw StateError('Location permission denied — grant it in system settings to record a trip.');
@@ -190,45 +167,24 @@ class LocationRecorder {
     // even though permission and location services are otherwise fine.
     if (Platform.isAndroid) {
       final notificationStatus = await Permission.notification.status;
-      log('GPS: notification permission is $notificationStatus');
+      logBuffer.add('GPS: notification permission is $notificationStatus');
       if (notificationStatus.isDenied) {
         final result = await Permission.notification.request();
-        log('GPS: notification permission after request: $result');
+        logBuffer.add('GPS: notification permission after request: $result');
       }
     }
   }
 
-  /// Starts recording. [priorPoints], if given, seeds seq/distance/last-fix
-  /// state from points that already exist for this trip — used to resume
-  /// a trip a fresh LocationRecorder instance didn't itself start (e.g.
-  /// autostart/driving_detector_task.dart re-attaching after its
-  /// background service was restarted mid-trip by the OS). Points not
-  /// covered by [priorPoints] (the outage window itself) are simply
-  /// missing from the route and undercounted in distance — an accepted
-  /// gap, not a bug, given how rare a mid-trip service restart should be.
-  Future<void> start(String tripId, {List<TripPoint> priorPoints = const []}) async {
+  Future<void> start(String tripId) async {
     if (isRecording) return;
-    await ensureReady(onLog: onLog);
+    await ensureReady();
 
     _tripId = tripId;
     _startedAt = DateTime.now();
-    _seq = priorPoints.length;
+    _seq = 0;
     _distanceMeters = 0;
     _maxSpeedKph = null;
-    _lastAcceptedPoint = priorPoints.isEmpty ? null : priorPoints.last;
-    for (var i = 1; i < priorPoints.length; i++) {
-      _distanceMeters += haversineMeters(
-        lat1: priorPoints[i - 1].latitude,
-        lon1: priorPoints[i - 1].longitude,
-        lat2: priorPoints[i].latitude,
-        lon2: priorPoints[i].longitude,
-      );
-    }
-    for (final p in priorPoints) {
-      if (p.speedKph != null && (_maxSpeedKph == null || p.speedKph! > _maxSpeedKph!)) {
-        _maxSpeedKph = p.speedKph;
-      }
-    }
+    _lastAcceptedPoint = null;
     _rejectedAccuracyCount = 0;
     _rejectedGlitchCount = 0;
     _cameraAlerts.resetForNewTrip();
@@ -240,14 +196,14 @@ class LocationRecorder {
     _hardBrakeCount = 0;
     _hardCorneringCount = 0;
 
-    onLog('GPS: starting position stream (${Platform.operatingSystem})');
+    logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
     _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
       _onPosition,
       onError: (Object error, StackTrace stack) {
-        onLog('GPS: position stream ERROR: $error');
+        logBuffer.add('GPS: position stream ERROR: $error');
       },
       onDone: () {
-        onLog('GPS: position stream closed (accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount glitch-rejected=$_rejectedGlitchCount)');
+        logBuffer.add('GPS: position stream closed (accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount glitch-rejected=$_rejectedGlitchCount)');
       },
     );
   }
@@ -295,7 +251,7 @@ class LocationRecorder {
 
     if (position.accuracy > _maxAcceptableAccuracyMeters) {
       _rejectedAccuracyCount++;
-      onLog(
+      logBuffer.add(
         'GPS: fix rejected, accuracy ${position.accuracy.toStringAsFixed(0)}m '
         '> ${_maxAcceptableAccuracyMeters.toStringAsFixed(0)}m threshold '
         '(${position.latitude.toStringAsFixed(5)}, ${position.longitude.toStringAsFixed(5)})',
@@ -317,7 +273,7 @@ class LocationRecorder {
       final seconds = now.difference(last.timestamp).inMilliseconds / 1000.0;
       if (seconds > 0 && (segmentMeters / seconds) * 3.6 > _maxPlausibleSpeedKph) {
         _rejectedGlitchCount++;
-        onLog(
+        logBuffer.add(
           'GPS: fix rejected as a glitch, implied ${((segmentMeters / seconds) * 3.6).toStringAsFixed(0)} km/h',
         );
         return; // GPS glitch — skip this fix entirely rather than pollute the trip
@@ -373,7 +329,7 @@ class LocationRecorder {
     }
 
     if (_seq == 1 || _seq % 20 == 0) {
-      onLog(
+      logBuffer.add(
         'GPS: fix #$_seq accepted, accuracy ${position.accuracy.toStringAsFixed(0)}m, '
         'distance so far ${(_distanceMeters / 1000).toStringAsFixed(2)}km',
       );
@@ -394,7 +350,7 @@ class LocationRecorder {
   /// Stops the GPS stream and returns final stats for the caller to persist
   /// via TripRepository.finishTrip.
   Future<RecordingStats> stop() async {
-    onLog(
+    logBuffer.add(
       'GPS: stopping — accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount '
       'glitch-rejected=$_rejectedGlitchCount distance=${(_distanceMeters / 1000).toStringAsFixed(2)}km',
     );
