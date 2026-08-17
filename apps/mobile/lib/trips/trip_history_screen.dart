@@ -55,6 +55,25 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
   }
 
+  Future<bool> _confirmDelete(Trip trip) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete trip?'),
+        content: Text('This ${trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -81,17 +100,29 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 itemBuilder: (context, i) {
                   final trip = _trips[i];
                   final vehicle = _vehiclesById[trip.vehicleId];
-                  return ListTile(
-                    leading: const Icon(Icons.route_outlined),
-                    title: Text('${trip.distanceKm.toStringAsFixed(2)} km'),
-                    subtitle: Text(
-                      '${vehicle?.name ?? 'Unknown vehicle'} · '
-                      '${trip.startedAt.toLocal().toString().substring(0, 16)} · '
-                      '${_fmtDuration(trip.durationSeconds)}',
+                  return Dismissible(
+                    key: ValueKey(trip.id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Colors.redAccent,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: const Icon(Icons.delete_outline, color: Colors.white),
                     ),
-                    trailing: trip.isFinished ? null : const Chip(label: Text('In progress')),
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle)),
+                    confirmDismiss: (_) => _confirmDelete(trip),
+                    onDismissed: (_) => TripRepository.instance.deleteTrip(trip.id),
+                    child: ListTile(
+                      leading: const Icon(Icons.route_outlined),
+                      title: Text('${trip.distanceKm.toStringAsFixed(2)} km'),
+                      subtitle: Text(
+                        '${vehicle?.name ?? 'Unknown vehicle'} · '
+                        '${trip.startedAt.toLocal().toString().substring(0, 16)} · '
+                        '${_fmtDuration(trip.durationSeconds)}',
+                      ),
+                      trailing: trip.isFinished ? null : const Chip(label: Text('In progress')),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle)),
+                      ),
                     ),
                   );
                 },

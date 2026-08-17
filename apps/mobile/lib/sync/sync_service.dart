@@ -376,6 +376,18 @@ class SyncService {
     }
   }
 
+  /// Deletes a trip's remote row (and, via Postgres's real `ON DELETE
+  /// CASCADE`, its points too). Same best-effort posture as
+  /// [deleteVehicleRemote].
+  Future<void> deleteTripRemote(String tripId) async {
+    if (!_canSync) return;
+    try {
+      await _client.from('trips').delete().eq('id', tripId);
+    } catch (e) {
+      lastError = e.toString();
+    }
+  }
+
   /// Deletes every remote row (vehicles, cascading to trips and
   /// trip_points, plus the profile) for the signed-in user. Used by
   /// "Delete account" (data/account_data_service.dart) so cloud data

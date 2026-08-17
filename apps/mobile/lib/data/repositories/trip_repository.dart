@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:uuid/uuid.dart';
 
 import '../../sync/sync_service.dart';
@@ -84,9 +86,19 @@ class TripRepository {
     return SyncService.instance.pullTripPoints(tripId);
   }
 
+  /// Deletes a trip and its points. Deliberately leaves territory_cells
+  /// and trophies (gamification/) untouched — you still physically
+  /// covered that ground and earned those trophies even if you delete
+  /// the trip record itself.
   Future<void> deleteTrip(String tripId) async {
     final db = await LocalDatabase.instance.database;
+    // No local FK enforcement (see local_database.dart) — trip_points
+    // needs its own explicit delete, unlike the remote side where
+    // Postgres's real ON DELETE CASCADE (supabase/schema.sql) handles it.
+    await db.delete('trip_points', where: 'trip_id = ?', whereArgs: [tripId]);
     await db.delete('trips', where: 'id = ?', whereArgs: [tripId]);
     DataEvents.instance.notifyChanged();
+    // Best-effort — a local delete should never block on network.
+    unawaited(SyncService.instance.deleteTripRemote(tripId));
   }
 }

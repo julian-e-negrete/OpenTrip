@@ -40,11 +40,42 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
   }
 
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete trip?'),
+        content: Text('This ${widget.trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await TripRepository.instance.deleteTrip(widget.trip.id);
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final trip = widget.trip;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.vehicle?.name ?? 'Trip')),
+      appBar: AppBar(
+        title: Text(widget.vehicle?.name ?? 'Trip'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Delete trip',
+            onPressed: _confirmDelete,
+          ),
+        ],
+      ),
       body: ListView(
         children: [
           SizedBox(height: 220, child: _RouteMap(points: _points)),
