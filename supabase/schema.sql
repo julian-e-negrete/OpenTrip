@@ -101,13 +101,24 @@ create policy "trip_points_delete_own" on public.trip_points
   );
 
 
--- Just the display name for now — avatar/vehicle photo sync needs
+-- Display name + country for now — avatar/vehicle photo sync needs
 -- Supabase Storage (a bucket + its own policies), not set up yet.
+-- country_code is a picked ISO 3166-1 alpha-2 code (see
+-- apps/mobile/lib/data/catalog/country_catalog.dart), captured now so
+-- it's there to slice a future leaderboard by if that's ever built —
+-- RLS below still means only its own owner can read it until/unless a
+-- security-definer function (like get_leaderboard()) deliberately
+-- exposes it, the same pattern supabase/leaderboard.sql already uses.
 create table if not exists public.profiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null default '',
+  country_code text,
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run on a project that already had this table before
+-- country_code existed.
+alter table public.profiles add column if not exists country_code text;
 
 alter table public.profiles enable row level security;
 

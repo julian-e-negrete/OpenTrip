@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -49,6 +49,7 @@ class LocalDatabase {
             user_id TEXT PRIMARY KEY,
             display_name TEXT NOT NULL,
             avatar_path TEXT,
+            country_code TEXT,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -172,6 +173,13 @@ class LocalDatabase {
               PRIMARY KEY (user_id, trophy_key)
             )
           ''');
+        }
+        if (oldVersion < 6) {
+          final columns = await db.rawQuery('PRAGMA table_info(profiles)');
+          final hasCountry = columns.any((c) => c['name'] == 'country_code');
+          if (!hasCountry) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN country_code TEXT');
+          }
         }
       },
     );

@@ -8,6 +8,7 @@ import '../auth/auth_service.dart';
 import '../auth/current_user.dart';
 import '../auth/login_screen.dart';
 import '../data/account_data_service.dart';
+import '../data/catalog/country_catalog.dart';
 import '../data/data_events.dart';
 import '../data/local_image_store.dart';
 import '../data/models/user_profile.dart';
@@ -16,6 +17,7 @@ import '../data/repositories/gamification_repository.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../sync/sync_service.dart';
+import 'country_picker.dart';
 
 /// Identity (display name + avatar — deliberately never the email, per
 /// the "other users should be able to identify you without seeing your
@@ -135,6 +137,18 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  Future<void> _editCountry() async {
+    final picked = await pickCountry(context, currentCode: _profile?.countryCode);
+    if (picked == null) return;
+
+    // synced: false explicitly — see the same note in _editName above.
+    final updated = (_profile ?? UserProfile(userId: _userId, displayName: '')).copyWith(
+      countryCode: picked.code,
+      synced: false,
+    );
+    await ProfileRepository.instance.upsert(updated);
+  }
+
   Future<void> _editAvatar() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 800);
     if (picked == null) return;
@@ -228,6 +242,13 @@ class _AccountScreenState extends State<AccountScreen> {
               onPressed: _editName,
               icon: const Icon(Icons.edit_outlined, size: 16),
               label: Text(_displayName),
+            ),
+          ),
+          Center(
+            child: TextButton.icon(
+              onPressed: _editCountry,
+              icon: const Icon(Icons.public_outlined, size: 16),
+              label: Text(countryForCode(_profile?.countryCode)?.name ?? 'Add your country'),
             ),
           ),
           if (guest)

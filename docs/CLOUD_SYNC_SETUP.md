@@ -18,6 +18,11 @@ each with row-level security scoped to `auth.uid()` — a user can only
 ever read/write their own rows, enforced by Postgres itself, not just app
 code.
 
+**Already ran this before `profiles.country_code` existed?** Just re-run
+the current `schema.sql` — every statement in it, including the new
+column, is safe to run again (`create table if not exists`,
+`add column if not exists`).
+
 ## 2. Enable Realtime (for continuous, not on-demand, sync)
 
 1. Same SQL Editor, another **New query**.

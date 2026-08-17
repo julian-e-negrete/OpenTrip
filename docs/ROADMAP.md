@@ -173,11 +173,84 @@
   trip and its GPS points locally and (best-effort) remotely; territory
   cells and trophies earned from that trip are deliberately left alone,
   since you still covered that ground either way.
+- **Country field** (`data/catalog/country_catalog.dart`,
+  `account/country_picker.dart`): a rider's country, captured on the
+  Account tab as a picked ISO 3166-1 code (searchable full-screen
+  picker, same "structured, not free text" reasoning as the vehicle
+  catalog) rather than free text — the point is that it stays usable
+  later (e.g. slicing a future leaderboard by country), which free text
+  never reliably is. Syncs to Supabase (`profiles.country_code`) but
+  isn't exposed to any other user yet — same private-until-a-
+  security-definer-function-says-otherwise posture as everything else
+  in `profiles`; nothing currently reads it back out.
 
 ## Not done yet
 
-1. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+Ordered by priority, from a feature comparison against TripRank (see
+`/README.md` for what TripRank is) — highest-value gaps first. An item
+being here means "identified and worth doing," not "in progress."
+
+1. **Auto-start drive detection.** Trips currently require manually
+   tapping "Start recording" — the single feature most likely to be
+   assumed as table-stakes by anyone coming from TripRank or Strava.
+   Likely needs Android's activity-recognition APIs (detecting
+   "in vehicle" transitions) rather than anything GPS-speed-threshold-based,
+   to avoid false starts from being a bicycle/train passenger.
+2. **A friends layer.** The leaderboard (`leaderboard/`) is global-only
+   — no concept of "friends," no smaller/more personal ranking, no way
+   to add another rider. TripRank's most-repeated social hook and
+   currently OpenTrip has none of it. Needs a friend-request/accept
+   model (its own Supabase table + RLS) before a "friends" leaderboard
+   view is even possible.
+3. **Speed-camera & traffic-signal alerts.** Buildable on the same
+   OpenStreetMap data the app's maps already depend on (`flutter_map`,
+   `trips/trip_detail_screen.dart`) — no new data source required, just
+   proximity queries against OSM's camera/signal tags during an active
+   recording.
+4. **Phone-sensor driving-behavior analytics** (acceleration, braking,
+   cornering, G-force) — currently `trip/location_recorder.dart` only
+   derives speed/distance from GPS fixes; this would need the
+   accelerometer/gyroscope, a new sensor pipeline alongside the existing
+   GPS one. Vehicles with a BLE connector already get a version of this
+   (lean angle, brake pressure) for free — this would extend it to every
+   vehicle, not just BLE-equipped bikes.
+5. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
+6. **Private-profile opt-out.** Right now signing in means being
+   ranked — there's no way to keep an account off the leaderboard/
+   territory map while still using cloud sync.
+7. **Animated trip replay on satellite map.** Trip detail currently
+   shows a static route line over OpenStreetMap street tiles
+   (`trips/trip_detail_screen.dart`); TripRank animates the route over
+   satellite imagery. Satellite tiles alone are a tile-provider swap
+   (see that file's doc comment); the playback animation is new work.
+8. **Monthly recap.** A generated summary of a rider's month — would
+   reuse `gamification_repository.dart`'s existing aggregation
+   patterns, just windowed by date instead of all-time.
+9. **Shareable trip stat-card image.** Render a trip's key numbers as a
+   shareable image (e.g. via Flutter's `RepaintBoundary` capture) —
+   useful for organic growth, no backend changes needed.
+10. **iOS, actually shippable.** The `ios/` project is scaffolded and
+    wired for feature parity (Info.plist entries, `AppleSettings` in
+    `trip/location_recorder.dart`) but has never been built or run —
+    this project has no Mac. Everything iOS-related in this roadmap is
+    unverified until that changes.
+11. **Car clubs / groups.** Lowest priority of the identified gaps —
+    TripRank's own description of what a "car club" actually does
+    (chat? shared challenges? just a named group on the leaderboard?)
+    couldn't be confirmed even from its own marketing pages, so there's
+    not yet a clear feature to build toward.
+12. **AI car-modification visualizer.** Also low priority — a novelty
+    feature with an external paid image-generation API dependency
+    (TripRank uses fal.ai), not core to trip tracking or vehicle
+    connectivity, which is where this project's actual differentiation
+    is.
+
+**Not prioritized, but noted for completeness** — things neither app
+appears to have, surfaced by the same comparison: GPX/raw trip data
+export, maintenance/OBD tracking, and a browser-based web dashboard.
+Any of these would be genuine differentiation rather than parity-chasing
+if picked up later.
 
 ## Explicitly deferred inside the Kawasaki connector itself
 
