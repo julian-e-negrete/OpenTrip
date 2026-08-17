@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:opentrip_mobile/data/models/trip_point.dart';
 import 'package:opentrip_mobile/gamification/territory.dart';
 
@@ -27,5 +28,22 @@ void main() {
       _pt(41.0, -3.7038), // a genuinely different cell
     ]);
     expect(cells.length, 2);
+  });
+
+  test('cellBoundsFor contains the point that produced its key', () {
+    const lat = 40.4168;
+    const lng = -3.7038;
+    final bounds = cellBoundsFor(cellKeyFor(lat, lng));
+    expect(bounds.contains(const LatLng(lat, lng)), isTrue);
+  });
+
+  test('cellBoundsFor handles negative cell indices without a sign clash', () {
+    // Both lat and lng floor to negative cell indices here — makes sure
+    // splitting the "lat:lng" key on ':' doesn't get confused by the
+    // leading '-' on each half.
+    const lat = -33.865;
+    const lng = -70.65;
+    final bounds = cellBoundsFor(cellKeyFor(lat, lng));
+    expect(bounds.contains(const LatLng(lat, lng)), isTrue);
   });
 }

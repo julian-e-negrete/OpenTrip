@@ -1,3 +1,6 @@
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+
 import '../data/models/trip_point.dart';
 
 /// Roughly 1.1km per cell at the equator (a degree of latitude is ~111km
@@ -21,4 +24,16 @@ String cellKeyFor(double latitude, double longitude) {
 /// Every distinct cell a trip's route passed through.
 Set<String> cellsForTrip(Iterable<TripPoint> points) {
   return points.map((p) => cellKeyFor(p.latitude, p.longitude)).toSet();
+}
+
+/// The inverse of [cellKeyFor] — the rectangle a cell key covers, for
+/// drawing it on a map (see gamification/territory_map_screen.dart).
+LatLngBounds cellBoundsFor(String cellKey) {
+  final parts = cellKey.split(':');
+  final latCell = int.parse(parts[0]);
+  final lngCell = int.parse(parts[1]);
+  return LatLngBounds(
+    LatLng(latCell * _cellSizeDeg, lngCell * _cellSizeDeg),
+    LatLng((latCell + 1) * _cellSizeDeg, (lngCell + 1) * _cellSizeDeg),
+  );
 }

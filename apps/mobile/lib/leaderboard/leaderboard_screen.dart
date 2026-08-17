@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
+import '../gamification/territory_map_screen.dart';
 import '../sync/sync_service.dart';
 import 'leaderboard_entry.dart';
 
@@ -63,6 +64,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Leaderboard'),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.map_outlined),
+              tooltip: 'Territory map',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TerritoryMapScreen()),
+              ),
+            ),
+          ],
           bottom: const TabBar(
             isScrollable: true,
             tabs: [

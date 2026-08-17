@@ -12,6 +12,7 @@ import '../data/models/trip_point.dart';
 import '../data/models/user_profile.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
+import '../gamification/territory_map_cell.dart';
 import '../leaderboard/leaderboard_entry.dart';
 
 /// Mirrors local vehicles/trips/trip_points/profile (display name only)
@@ -419,6 +420,21 @@ class SyncService {
     try {
       final rows = await _client.rpc('get_leaderboard') as List;
       return rows.map((row) => LeaderboardEntry.fromRow(row as Map<String, dynamic>)).toList();
+    } catch (e) {
+      lastError = e.toString();
+      return const [];
+    }
+  }
+
+  /// Every claimed territory cell across all riders, for
+  /// gamification/territory_map_screen.dart. See get_territory_map()'s
+  /// comment in supabase/leaderboard.sql for why this needed its own
+  /// security-definer function rather than a plain SELECT.
+  Future<List<TerritoryMapCell>> fetchTerritoryMap() async {
+    if (!_canSync) return const [];
+    try {
+      final rows = await _client.rpc('get_territory_map') as List;
+      return rows.map((row) => TerritoryMapCell.fromRow(row as Map<String, dynamic>)).toList();
     } catch (e) {
       lastError = e.toString();
       return const [];

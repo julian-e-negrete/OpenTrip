@@ -140,6 +140,24 @@
   see `supabase/leaderboard.sql`'s comment. Reachable via a leaderboard
   icon on the Trips tab; guests see a "sign in to compare" message
   instead, since there's no account to rank.
+- **Territory map** (`gamification/territory_map_screen.dart`,
+  `get_territory_map()` in `supabase/leaderboard.sql`): a world map of
+  conquered zones — every rider's claimed grid cells drawn as filled
+  rectangles over OpenStreetMap tiles, yours highlighted, everyone
+  else's colored by a stable per-rider hash so the same person always
+  reads as the same color across loads. Needed its own `security
+  definer` function for the same reason the leaderboard did (RLS blocks
+  cross-user reads even through a view) — but deliberately returns only
+  `(cell_key, user_id, display_name)`, never a raw trip route or
+  timestamp, so it can't be used to reconstruct anyone's actual path.
+  Reachable via a map icon on the Leaderboard screen; guests get the
+  same "sign in" gate as the leaderboard itself.
+- **Trip deletion** (`trips/trip_history_screen.dart`,
+  `trips/trip_detail_screen.dart`): swipe a trip left in the list, or use
+  the delete icon on its detail screen — both confirm first. Removes the
+  trip and its GPS points locally and (best-effort) remotely; territory
+  cells and trophies earned from that trip are deliberately left alone,
+  since you still covered that ground either way.
 
 ## Not done yet
 

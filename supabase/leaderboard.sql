@@ -86,3 +86,31 @@ $$;
 
 -- Only signed-in app users can call this — not the public "anon" role.
 grant execute on function public.get_leaderboard() to authenticated;
+
+
+-- Same "security definer to safely expose cross-user data" pattern as
+-- get_leaderboard() above, but for the territory *map* (which cells,
+-- whose) rather than a per-rider total. Deliberately returns only cell
+-- keys + who owns them — never a raw trip route or timestamp, so this
+-- can't be used to reconstruct anyone's actual path or figure out where
+-- they live/work down to house-level precision (a cell is ~1.1km).
+-- Returns every claimed cell with no viewport filtering — fine at this
+-- app's current scale; if the territory map ever gets slow to load, the
+-- fix is adding bounding-box parameters here, not filtering client-side
+-- (that would still ship every row over the wire first).
+create or replace function public.get_territory_map()
+returns table (
+  cell_key text,
+  user_id uuid,
+  display_name text
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name
+  from public.territory_cells tc
+  join public.profiles p on p.user_id = tc.user_id;
+$$;
+
+grant execute on function public.get_territory_map() to authenticated;

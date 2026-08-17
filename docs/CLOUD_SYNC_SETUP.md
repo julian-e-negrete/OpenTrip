@@ -40,14 +40,21 @@ needed.
 3. **Run**.
 
 Creates `territory_cells` and `trophies` (same per-user RLS as everything
-else), plus a `get_leaderboard()` function. That function is the one
-exception to "every table only shows you your own rows" — see the
-comment at the top of `leaderboard.sql` for why a `security definer`
-function, not a view, was necessary to show cross-user rankings at all
-without a plain view accidentally being able to expose raw private data.
-It only ever returns already-aggregated numbers (sums/counts) and a
-display name. Skipping this step just means the Leaderboard screen shows
-"no data yet" instead of rankings — nothing else is affected.
+else), plus `get_leaderboard()` and `get_territory_map()` functions.
+Those are the exception to "every table only shows you your own rows" —
+see the comment at the top of `leaderboard.sql` for why `security
+definer` functions, not views, were necessary to show cross-user data at
+all without a plain view accidentally exposing raw private rows.
+`get_leaderboard()` only ever returns already-aggregated numbers
+(sums/counts) and a display name; `get_territory_map()` only returns
+which grid cell each rider has claimed and by whom, never a raw trip
+route. Skipping this step just means the Leaderboard screen shows "no
+data yet" and the territory map (the map icon on that screen) shows
+nothing — nothing else is affected.
+
+**Already ran `leaderboard.sql` before `get_territory_map()` existed?**
+Just re-run the current file — every statement in it is safe to run
+again (`create table if not exists`, `create or replace function`).
 
 ## 4. That's it
 
