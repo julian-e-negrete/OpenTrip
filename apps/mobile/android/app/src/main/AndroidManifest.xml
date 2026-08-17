@@ -34,6 +34,14 @@
          foreground-service one above. Requested in
          trip/location_recorder.dart's ensureReady(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- geolocator's background position stream (used for the same
+         foreground GPS recording above) needs a wake lock to keep the CPU
+         running while the screen is off. Previously came in transitively
+         via flutter_foreground_task's own manifest merge; now that that
+         plugin is gone (auto-start removal), it has to be declared here
+         directly or the position stream throws WAKE_LOCK PlatformException
+         as soon as it starts. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />
