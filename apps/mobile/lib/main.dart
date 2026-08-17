@@ -9,6 +9,7 @@ import 'auth/login_screen.dart';
 import 'config/app_config.dart';
 import 'home_shell.dart';
 import 'logging/log_buffer.dart';
+import 'sync/sync_service.dart';
 
 void main() {
   // Capture every print() in the app — including flutter_blue_plus's own
@@ -24,6 +25,7 @@ void main() {
       if (AppConfig.isSupabaseConfigured) {
         await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
       }
+      SyncService.instance.startListening();
 
       runApp(const OpenTripApp());
     },

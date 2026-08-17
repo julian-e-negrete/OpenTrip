@@ -14,6 +14,7 @@ import '../data/models/user_profile.dart';
 import '../data/repositories/profile_repository.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../sync/sync_service.dart';
 
 /// Identity (display name + avatar — deliberately never the email, per
 /// the "other users should be able to identify you without seeing your
@@ -40,6 +41,7 @@ class _AccountScreenState extends State<AccountScreen> {
   double _totalDistanceMeters = 0;
   bool _loading = true;
   bool _busy = false;
+  bool _syncing = false;
 
   @override
   void initState() {
@@ -74,6 +76,22 @@ class _AccountScreenState extends State<AccountScreen> {
     });
   }
 
+  Future<void> _syncNow() async {
+    setState(() => _syncing = true);
+    await SyncService.instance.pushPendingChanges();
+    await SyncService.instance.pullAll();
+    await _load();
+    if (mounted) setState(() => _syncing = false);
+  }
+
+  String _syncStatusText() {
+    final error = SyncService.instance.lastError;
+    if (error != null) return 'Last sync failed: $error';
+    final at = SyncService.instance.lastSyncAt;
+    if (at == null) return 'Not synced yet';
+    return 'Last synced ${at.toLocal().toString().substring(0, 19)}';
+  }
+
   String get _displayName {
     final name = _profile?.displayName;
     return (name == null || name.isEmpty) ? 'Unnamed rider' : name;
@@ -101,8 +119,12 @@ class _AccountScreenState extends State<AccountScreen> {
     );
     if (newName == null || newName.isEmpty) return;
 
+    // synced: false explicitly — copyWith would otherwise preserve a
+    // prior "already synced" flag from _profile, and this edit would
+    // never get pushed again. See sync/sync_service.dart.
     final updated = (_profile ?? UserProfile(userId: _userId, displayName: newName)).copyWith(
       displayName: newName,
+      synced: false,
     );
     await ProfileRepository.instance.upsert(updated);
     if (!CurrentUser.instance.isGuest) {
@@ -116,7 +138,10 @@ class _AccountScreenState extends State<AccountScreen> {
     if (picked == null) return;
     final path = await LocalImageStore.save(File(picked.path));
     await LocalImageStore.deleteIfExists(_profile?.avatarPath);
-    final updated = (_profile ?? UserProfile(userId: _userId, displayName: '')).copyWith(avatarPath: path);
+    final updated = (_profile ?? UserProfile(userId: _userId, displayName: '')).copyWith(
+      avatarPath: path,
+      synced: false,
+    );
     await ProfileRepository.instance.upsert(updated);
   }
 
@@ -133,10 +158,11 @@ class _AccountScreenState extends State<AccountScreen> {
       builder: (_) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text(
-          'This permanently deletes every vehicle, trip, and photo stored on '
-          'this device for this account. This cannot be undone.\n\n'
+          'This permanently deletes every vehicle, trip, and photo — on '
+          'this device, and in the cloud if you\'re signed in and synced. '
+          'This cannot be undone.\n\n'
           'If you\'re signed in with Google or email, this does not delete '
-          'the Google/email account itself — only this app\'s local data. '
+          'the Google/email account itself — only this app\'s data. '
           'You\'ll be signed out.',
         ),
         actions: [
@@ -153,6 +179,11 @@ class _AccountScreenState extends State<AccountScreen> {
 
     setState(() => _busy = true);
     final wasGuest = CurrentUser.instance.isGuest;
+    if (!wasGuest) {
+      // Before signing out — deleteAllRemoteData needs the still-active
+      // session to authenticate the delete against RLS.
+      await SyncService.instance.deleteAllRemoteData(_userId);
+    }
     await AccountDataService.wipeLocalData(_userId);
     if (wasGuest) {
       await CurrentUser.instance.resetGuestId();
@@ -213,6 +244,28 @@ class _AccountScreenState extends State<AccountScreen> {
               _StatTile(label: 'Distance', value: '${(_totalDistanceMeters / 1000).toStringAsFixed(0)} km'),
             ],
           ),
+          if (!guest) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: Column(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _syncing ? null : _syncNow,
+                    icon: _syncing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cloud_sync_outlined),
+                    label: Text(_syncing ? 'Syncing…' : 'Sync now'),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(_syncStatusText(), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 32),
           if (guest)
             OutlinedButton.icon(onPressed: _signIn, icon: const Icon(Icons.login), label: const Text('Sign in'))

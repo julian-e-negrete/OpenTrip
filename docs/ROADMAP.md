@@ -56,39 +56,47 @@
   name + avatar (never the email — that's stored but deliberately not
   shown, since a display name is what's meant to identify you to other
   users once social features exist), vehicle/trip/distance counts, and
-  "Delete account". That last one only wipes on-device data
-  (`data/account_data_service.dart`) — it can't delete the actual
-  Supabase auth account itself, since that needs a privileged
-  service-role operation (an Edge Function) a mobile client's anon key
-  can't perform; the confirmation dialog says so explicitly.
+  "Delete account". That wipes both local and (if synced) cloud data —
+  it still can't delete the actual Supabase auth account/email
+  registration itself, since that needs a privileged service-role
+  operation (an Edge Function) a mobile client's anon key can't perform;
+  the confirmation dialog says so explicitly.
+- **Cloud sync** (`sync/sync_service.dart`, `supabase/schema.sql`):
+  vehicles, trips, trip points, and profile display name now sync to
+  Supabase Postgres for real signed-in accounts — push after every local
+  write, pull once right after sign-in, plus a manual "Sync now" button.
+  Guest-mode data stays local-only on purpose (no `auth.uid()` session to
+  authenticate a sync write with, and RLS would reject it anyway). Needs
+  a one-time setup step only the project owner can do — running
+  `supabase/schema.sql` in the Supabase SQL Editor — see
+  `docs/CLOUD_SYNC_SETUP.md`. Deliberately not a full offline-sync
+  engine: last-write-wins (no per-field conflict merge), not real-time
+  across devices (pull is once-at-sign-in, not a live subscription), and
+  vehicle/profile **photos don't sync yet** (needs a Supabase Storage
+  bucket, separate setup not included here).
 
 ## Not done yet
 
-1. **Cloud sync.** Trips/vehicles are local-only right now — login
-   establishes *who you are* (and is required to record a trip, since
-   every local row is scoped to a user id) but nothing is pushed to
-   Supabase's Postgres yet. That's the natural next slice once auth is
-   confirmed working end-to-end: mirror `data/local_database.dart`'s
-   schema into Supabase tables with row-level security scoped to
-   `auth.uid()`, then sync opportunistically when online.
-2. **Background recording.** GPS tracking currently only runs while the
+1. **Background recording.** GPS tracking currently only runs while the
    app is in the foreground — `geolocator`'s stream stops if Android kills
    the app in the background. A foreground service (e.g.
    `flutter_foreground_task`, MIT-licensed) is the fix; not added yet to
    keep this slice's scope verifiable in one pass.
-3. **Maps.** Route points are already being recorded and persisted
+2. **Maps.** Route points are already being recorded and persisted
    per-trip — `trips/trip_detail_screen.dart` shows stats only, no map.
    MapLibre GL + OpenStreetMap tiles is still the plan (no Mapbox/Google
    billing dependency).
-4. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
+3. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
    ranked categories (distance, longest drive, territory explored,
-   trophies) — deliberately *not* speed-based. Needs cloud sync (1) first,
-   since leaderboards are inherently cross-user.
-5. **Background BLE + trip pairing.** The BLE telemetry hookup (see
+   trophies) — deliberately *not* speed-based. Cloud sync now exists to
+   build this on top of.
+4. **Background BLE + trip pairing.** The BLE telemetry hookup (see
    "Done" above) only survives while the app is foregrounded, same
-   limitation as (2) — connecting the bike, then locking the phone
+   limitation as (1) — connecting the bike, then locking the phone
    mid-ride, currently drops both the GPS stream and the BLE connection.
-   Fixed by the same foreground-service work as (2).
+   Fixed by the same foreground-service work as (1).
+5. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+   sync" above. Needs a Supabase Storage bucket + policies.
 
 ## Explicitly deferred inside the Kawasaki connector itself
 

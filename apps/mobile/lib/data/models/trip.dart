@@ -24,6 +24,10 @@ class Trip {
   final int? bleMinWaterTemperatureC;
   final int? bleMaxWaterTemperatureC;
 
+  /// Whether this trip (and its points) has been pushed to Supabase. See
+  /// sync/sync_service.dart. Always true for a trip that came from a pull.
+  final bool synced;
+
   const Trip({
     required this.id,
     required this.userId,
@@ -41,6 +45,7 @@ class Trip {
     this.bleMaxBrakePressureKpa,
     this.bleMinWaterTemperatureC,
     this.bleMaxWaterTemperatureC,
+    this.synced = false,
   });
 
   bool get hasBleTelemetry => bleMaxSpeedKph != null || bleMaxRpm != null;
@@ -100,6 +105,7 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'synced': synced ? 1 : 0,
   };
 
   static Trip fromRow(Map<String, Object?> row) => Trip(
@@ -119,5 +125,47 @@ class Trip {
     bleMaxBrakePressureKpa: row['ble_max_brake_kpa'] as double?,
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    synced: (row['synced'] as int? ?? 0) != 0,
+  );
+
+  /// What gets pushed to Supabase (supabase/schema.sql's `trips` table).
+  Map<String, Object?> toSupabaseRow() => {
+    'id': id,
+    'user_id': userId,
+    'vehicle_id': vehicleId,
+    'started_at': startedAt.toIso8601String(),
+    'ended_at': endedAt?.toIso8601String(),
+    'distance_meters': distanceMeters,
+    'duration_seconds': durationSeconds,
+    'avg_speed_kph': avgSpeedKph,
+    'max_speed_kph': maxSpeedKph,
+    'point_count': pointCount,
+    'ble_max_speed_kph': bleMaxSpeedKph,
+    'ble_max_rpm': bleMaxRpm,
+    'ble_max_lean_deg': bleMaxLeanDeg,
+    'ble_max_brake_kpa': bleMaxBrakePressureKpa,
+    'ble_min_water_temp_c': bleMinWaterTemperatureC,
+    'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+  };
+
+  /// A row pulled from Supabase — always synced.
+  static Trip fromSupabaseRow(Map<String, Object?> row) => Trip(
+    id: row['id'] as String,
+    userId: row['user_id'] as String,
+    vehicleId: row['vehicle_id'] as String,
+    startedAt: DateTime.parse(row['started_at'] as String),
+    endedAt: row['ended_at'] == null ? null : DateTime.parse(row['ended_at'] as String),
+    distanceMeters: (row['distance_meters'] as num).toDouble(),
+    durationSeconds: row['duration_seconds'] as int,
+    avgSpeedKph: (row['avg_speed_kph'] as num?)?.toDouble(),
+    maxSpeedKph: (row['max_speed_kph'] as num?)?.toDouble(),
+    pointCount: row['point_count'] as int,
+    bleMaxSpeedKph: (row['ble_max_speed_kph'] as num?)?.toDouble(),
+    bleMaxRpm: row['ble_max_rpm'] as int?,
+    bleMaxLeanDeg: (row['ble_max_lean_deg'] as num?)?.toDouble(),
+    bleMaxBrakePressureKpa: (row['ble_max_brake_kpa'] as num?)?.toDouble(),
+    bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
+    bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    synced: true,
   );
 }

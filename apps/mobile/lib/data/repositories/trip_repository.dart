@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../../sync/sync_service.dart';
 import '../data_events.dart';
 import '../local_database.dart';
 import '../models/trip.dart';
@@ -72,7 +73,15 @@ class TripRepository {
       whereArgs: [tripId],
       orderBy: 'seq ASC',
     );
-    return rows.map(TripPoint.fromRow).toList();
+    if (rows.isNotEmpty) {
+      return rows.map(TripPoint.fromRow).toList();
+    }
+    // No local points — this trip may have been pulled from another
+    // device via SyncService.pullAll, which doesn't eagerly fetch every
+    // trip's points. Try fetching them now; a harmless no-op if there
+    // genuinely are none (e.g. a trip stopped with zero GPS fixes) or
+    // sync isn't available.
+    return SyncService.instance.pullTripPoints(tripId);
   }
 
   Future<void> deleteTrip(String tripId) async {

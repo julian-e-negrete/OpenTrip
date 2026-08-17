@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:uuid/uuid.dart';
 
+import '../../sync/sync_service.dart';
 import '../data_events.dart';
 import '../local_database.dart';
 import '../local_image_store.dart';
@@ -62,5 +65,7 @@ class VehicleRepository {
     }
     await db.delete('vehicles', where: 'id = ?', whereArgs: [vehicleId]);
     DataEvents.instance.notifyChanged();
+    // Best-effort — a local delete should never block on network.
+    unawaited(SyncService.instance.deleteVehicleRemote(vehicleId));
   }
 }

@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -38,7 +38,8 @@ class LocalDatabase {
             model TEXT NOT NULL DEFAULT '',
             ble_connector TEXT NOT NULL,
             photo_path TEXT,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('CREATE INDEX idx_vehicles_user ON vehicles(user_id)');
@@ -47,7 +48,8 @@ class LocalDatabase {
           CREATE TABLE profiles (
             user_id TEXT PRIMARY KEY,
             display_name TEXT NOT NULL,
-            avatar_path TEXT
+            avatar_path TEXT,
+            synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
 
@@ -68,7 +70,8 @@ class LocalDatabase {
             ble_max_lean_deg REAL,
             ble_max_brake_kpa REAL,
             ble_min_water_temp_c INTEGER,
-            ble_max_water_temp_c INTEGER
+            ble_max_water_temp_c INTEGER,
+            synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await db.execute('CREATE INDEX idx_trips_vehicle ON trips(vehicle_id)');
@@ -111,6 +114,24 @@ class LocalDatabase {
               avatar_path TEXT
             )
           ''');
+        }
+        if (oldVersion < 4) {
+          await db.execute('ALTER TABLE vehicles ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
+          await db.execute('ALTER TABLE trips ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
+          // profiles may not exist yet if jumping straight from version 2.
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS profiles (
+              user_id TEXT PRIMARY KEY,
+              display_name TEXT NOT NULL,
+              avatar_path TEXT,
+              synced INTEGER NOT NULL DEFAULT 0
+            )
+          ''');
+          final columns = await db.rawQuery('PRAGMA table_info(profiles)');
+          final hasSynced = columns.any((c) => c['name'] == 'synced');
+          if (!hasSynced) {
+            await db.execute('ALTER TABLE profiles ADD COLUMN synced INTEGER NOT NULL DEFAULT 0');
+          }
         }
       },
     );
