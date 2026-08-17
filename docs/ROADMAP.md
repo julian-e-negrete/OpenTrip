@@ -99,7 +99,23 @@
   is both less permission friction and avoids Play Store's
   background-location review requirement. iOS gets the equivalent
   `AppleSettings`/`Info.plist` config for parity, but is unverified —
-  this project has no way to build/run iOS (needs a Mac).
+  this project has no way to build/run iOS (needs a Mac). Needed
+  `POST_NOTIFICATIONS` (Android 13+) to actually work — missing it broke
+  GPS the moment the screen locked while leaving BLE unaffected (an
+  unrelated subsystem), which is exactly what surfaced this in testing;
+  fixed by declaring + requesting that permission
+  (`LocationRecorder.ensureReady()`).
+  **Known limit, accepted deliberately rather than built around:**
+  survives screen lock and switching to another app, but not the user
+  explicitly swiping this app away from the Recents/app-switcher list —
+  Android kills the service by default when its task is removed, and
+  `geolocator`'s bundled foreground service (confirmed by reading its
+  source: no `stopWithTask="false"`, no `onTaskRemoved()` override) does
+  nothing to prevent that. Matching Google Maps' full swipe-away
+  resilience would mean swapping to a dedicated background-service
+  plugin (`flutter_foreground_task`) running the recording/BLE logic in
+  a separate isolate — real architecture work, not a config flag —
+  intentionally not done now.
 - **Maps** (`trips/trip_detail_screen.dart`): route polyline + start/end
   markers over OpenStreetMap tiles, via `flutter_map` (pure-Dart canvas
   renderer) rather than MapLibre GL — no native map SDK, no platform
