@@ -1,17 +1,38 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../data/models/trip.dart';
+import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
+import '../data/repositories/trip_repository.dart';
 
-/// Trip stats only — no map rendering yet. Route points are already being
-/// recorded and persisted (see data/repositories/trip_repository.dart's
-/// pointsForTrip), so a map view is a UI-only follow-up once MapLibre is
-/// wired in (/docs/ROADMAP.md).
-class TripDetailScreen extends StatelessWidget {
+class TripDetailScreen extends StatefulWidget {
   const TripDetailScreen({super.key, required this.trip, required this.vehicle});
 
   final Trip trip;
   final Vehicle? vehicle;
+
+  @override
+  State<TripDetailScreen> createState() => _TripDetailScreenState();
+}
+
+class _TripDetailScreenState extends State<TripDetailScreen> {
+  List<TripPoint>? _points;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPoints();
+  }
+
+  Future<void> _loadPoints() async {
+    // TripRepository.pointsForTrip falls back to a remote pull if this
+    // trip has no local points yet (e.g. it arrived via cloud sync from
+    // another device) — see sync/sync_service.dart.
+    final points = await TripRepository.instance.pointsForTrip(widget.trip.id);
+    if (mounted) setState(() => _points = points);
+  }
 
   String _fmtDuration(int seconds) {
     final d = Duration(seconds: seconds);
@@ -21,43 +42,118 @@ class TripDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final trip = widget.trip;
     return Scaffold(
-      appBar: AppBar(title: Text(vehicle?.name ?? 'Trip')),
+      appBar: AppBar(title: Text(widget.vehicle?.name ?? 'Trip')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
         children: [
-          _Row('Started', trip.startedAt.toLocal().toString().substring(0, 19)),
-          if (trip.endedAt != null) _Row('Ended', trip.endedAt!.toLocal().toString().substring(0, 19)),
-          _Row('Distance', '${trip.distanceKm.toStringAsFixed(2)} km'),
-          _Row('Duration', _fmtDuration(trip.durationSeconds)),
-          _Row(
-            'Average speed',
-            trip.avgSpeedKph == null ? '—' : '${trip.avgSpeedKph!.toStringAsFixed(1)} km/h',
-          ),
-          _Row(
-            'Max speed',
-            trip.maxSpeedKph == null ? '—' : '${trip.maxSpeedKph!.toStringAsFixed(1)} km/h',
-          ),
-          _Row('GPS points recorded', '${trip.pointCount}'),
-          if (trip.hasBleTelemetry) ...[
-            const Padding(
-              padding: EdgeInsets.only(top: 16, bottom: 4),
-              child: Text('From the bike', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          SizedBox(height: 220, child: _RouteMap(points: _points)),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                _Row('Started', trip.startedAt.toLocal().toString().substring(0, 19)),
+                if (trip.endedAt != null) _Row('Ended', trip.endedAt!.toLocal().toString().substring(0, 19)),
+                _Row('Distance', '${trip.distanceKm.toStringAsFixed(2)} km'),
+                _Row('Duration', _fmtDuration(trip.durationSeconds)),
+                _Row(
+                  'Average speed',
+                  trip.avgSpeedKph == null ? '—' : '${trip.avgSpeedKph!.toStringAsFixed(1)} km/h',
+                ),
+                _Row(
+                  'Max speed',
+                  trip.maxSpeedKph == null ? '—' : '${trip.maxSpeedKph!.toStringAsFixed(1)} km/h',
+                ),
+                _Row('GPS points recorded', '${trip.pointCount}'),
+                if (trip.hasBleTelemetry) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16, bottom: 4),
+                    child: Text(
+                      'From the bike',
+                      style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (trip.bleMaxSpeedKph != null)
+                    _Row('Max speed (bike)', '${trip.bleMaxSpeedKph!.toStringAsFixed(0)} km/h'),
+                  if (trip.bleMaxRpm != null) _Row('Max RPM', '${trip.bleMaxRpm}'),
+                  if (trip.bleMaxLeanDeg != null)
+                    _Row('Max lean angle', '${trip.bleMaxLeanDeg!.toStringAsFixed(0)}°'),
+                  if (trip.bleMaxBrakePressureKpa != null)
+                    _Row('Max front brake pressure', '${trip.bleMaxBrakePressureKpa!.toStringAsFixed(0)} kPa'),
+                  if (trip.bleMinWaterTemperatureC != null && trip.bleMaxWaterTemperatureC != null)
+                    _Row(
+                      'Water temperature range',
+                      '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC} °C',
+                    ),
+                ],
+              ],
             ),
-            if (trip.bleMaxSpeedKph != null)
-              _Row('Max speed (bike)', '${trip.bleMaxSpeedKph!.toStringAsFixed(0)} km/h'),
-            if (trip.bleMaxRpm != null) _Row('Max RPM', '${trip.bleMaxRpm}'),
-            if (trip.bleMaxLeanDeg != null) _Row('Max lean angle', '${trip.bleMaxLeanDeg!.toStringAsFixed(0)}°'),
-            if (trip.bleMaxBrakePressureKpa != null)
-              _Row('Max front brake pressure', '${trip.bleMaxBrakePressureKpa!.toStringAsFixed(0)} kPa'),
-            if (trip.bleMinWaterTemperatureC != null && trip.bleMaxWaterTemperatureC != null)
-              _Row(
-                'Water temperature range',
-                '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC} °C',
-              ),
-          ],
+          ),
         ],
       ),
+    );
+  }
+}
+
+/// Route polyline over OpenStreetMap raster tiles. Uses the public
+/// tile.openstreetmap.org server, which is fine for this app's current
+/// scale but comes with OSM's tile usage policy (low volume, no heavy
+/// production traffic) — see docs/ROADMAP.md. Self-hosting tiles or
+/// switching to a paid provider (Stadia Maps, MapTiler, Thunderforest)
+/// is the documented upgrade path if that ever becomes a real concern.
+class _RouteMap extends StatelessWidget {
+  const _RouteMap({required this.points});
+  final List<TripPoint>? points;
+
+  @override
+  Widget build(BuildContext context) {
+    final pts = points;
+    if (pts == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (pts.isEmpty) {
+      return const ColoredBox(
+        color: Color(0xFF1A1A1A),
+        child: Center(child: Text('No route recorded for this trip.')),
+      );
+    }
+
+    final routePoints = pts.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    final bounds = LatLngBounds.fromPoints(routePoints);
+
+    return FlutterMap(
+      options: MapOptions(
+        initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
+      ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'co.opentrip.opentrip_mobile',
+        ),
+        PolylineLayer(
+          polylines: [Polyline(points: routePoints, strokeWidth: 4, color: Colors.tealAccent)],
+        ),
+        MarkerLayer(
+          markers: [
+            Marker(
+              point: routePoints.first,
+              width: 16,
+              height: 16,
+              child: const DecoratedBox(
+                decoration: BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+              ),
+            ),
+            Marker(
+              point: routePoints.last,
+              width: 16,
+              height: 16,
+              child: const DecoratedBox(
+                decoration: BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

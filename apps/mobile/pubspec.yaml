@@ -30,6 +30,10 @@ dependencies:
   shared_preferences: ^2.3.2
   # GPS trip recording.
   geolocator: ^13.0.1
+  # Trip route map. Pure-Dart tile renderer (no native map SDK, no
+  # Mapbox/Google billing) — see trips/trip_detail_screen.dart.
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   # Profile / vehicle photos.
   image_picker: ^1.1.2
   path_provider: ^2.1.4

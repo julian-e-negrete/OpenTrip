@@ -19,6 +19,7 @@
   on-device feature works with zero backend setup — login is an optional
   upgrade path, not a gate. Confirmed working end-to-end against a real
   Supabase project, including tracking down a `DEVELOPER_ERROR (10)`
+  
   Google Sign-In failure to ephemeral CI runners auto-generating a fresh
   debug-signing keystore on every run — fixed by pinning one
   (`android/app/debug.keystore`, deliberately committed; see
@@ -83,28 +84,38 @@
   only. Still not a full offline-sync engine: last-write-wins (no
   per-field conflict merge), and vehicle/profile **photos don't sync yet**
   (needs a Supabase Storage bucket, separate setup not included here).
+- **Background recording + BLE** (`trip/location_recorder.dart`): one
+  change covers what were two separate roadmap items, since they shared a
+  root cause — Android killing the app process when backgrounded, which
+  drops both the GPS stream and the BLE connection together (same
+  process). Fixed via geolocator's built-in Android foreground-service
+  integration (`AndroidSettings.foregroundNotificationConfig`) rather
+  than a separate background-service plugin/isolate: a persistent
+  notification keeps the process alive while recording, so both GPS and
+  the Kawasaki BLE connection survive backgrounding with no other code
+  change needed. Deliberately doesn't request
+  `ACCESS_BACKGROUND_LOCATION` — a foreground service already keeps
+  Android treating the app as foregrounded for location purposes, which
+  is both less permission friction and avoids Play Store's
+  background-location review requirement. iOS gets the equivalent
+  `AppleSettings`/`Info.plist` config for parity, but is unverified —
+  this project has no way to build/run iOS (needs a Mac).
+- **Maps** (`trips/trip_detail_screen.dart`): route polyline + start/end
+  markers over OpenStreetMap tiles, via `flutter_map` (pure-Dart canvas
+  renderer) rather than MapLibre GL — no native map SDK, no platform
+  channels, meaningfully less build risk for the same result. Uses the
+  public `tile.openstreetmap.org` server, fine at this app's current
+  scale but subject to OSM's tile usage policy (not for heavy/production
+  traffic); self-hosting tiles or a paid provider (Stadia Maps, MapTiler,
+  Thunderforest) is the documented upgrade path if that ever matters.
 
 ## Not done yet
 
-1. **Background recording.** GPS tracking currently only runs while the
-   app is in the foreground — `geolocator`'s stream stops if Android kills
-   the app in the background. A foreground service (e.g.
-   `flutter_foreground_task`, MIT-licensed) is the fix; not added yet to
-   keep this slice's scope verifiable in one pass.
-2. **Maps.** Route points are already being recorded and persisted
-   per-trip — `trips/trip_detail_screen.dart` shows stats only, no map.
-   MapLibre GL + OpenStreetMap tiles is still the plan (no Mapbox/Google
-   billing dependency).
-3. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
+1. **Territory/leaderboard/trophy logic**, mirroring TripRank's four
    ranked categories (distance, longest drive, territory explored,
    trophies) — deliberately *not* speed-based. Cloud sync now exists to
    build this on top of.
-4. **Background BLE + trip pairing.** The BLE telemetry hookup (see
-   "Done" above) only survives while the app is foregrounded, same
-   limitation as (1) — connecting the bike, then locking the phone
-   mid-ride, currently drops both the GPS stream and the BLE connection.
-   Fixed by the same foreground-service work as (1).
-5. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+2. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
 
 ## Explicitly deferred inside the Kawasaki connector itself

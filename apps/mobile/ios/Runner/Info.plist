@@ -34,6 +34,17 @@
 	<string>Connects to your motorcycle's Rideology Bluetooth interface to read live ride telemetry (speed, RPM, gear).</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used for trip route recording while you ride.</string>
+	<!-- Background recording (trip/location_recorder.dart) — unverified,
+	     this project has no way to build/run iOS (needs a Mac). Requires
+	     the user to grant "Always" location access, not just "While Using
+	     the App", or geolocator's allowBackgroundLocationUpdates silently
+	     has no effect. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Used to keep recording your trip's route if you lock your phone or switch apps while riding.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:geolocator/geolocator.dart';
 
@@ -41,9 +42,21 @@ const _maxPlausibleSpeedKph = 300.0;
 /// the UI. Distance is accumulated incrementally rather than recomputed
 /// from scratch each fix, so recording stays cheap on a long trip.
 ///
-/// This is foreground-only for now — recording stops if the app is
-/// killed in the background. See /docs/ROADMAP.md for the background
-/// foreground-service follow-up.
+/// Survives backgrounding on Android via geolocator's own foreground-
+/// service integration (see [_buildLocationSettings]) — no separate
+/// background-service plugin or isolate needed, and no extra BLE code
+/// either: once Android stops treating this app as killable (which is
+/// what a foreground service buys), the Kawasaki BLE connection
+/// (vehicle/kawasaki_connector.dart) survives right along with it, since
+/// it lives in the same process. Deliberately doesn't request the
+/// heavier "Allow location all the time" (`ACCESS_BACKGROUND_LOCATION`)
+/// permission — Android treats an app showing an active foreground-
+/// service notification as foregrounded for location purposes, so the
+/// ordinary "while using the app" grant this already requests is
+/// enough. That's also a real product decision, not just less
+/// friction: Play Store policy requires a background-location
+/// declaration/review for apps that use `ACCESS_BACKGROUND_LOCATION`,
+/// which the foreground-service approach avoids entirely.
 class LocationRecorder {
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
@@ -87,8 +100,39 @@ class LocationRecorder {
     _maxSpeedKph = null;
     _lastAcceptedPoint = null;
 
-    const settings = LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 3);
-    _positionSub = Geolocator.getPositionStream(locationSettings: settings).listen(_onPosition);
+    _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(_onPosition);
+  }
+
+  /// Platform-specific settings so a recording keeps streaming positions
+  /// while backgrounded, per this class's doc comment.
+  LocationSettings _buildLocationSettings() {
+    if (Platform.isAndroid) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 3,
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'OpenTrip is recording',
+          notificationText: 'Tracking your trip — tap to return to the app.',
+          enableWakeLock: true,
+        ),
+      );
+    }
+    if (Platform.isIOS) {
+      // Unverified — this project has no way to build/run iOS (needs a
+      // Mac; see /README.md). Requires Info.plist's
+      // UIBackgroundModes=[location] and NSLocationAlwaysAndWhenInUseUsageDescription
+      // (apps/mobile/ios/Runner/Info.plist), and the OS granting "Always"
+      // location access, not just "While Using the App" — geolocator
+      // silently ignores allowBackgroundLocationUpdates without that.
+      return AppleSettings(
+        accuracy: LocationAccuracy.best,
+        distanceFilter: 3,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+        allowBackgroundLocationUpdates: true,
+      );
+    }
+    return const LocationSettings(accuracy: LocationAccuracy.best, distanceFilter: 3);
   }
 
   void _onPosition(Position position) {
