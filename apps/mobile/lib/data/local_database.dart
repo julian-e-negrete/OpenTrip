@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -73,6 +73,7 @@ class LocalDatabase {
             ble_max_brake_kpa REAL,
             ble_min_water_temp_c INTEGER,
             ble_max_water_temp_c INTEGER,
+            auto_started INTEGER NOT NULL DEFAULT 0,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -187,6 +188,13 @@ class LocalDatabase {
           final hasVisible = columns.any((c) => c['name'] == 'leaderboard_visible');
           if (!hasVisible) {
             await db.execute('ALTER TABLE profiles ADD COLUMN leaderboard_visible INTEGER NOT NULL DEFAULT 1');
+          }
+        }
+        if (oldVersion < 8) {
+          final columns = await db.rawQuery('PRAGMA table_info(trips)');
+          final hasAutoStarted = columns.any((c) => c['name'] == 'auto_started');
+          if (!hasAutoStarted) {
+            await db.execute('ALTER TABLE trips ADD COLUMN auto_started INTEGER NOT NULL DEFAULT 0');
           }
         }
       },

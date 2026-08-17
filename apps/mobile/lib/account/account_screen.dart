@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../auth/auth_service.dart';
 import '../auth/current_user.dart';
 import '../auth/login_screen.dart';
+import '../autostart/auto_start_controller.dart';
 import '../data/account_data_service.dart';
 import '../data/catalog/country_catalog.dart';
 import '../data/data_events.dart';
@@ -43,6 +44,8 @@ class _AccountScreenState extends State<AccountScreen> {
   double _totalDistanceMeters = 0;
   bool _loading = true;
   bool _busy = false;
+  bool _autoStartEnabled = false;
+  bool _autoStartBusy = false;
   bool _syncing = false;
 
   @override
@@ -68,6 +71,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final trips = await TripRepository.instance.listForUser(userId);
     final trophyCount = await GamificationRepository.instance.trophyCount(userId);
     final totalDistance = trips.fold<double>(0, (sum, t) => sum + t.distanceMeters);
+    final autoStartEnabled = await AutoStartController.instance.isEnabled();
     if (!mounted) return;
     setState(() {
       _userId = userId;
@@ -76,6 +80,7 @@ class _AccountScreenState extends State<AccountScreen> {
       _tripCount = trips.length;
       _trophyCount = trophyCount;
       _totalDistanceMeters = totalDistance;
+      _autoStartEnabled = autoStartEnabled;
       _loading = false;
     });
   }
@@ -147,6 +152,27 @@ class _AccountScreenState extends State<AccountScreen> {
       synced: false,
     );
     await ProfileRepository.instance.upsert(updated);
+  }
+
+  Future<void> _setAutoStartEnabled(bool enabled) async {
+    setState(() => _autoStartBusy = true);
+    String? error;
+    if (enabled) {
+      error = await AutoStartController.instance.enable();
+    } else {
+      await AutoStartController.instance.disable();
+    }
+    if (!mounted) return;
+    setState(() {
+      // Only actually flips on success — a denied permission or a failed
+      // service start leaves the switch showing what's really happening,
+      // not what was requested.
+      if (error == null) _autoStartEnabled = enabled;
+      _autoStartBusy = false;
+    });
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    }
   }
 
   Future<void> _setLeaderboardVisible(bool visible) async {
@@ -267,7 +293,19 @@ class _AccountScreenState extends State<AccountScreen> {
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
             ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Auto-start drive detection'),
+            subtitle: const Text(
+              'Starts recording automatically once driving is detected, even if OpenTrip '
+              'isn\'t open. Can\'t always tell your own vehicle apart from being a '
+              'passenger in a bus or train — GPS-only, doesn\'t connect a bike for you.',
+            ),
+            value: _autoStartEnabled,
+            onChanged: _autoStartBusy ? null : _setAutoStartEnabled,
+          ),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [

@@ -204,6 +204,52 @@
   second row," but a function can, atomically. Reachable via the people
   icon on the Leaderboard screen. Sign-in only, like the rest of the
   social features — no cross-device "friends" concept for a local guest.
+- **Auto-start drive detection** (`autostart/`): a trip starts and stops
+  itself once driving is detected — no tapping "Start recording," and it
+  works even if OpenTrip was fully closed, matching what TripRank/Google
+  Maps do. Given the choice between that and a lighter "only while the
+  app is open" version, this was built as the full always-on kind
+  deliberately, at real architectural cost — see below.
+
+  Two cooperating pieces: `flutter_activity_recognition` wraps Android's
+  `ActivityRecognitionClient` to report `IN_VEHICLE`/`STILL`/etc.
+  transitions; `flutter_foreground_task` runs that subscription inside
+  its own persistent background isolate (a second foreground-service
+  notification, independent of `trip/location_recorder.dart`'s own —
+  the two never run at once, and this one has `stopWithTask: false` and
+  `autoRunOnBoot: true`, which is what actually gets it past a swipe-away
+  or a reboot). `IN_VEHICLE` sustained 45s starts a trip (against the
+  most-recently-used vehicle — there's no UI to ask which one);
+  `STILL`/`WALKING`/`RUNNING` sustained 3 minutes ends it. Both numbers
+  are a first guess, not a measurement — there's no way to tune a
+  debounce window like this without a real device actually driving
+  around, the same caveat every background-service change in this
+  project has needed.
+
+  A trip this task starts is GPS-only — connecting a bike over BLE still
+  needs the scan/connect flow on the Vehicle tab, which a background
+  isolate has no reasonable way to drive unattended. The two isolates
+  (this background one, and the main UI one `trip/recording_screen.dart`
+  runs in) don't share Dart memory even though they're the same OS
+  process, so "is a trip currently active" is answered from the database
+  (`TripRepository.activeTripFor`, keyed on `ended_at IS NULL`) rather
+  than in-memory state — both the detector and the manual Start button
+  check it first, so they can't ever race into two competing recordings.
+  Opening the app while an auto-started trip is running shows it as
+  "Recording automatically" on the Record tab; stopping it from there
+  sends a message to the background isolate rather than calling a local
+  recorder, since that isolate is the one actually holding it.
+
+  **Known limitations, accepted rather than built around:** the
+  start/stop debounce windows above will very likely need retuning once
+  this actually runs on a bike or in a car. Activity Recognition can't
+  distinguish your own vehicle from being a passenger in a bus or train
+  — there's no way around that with this API. If the background service
+  itself gets killed and restarted mid-trip (rare, but possible under
+  memory pressure), the resumed trip's distance undercounts whatever
+  happened during the gap — recomputing it exactly would mean
+  reconstructing pre-restart state with more precision than seemed worth
+  the complexity for an edge case this narrow.
 
 ## Not done yet
 
@@ -211,57 +257,46 @@ Ordered by priority, from a feature comparison against TripRank (see
 `/README.md` for what TripRank is) — highest-value gaps first. An item
 being here means "identified and worth doing," not "in progress."
 
-1. **Auto-start drive detection.** Trips currently require manually
-   tapping "Start recording" — the single feature most likely to be
-   assumed as table-stakes by anyone coming from TripRank or Strava.
-   Likely needs Android's activity-recognition APIs (detecting
-   "in vehicle" transitions) rather than anything GPS-speed-threshold-based,
-   to avoid false starts from being a bicycle/train passenger. Highest
-   remaining priority, and the riskiest to build blind — it needs a new
-   native permission (`ACTIVITY_RECOGNITION`) and a plugin dependency
-   this project hasn't used before, and false-positive/false-negative
-   tuning that really needs a real device to get right, the same way
-   the original background-recording work did.
-2. **Speed-camera & traffic-signal alerts.** Buildable on the same
+1. **Speed-camera & traffic-signal alerts.** Buildable on the same
    OpenStreetMap data the app's maps already depend on (`flutter_map`,
    `trips/trip_detail_screen.dart`) — no new data source required, just
    proximity queries against OSM's camera/signal tags during an active
    recording.
-3. **Phone-sensor driving-behavior analytics** (acceleration, braking,
+2. **Phone-sensor driving-behavior analytics** (acceleration, braking,
    cornering, G-force) — currently `trip/location_recorder.dart` only
    derives speed/distance from GPS fixes; this would need the
    accelerometer/gyroscope, a new sensor pipeline alongside the existing
    GPS one. Vehicles with a BLE connector already get a version of this
    (lean angle, brake pressure) for free — this would extend it to every
    vehicle, not just BLE-equipped bikes.
-4. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
+3. **Photo sync.** Vehicle/profile photos are local-only — see "Cloud
    sync" above. Needs a Supabase Storage bucket + policies.
-5. **Animated trip replay on satellite map.** Trip detail currently
+4. **Animated trip replay on satellite map.** Trip detail currently
    shows a static route line over OpenStreetMap street tiles
    (`trips/trip_detail_screen.dart`); TripRank animates the route over
    satellite imagery. Satellite tiles alone are a tile-provider swap
    (see that file's doc comment); the playback animation is new work.
-6. **Monthly recap.** A generated summary of a rider's month — would
+5. **Monthly recap.** A generated summary of a rider's month — would
    reuse `gamification_repository.dart`'s existing aggregation
    patterns, just windowed by date instead of all-time.
-7. **Shareable trip stat-card image.** Render a trip's key numbers as a
+6. **Shareable trip stat-card image.** Render a trip's key numbers as a
    shareable image (e.g. via Flutter's `RepaintBoundary` capture) —
    useful for organic growth, no backend changes needed.
-8. **iOS, actually shippable.** The `ios/` project is scaffolded and
+7. **iOS, actually shippable.** The `ios/` project is scaffolded and
    wired for feature parity (Info.plist entries, `AppleSettings` in
    `trip/location_recorder.dart`) but has never been built or run —
    this project has no Mac. Everything iOS-related in this roadmap is
    unverified until that changes.
-9. **Car clubs / groups.** Lowest priority of the identified gaps —
+8. **Car clubs / groups.** Lowest priority of the identified gaps —
    TripRank's own description of what a "car club" actually does
    (chat? shared challenges? just a named group on the leaderboard?)
    couldn't be confirmed even from its own marketing pages, so there's
    not yet a clear feature to build toward.
-10. **AI car-modification visualizer.** Also low priority — a novelty
-    feature with an external paid image-generation API dependency
-    (TripRank uses fal.ai), not core to trip tracking or vehicle
-    connectivity, which is where this project's actual differentiation
-    is.
+9. **AI car-modification visualizer.** Also low priority — a novelty
+   feature with an external paid image-generation API dependency
+   (TripRank uses fal.ai), not core to trip tracking or vehicle
+   connectivity, which is where this project's actual differentiation
+   is.
 
 **Possible implementation — things neither app has, surfaced by the
 same comparison, and worth treating as real candidates rather than a

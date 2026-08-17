@@ -28,6 +28,16 @@ class Trip {
   /// sync/sync_service.dart. Always true for a trip that came from a pull.
   final bool synced;
 
+  /// Whether autostart/driving_detector_task.dart created this trip
+  /// itself (detected via ActivityRecognition, no one tapped "Start
+  /// recording") rather than a manual recording. Purely local bookkeeping
+  /// — it's how the detector task tells "a trip I own and should
+  /// auto-stop" apart from a manual one it must leave alone, and how
+  /// trip/recording_screen.dart tells "adopt this already-running trip"
+  /// apart from "let me start a new one." Not synced — another device
+  /// doesn't need to know which button (or lack of one) started a trip.
+  final bool autoStarted;
+
   const Trip({
     required this.id,
     required this.userId,
@@ -46,6 +56,7 @@ class Trip {
     this.bleMinWaterTemperatureC,
     this.bleMaxWaterTemperatureC,
     this.synced = false,
+    this.autoStarted = false,
   });
 
   bool get hasBleTelemetry => bleMaxSpeedKph != null || bleMaxRpm != null;
@@ -85,6 +96,7 @@ class Trip {
       bleMaxBrakePressureKpa: bleMaxBrakePressureKpa,
       bleMinWaterTemperatureC: bleMinWaterTemperatureC,
       bleMaxWaterTemperatureC: bleMaxWaterTemperatureC,
+      autoStarted: autoStarted,
     );
   }
 
@@ -105,6 +117,7 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'auto_started': autoStarted ? 1 : 0,
     'synced': synced ? 1 : 0,
   };
 
@@ -125,6 +138,7 @@ class Trip {
     bleMaxBrakePressureKpa: row['ble_max_brake_kpa'] as double?,
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    autoStarted: (row['auto_started'] as int? ?? 0) != 0,
     synced: (row['synced'] as int? ?? 0) != 0,
   );
 

@@ -65,6 +65,18 @@ const _maxPlausibleSpeedKph = 300.0;
 /// otherwise invisible: unlike a BLE connect failure, there's no
 /// exception dialog, just a trip that saves with 0 km recorded.
 class LocationRecorder {
+  /// False when this recorder runs inside a process that's already kept
+  /// alive by its own foreground service — autostart/driving_detector_task.dart,
+  /// which is itself a flutter_foreground_task-hosted service. Asking
+  /// geolocator to *also* promote a second Android foreground service in
+  /// that case would be redundant (and Android only needs one to keep the
+  /// process alive), so this just skips
+  /// AndroidSettings.foregroundNotificationConfig entirely rather than
+  /// showing a second, confusing notification alongside the detector's own.
+  final bool showForegroundNotification;
+
+  LocationRecorder({this.showForegroundNotification = true});
+
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
 
@@ -115,16 +127,37 @@ class LocationRecorder {
     }
   }
 
-  Future<void> start(String tripId) async {
+  /// Starts recording. [priorPoints], if given, seeds seq/distance/last-fix
+  /// state from points that already exist for this trip — used to resume
+  /// a trip a fresh LocationRecorder instance didn't itself start (e.g.
+  /// autostart/driving_detector_task.dart re-attaching after its
+  /// background service was restarted mid-trip by the OS). Points not
+  /// covered by [priorPoints] (the outage window itself) are simply
+  /// missing from the route and undercounted in distance — an accepted
+  /// gap, not a bug, given how rare a mid-trip service restart should be.
+  Future<void> start(String tripId, {List<TripPoint> priorPoints = const []}) async {
     if (isRecording) return;
     await ensureReady();
 
     _tripId = tripId;
     _startedAt = DateTime.now();
-    _seq = 0;
+    _seq = priorPoints.length;
     _distanceMeters = 0;
     _maxSpeedKph = null;
-    _lastAcceptedPoint = null;
+    _lastAcceptedPoint = priorPoints.isEmpty ? null : priorPoints.last;
+    for (var i = 1; i < priorPoints.length; i++) {
+      _distanceMeters += haversineMeters(
+        lat1: priorPoints[i - 1].latitude,
+        lon1: priorPoints[i - 1].longitude,
+        lat2: priorPoints[i].latitude,
+        lon2: priorPoints[i].longitude,
+      );
+    }
+    for (final p in priorPoints) {
+      if (p.speedKph != null && (_maxSpeedKph == null || p.speedKph! > _maxSpeedKph!)) {
+        _maxSpeedKph = p.speedKph;
+      }
+    }
     _rejectedAccuracyCount = 0;
     _rejectedGlitchCount = 0;
 
@@ -147,11 +180,13 @@ class LocationRecorder {
       return AndroidSettings(
         accuracy: LocationAccuracy.best,
         distanceFilter: 3,
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'OpenTrip is recording',
-          notificationText: 'Tracking your trip — tap to return to the app.',
-          enableWakeLock: true,
-        ),
+        foregroundNotificationConfig: showForegroundNotification
+            ? const ForegroundNotificationConfig(
+                notificationTitle: 'OpenTrip is recording',
+                notificationText: 'Tracking your trip — tap to return to the app.',
+                enableWakeLock: true,
+              )
+            : null,
       );
     }
     if (Platform.isIOS) {

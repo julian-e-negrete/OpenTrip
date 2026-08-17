@@ -27,7 +27,7 @@ dependencies:
   sqflite: ^2.3.3
   path: ^1.9.0
   uuid: ^4.4.0
-  shared_preferences: ^2.3.2
+  shared_preferences: ^2.5.5
   # GPS trip recording.
   geolocator: ^13.0.1
   # Trip route map. Pure-Dart tile renderer (no native map SDK, no
@@ -37,6 +37,12 @@ dependencies:
   # Profile / vehicle photos.
   image_picker: ^1.1.2
   path_provider: ^2.1.4
+  # Auto-start drive detection (autostart/) — activity_recognition detects
+  # "you're now in a vehicle"; foreground_task keeps that detection alive
+  # even after the app is swiped away, unlike the recording foreground
+  # service in trip/location_recorder.dart (see that file's doc comment).
+  flutter_activity_recognition: ^4.0.0
+  flutter_foreground_task: ^10.0.0
 
 dev_dependencies:
   flutter_test:

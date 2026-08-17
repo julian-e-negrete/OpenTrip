@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
 import '../auth/current_user.dart';
+import '../autostart/driving_detector_task.dart' show kStopAutoTripMessage;
 import '../data/data_events.dart';
 import '../data/models/trip.dart';
 import '../data/models/trip_point.dart';
@@ -35,6 +37,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
   RecordingStats? _stats;
   String? _error;
   bool _loadingVehicles = true;
+
+  /// True when [_activeTrip] is one autostart/driving_detector_task.dart
+  /// started, not this screen's own [_start] — that background isolate
+  /// owns the real running LocationRecorder in that case, not this
+  /// screen, so there's no live [_stats] to show and "Stop & save" has to
+  /// send a message rather than call [_recorder] directly. See
+  /// data/repositories/trip_repository.dart's activeTripFor doc comment.
+  bool _autoManaged = false;
 
   StreamSubscription<TripPoint>? _pointSub;
   StreamSubscription<RecordingStats>? _statsSub;
@@ -99,6 +109,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
   Future<void> _loadVehicles() async {
     _userId = await CurrentUser.instance.id();
     final vehicles = await VehicleRepository.instance.listForUser(_userId);
+    // Durable, database-backed check — catches a trip
+    // autostart/driving_detector_task.dart started while this screen
+    // wasn't watching (the app was closed, or just hadn't refreshed yet),
+    // and equally catches one it just finished while this screen still
+    // thought it was running.
+    final active = await TripRepository.instance.activeTripFor(_userId);
     if (!mounted) return;
     setState(() {
       _vehicles = vehicles;
@@ -111,6 +127,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (!stillExists) {
         _selectedVehicle = vehicles.isEmpty ? null : vehicles.first;
       }
+
+      if (_autoManaged) {
+        if (active == null) {
+          // Finished elsewhere — reconcile back to idle.
+          _activeTrip = null;
+          _autoManaged = false;
+        } else {
+          _activeTrip = active;
+        }
+      } else if (_activeTrip == null && active != null && active.autoStarted) {
+        _activeTrip = active;
+        _autoManaged = true;
+        final vehicleMatch = vehicles.where((v) => v.id == active.vehicleId);
+        if (vehicleMatch.isNotEmpty) _selectedVehicle = vehicleMatch.first;
+      }
+
       _loadingVehicles = false;
     });
   }
@@ -160,6 +192,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
     final vehicle = _selectedVehicle;
     if (vehicle == null) return;
 
+    // Rare race: autostart/driving_detector_task.dart started a trip in
+    // the instant before this button was tapped. Adopt it instead of
+    // starting a second, competing recording.
+    final alreadyActive = await TripRepository.instance.activeTripFor(_userId);
+    if (alreadyActive != null) {
+      setState(() {
+        _activeTrip = alreadyActive;
+        _autoManaged = alreadyActive.autoStarted;
+      });
+      return;
+    }
+
     setState(() => _error = null);
     try {
       final trip = await TripRepository.instance.startTrip(userId: _userId, vehicleId: vehicle.id);
@@ -184,6 +228,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
     } catch (e) {
       setState(() => _error = e.toString());
     }
+  }
+
+  /// Stops a trip autostart/driving_detector_task.dart owns — that
+  /// background isolate holds the actual running LocationRecorder, not
+  /// this screen, so stopping is a message, not a local call. The
+  /// isolate finishes the trip, runs gamification, and reports back via
+  /// AutoStartController's data callback, which pokes DataEvents and
+  /// brings this screen back to idle through the normal _loadVehicles path.
+  void _stopAutoManaged() {
+    FlutterForegroundTask.sendDataToTask(kStopAutoTripMessage);
+    setState(() {
+      _activeTrip = null;
+      _autoManaged = false;
+    });
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Stopping — this trip will appear in Trips shortly.')));
   }
 
   Future<void> _flushPoints() async {
@@ -314,14 +375,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
           ),
         ],
         const SizedBox(height: 24),
-        if (recording) _StatsView(stats: _stats) else const Spacer(),
+        if (recording)
+          (_autoManaged ? _AutoManagedBanner(startedAt: _activeTrip!.startedAt) : _StatsView(stats: _stats))
+        else
+          const Spacer(),
         const SizedBox(height: 24),
         if (_error != null) ...[
           Text(_error!, style: const TextStyle(color: Colors.redAccent)),
           const SizedBox(height: 12),
         ],
         FilledButton.icon(
-          onPressed: recording ? _stop : _start,
+          onPressed: recording ? (_autoManaged ? _stopAutoManaged : _stop) : _start,
           icon: Icon(recording ? Icons.stop_circle_outlined : Icons.play_circle_outline),
           label: Text(recording ? 'Stop & save' : 'Start recording'),
           style: recording ? FilledButton.styleFrom(backgroundColor: Colors.redAccent) : null,
@@ -393,6 +457,38 @@ class _BleConnectionCard extends StatelessWidget {
     BleConnectionState.connected => 'Bike connected',
     BleConnectionState.failed => 'Bike connection failed',
   };
+}
+
+/// Shown instead of [_StatsView] while auto-detected driving is being
+/// recorded by autostart/driving_detector_task.dart — no live distance
+/// to show here (that stream lives in the background isolate), just
+/// confirmation that it's happening.
+class _AutoManagedBanner extends StatelessWidget {
+  const _AutoManagedBanner({required this.startedAt});
+  final DateTime startedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final started = startedAt.toLocal().toString().substring(11, 16);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Icon(Icons.directions_car_filled_outlined, size: 32, color: Colors.tealAccent),
+            const SizedBox(height: 8),
+            const Text('Recording automatically', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 4),
+            Text(
+              'Auto-detected driving since $started — check the Trips tab once it\'s stopped.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _StatsView extends StatelessWidget {

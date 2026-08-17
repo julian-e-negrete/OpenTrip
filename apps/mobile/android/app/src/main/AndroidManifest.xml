@@ -35,6 +35,16 @@
          trip/location_recorder.dart's ensureReady(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Auto-start drive detection (autostart/) — a second, independent
+         foreground service (flutter_foreground_task) that watches for
+         "you're now in a vehicle" via ActivityRecognitionClient, and
+         survives the app being swiped away (unlike the recording service
+         above). RECEIVE_BOOT_COMPLETED, WAKE_LOCK, and POST_NOTIFICATIONS
+         (already declared) are merged in automatically by that plugin's
+         own manifest. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
+
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -64,6 +74,15 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Warning: do not change this service name — flutter_foreground_task
+             owns it. Used by autostart/driving_detector_task.dart; declared
+             as "location" type since it runs a Geolocator position stream
+             once driving is detected (see that file's doc comment). -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
