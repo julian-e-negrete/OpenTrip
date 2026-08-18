@@ -11,20 +11,34 @@ import 'territory_map_cell.dart';
 enum _Scope { global, friends }
 
 /// A world map of every rider's claimed territory — the "conquered
-/// zones" view OpenTrip shows alongside its leaderboard. Rendered as a
-/// soft heat glow, not a grid of flat rectangles: each ~1.1km cell
-/// (gamification/territory.dart) you've ridden through contributes a
-/// blob of color, and blobs from the same rider blend additively where
-/// they overlap (see [_TerritoryHeatLayer]) — so a cell you've crossed
-/// once glows faint and one you cross on every commute glows solid,
-/// intensity driven by territory_cells.visit_count
-/// (data/repositories/gamification_repository.dart). Your own territory
-/// is drawn in the app's coral accent; everyone else's in a color
-/// derived from their user id (stable across screen loads, so the same
-/// rider always reads as the same color). Only aggregate cell ownership
-/// + visit count is fetched — see get_territory_map()'s comment in
-/// supabase/leaderboard.sql for why this deliberately can't show
-/// anyone's actual route.
+/// zones" view OpenTrip shows alongside its leaderboard. Rendered as
+/// extruded columns, not flat rectangles: each ~1.1km cell
+/// (gamification/territory.dart) you've ridden through rises out of the
+/// map as a small 3-faced block (see [_TerritoryColumnLayer]), taller
+/// the more times you've crossed it — a cell you've passed once is a
+/// low bump, a daily-commute cell stands up like a tower. Height is
+/// driven by territory_cells.visit_count
+/// (data/repositories/gamification_repository.dart); color is constant
+/// per rider, not intensity — your own territory in the app's coral
+/// accent, everyone else's in a color derived from their user id
+/// (stable across screen loads, so the same rider always reads as the
+/// same color). Only aggregate cell ownership + visit count is fetched
+/// — see get_territory_map()'s comment in supabase/leaderboard.sql for
+/// why this deliberately can't show anyone's actual route.
+///
+/// This is the second visual pass at this screen — the first drew flat
+/// bordered rectangles, the second a soft additive glow. Both read as
+/// "a spreadsheet over a map" more than "territory." This version chases
+/// the look of deck.gl's HexagonLayer (the extruded-hexbin style behind
+/// most Uber-style "3D density" dashboards), faked in 2D screen space
+/// since flutter_map has no tiltable 3D camera to do it for real: each
+/// cell's true geographic footprint is projected as normal, then a
+/// second copy is drawn shifted up-and-right by the column's height,
+/// with the gap between the two filled in as the column's front/right
+/// walls (see [_ColumnPainter]) — the same "shift the roof, fill the
+/// walls" cheat classic isometric icon art uses, not real 3D geometry.
+/// It'll look right at today's fixed top-down view but wouldn't tilt
+/// correctly if the map ever gained real camera rotation.
 ///
 /// The basemap switches between CARTO's Dark Matter and Positron tile
 /// sets by the app's current brightness (dark/light, following system —
@@ -80,8 +94,8 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
   /// A stable, reasonably distinct color per rider — derived from their
   /// user id so it doesn't shuffle between loads, without needing a
   /// server-assigned color column. Pushed toward high saturation/value so
-  /// it still pops as a soft glow against the dark or light CARTO
-  /// basemap, not just as a hard-edged fill.
+  /// it still pops as a solid block against the dark or light CARTO
+  /// basemap.
   Color _colorForUser(String userId) {
     final hue = (userId.hashCode.abs() % 360).toDouble();
     return HSVColor.fromAHSV(1, hue, 0.75, 0.92).toColor();
@@ -155,23 +169,20 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
       }(),
     ]);
 
-    final byUser = <String, List<TerritoryMapCell>>{};
-    for (final cell in cells) {
-      byUser.putIfAbsent(cell.userId, () => []).add(cell);
-    }
-
-    // Draw everyone else first, "you" last — your own territory should
-    // sit on top where it overlaps someone else's.
-    final userOrder = byUser.keys.toList()
-      ..sort((a, b) {
-        if (a == _myUserId) return 1;
-        if (b == _myUserId) return -1;
-        return 0;
-      });
-
-    final groups = userOrder.map((userId) {
-      final isMine = userId == _myUserId;
-      return _HeatGroup(color: isMine ? scheme.primary : _colorForUser(userId), cells: byUser[userId]!);
+    // No per-rider grouping needed here (unlike the additive-glow version
+    // this replaced) — columns are solid, so correct occlusion just means
+    // sorting every column by map position and painting back-to-front,
+    // done once inside [_ColumnPainter] itself rather than per-rider.
+    final columns = cells.map((cell) {
+      final isMine = cell.userId == _myUserId;
+      final base = isMine ? scheme.primary : _colorForUser(cell.userId);
+      return _TerritoryColumn(
+        bounds: cellBoundsFor(cell.cellKey),
+        topColor: Color.lerp(base, Colors.white, 0.22)!,
+        frontColor: base,
+        rightColor: Color.lerp(base, Colors.black, 0.28)!,
+        visitCount: cell.visitCount,
+      );
     }).toList();
 
     final riders = <String, String>{for (final c in cells) c.userId: c.displayName};
@@ -196,7 +207,7 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
                     : 'https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
                 userAgentPackageName: 'co.opentrip.opentrip_mobile',
               ),
-              _TerritoryHeatLayer(groups: groups),
+              _TerritoryColumnLayer(columns: columns),
             ],
           ),
         ),
@@ -246,36 +257,41 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
   }
 }
 
-class _HeatGroup {
-  const _HeatGroup({required this.color, required this.cells});
-  final Color color;
-  final List<TerritoryMapCell> cells;
+/// One claimed cell, pre-styled: its geographic footprint plus the three
+/// shades its column will be drawn in (top/front/right — see
+/// [_ColumnPainter]) and how many visits set its height. Shading is
+/// computed once here, in [_TerritoryMapScreenState._buildMap], rather
+/// than per animation frame inside the painter.
+class _TerritoryColumn {
+  const _TerritoryColumn({
+    required this.bounds,
+    required this.topColor,
+    required this.frontColor,
+    required this.rightColor,
+    required this.visitCount,
+  });
+
+  final LatLngBounds bounds;
+  final Color topColor;
+  final Color frontColor;
+  final Color rightColor;
+  final int visitCount;
 }
 
-/// Paints [_HeatGroup]s as soft, additively-blended glows instead of flat
-/// rectangles. Each cell becomes a radial-gradient blob centered on the
-/// cell and sized to overlap its neighbors, so a contiguous ridden area
-/// reads as one continuous field of color rather than a checkerboard of
-/// grid squares. Blobs are grouped per rider and composited on their own
-/// layer with [BlendMode.plus]: overlapping cells from the *same* rider
-/// brighten together (more visits = a hotter glow), while different
-/// riders' layers still composite normally against each other and the
-/// basemap beneath.
-///
 /// Mirrors flutter_map's own [CircleLayer]/[CirclePainter] plumbing
 /// (camera-aware [CustomPaint] wrapped in [MobileLayerTransformer]) since
-/// there's no built-in heatmap layer in flutter_map — this is that layer,
-/// purpose-built for cell-based territory instead of arbitrary points.
-class _TerritoryHeatLayer extends StatelessWidget {
-  const _TerritoryHeatLayer({required this.groups});
-  final List<_HeatGroup> groups;
+/// there's no built-in 3D/extrusion layer in flutter_map — this is that
+/// layer, purpose-built for cell-based territory columns.
+class _TerritoryColumnLayer extends StatelessWidget {
+  const _TerritoryColumnLayer({required this.columns});
+  final List<_TerritoryColumn> columns;
 
   @override
   Widget build(BuildContext context) {
     final camera = MapCamera.of(context);
     return MobileLayerTransformer(
       child: CustomPaint(
-        painter: _HeatPainter(camera: camera, groups: groups),
+        painter: _ColumnPainter(camera: camera, columns: columns),
         size: Size(camera.size.x, camera.size.y),
         isComplex: true,
       ),
@@ -283,52 +299,92 @@ class _TerritoryHeatLayer extends StatelessWidget {
   }
 }
 
-class _HeatPainter extends CustomPainter {
-  _HeatPainter({required this.camera, required this.groups});
+/// Paints each [_TerritoryColumn] as a 3-faced block: the cell's real
+/// geographic footprint is the base, a second copy of that same
+/// rectangle shifted up-and-right by the column's height is the top face,
+/// and the gap between the two is filled in as the front and right
+/// walls. That shift is the entire "3D" trick — flutter_map's camera
+/// can't tilt, so there's no real depth here, just two rectangles and
+/// two connecting quads. Faces are flat-shaded (lighter top, base color
+/// front, darker right) to sell the illusion, not lit dynamically.
+///
+/// Column height comes from [_TerritoryColumn.visitCount] scaled by the
+/// cell's own on-screen size (not a fixed pixel height) so columns stay
+/// proportionate whether you're zoomed into a neighborhood or looking at
+/// a whole city.
+///
+/// Columns are painted back-to-front by their base's screen Y — the
+/// same painter's-algorithm ordering real 3D renderers use — so a
+/// column further "south" (lower on screen) correctly draws over one
+/// further "north" behind it, regardless of which rider owns either
+/// cell. There's no per-rider grouping or blending here: every face is
+/// fully opaque.
+class _ColumnPainter extends CustomPainter {
+  _ColumnPainter({required this.camera, required this.columns});
 
   final MapCamera camera;
-  final List<_HeatGroup> groups;
+  final List<_TerritoryColumn> columns;
 
-  /// Visits at or above this many light up at full intensity — a
+  /// Visits at or above this many reach the tallest column height — a
   /// deliberately low bar (a well-worn daily-commute cell) rather than
-  /// requiring dozens of passes to ever look "solid."
+  /// requiring dozens of passes to ever stand up like a tower.
   static const _capVisits = 6;
-  static const _minAlpha = 0.22;
-  static const _maxAlpha = 0.85;
-  static const _blobScale = 1.7;
-  static const _minBlobRadius = 10.0;
+  static const _minHeightRatio = 0.35;
+  static const _maxHeightRatio = 1.5;
+  static const _leanRatio = 0.35;
+  static const _maxHeightPx = 140.0;
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.clipRect(Offset.zero & size);
-    for (final group in groups) {
-      // A fresh transparent layer per rider so their own overlapping
-      // cells can brighten together via BlendMode.plus without washing
-      // out or blending into a different rider's color underneath.
-      canvas.saveLayer(Offset.zero & size, Paint());
-      for (final cell in group.cells) {
-        final bounds = cellBoundsFor(cell.cellKey);
-        final nw = camera.getOffsetFromOrigin(bounds.northWest);
-        final se = camera.getOffsetFromOrigin(bounds.southEast);
-        final center = Offset((nw.dx + se.dx) / 2, (nw.dy + se.dy) / 2);
-        final halfWidth = (se.dx - nw.dx).abs() / 2;
-        final halfHeight = (se.dy - nw.dy).abs() / 2;
-        final radius = math.max(math.max(halfWidth, halfHeight) * _blobScale, _minBlobRadius);
-        final ratio = (cell.visitCount / _capVisits).clamp(0.0, 1.0);
-        final alpha = _minAlpha + (_maxAlpha - _minAlpha) * ratio;
 
-        final paint = Paint()
-          ..blendMode = BlendMode.plus
-          ..shader = RadialGradient(
-            colors: [group.color.withValues(alpha: alpha), group.color.withValues(alpha: 0)],
-          ).createShader(Rect.fromCircle(center: center, radius: radius));
-        canvas.drawCircle(center, radius, paint);
-      }
-      canvas.restore();
+    final built =
+        columns.map((column) {
+          final nw = camera.getOffsetFromOrigin(column.bounds.northWest);
+          final se = camera.getOffsetFromOrigin(column.bounds.southEast);
+          final rect = Rect.fromPoints(nw, se);
+          final baseSize = math.max(rect.width, rect.height);
+          final ratio = (column.visitCount / _capVisits).clamp(0.0, 1.0);
+          final height = (baseSize * (_minHeightRatio + (_maxHeightRatio - _minHeightRatio) * ratio)).clamp(
+            4.0,
+            _maxHeightPx,
+          );
+          return (rect: rect, height: height, column: column);
+        }).toList()
+          ..sort((a, b) => a.rect.bottom.compareTo(b.rect.bottom));
+
+    for (final c in built) {
+      final lean = Offset(c.height * _leanRatio, -c.height);
+      final topRect = c.rect.shift(lean);
+
+      final frontPath = Path()
+        ..moveTo(c.rect.left, c.rect.bottom)
+        ..lineTo(topRect.left, topRect.bottom)
+        ..lineTo(topRect.right, topRect.bottom)
+        ..lineTo(c.rect.right, c.rect.bottom)
+        ..close();
+      canvas.drawPath(frontPath, Paint()..color = c.column.frontColor);
+
+      final rightPath = Path()
+        ..moveTo(c.rect.right, c.rect.top)
+        ..lineTo(topRect.right, topRect.top)
+        ..lineTo(topRect.right, topRect.bottom)
+        ..lineTo(c.rect.right, c.rect.bottom)
+        ..close();
+      canvas.drawPath(rightPath, Paint()..color = c.column.rightColor);
+
+      canvas.drawRect(topRect, Paint()..color = c.column.topColor);
+      canvas.drawRect(
+        topRect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1
+          ..color = Colors.black.withValues(alpha: 0.18),
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _HeatPainter oldDelegate) =>
-      groups != oldDelegate.groups || camera != oldDelegate.camera;
+  bool shouldRepaint(covariant _ColumnPainter oldDelegate) =>
+      columns != oldDelegate.columns || camera != oldDelegate.camera;
 }

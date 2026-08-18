@@ -156,9 +156,11 @@
   actual path. Promoted from an icon buried on the Leaderboard screen to
   a full bottom-nav tab (`home_shell.dart`) on request; guests get the
   same "sign in" gate as the leaderboard itself.
-- **Territory map redesign: heat glow instead of flat rectangles**
-  (`gamification/territory_map_screen.dart`'s `_TerritoryHeatLayer`/
-  `_HeatPainter`, `territory_cells.visit_count` in
+- **Territory map redesign, take one: heat glow instead of flat
+  rectangles** (superseded by the extruded-column redesign below —
+  `_TerritoryHeatLayer`/`_HeatPainter` no longer exist, kept here as the
+  historical record of what changed and why)
+  (`territory_cells.visit_count` in
   `supabase/leaderboard.sql`): the original version drew every claimed
   cell as a flat-colored rectangle with a visible border — functionally
   fine, visually a checkerboard, and didn't read as "territory" so much
@@ -183,6 +185,28 @@
   either theme — to CARTO's Dark Matter/Positron tile sets, picked by the
   app's current brightness so the map always matches
   `theme/app_theme.dart` instead of looking bolted on.
+- **Territory map redesign, take two: extruded columns instead of a
+  glow** (`gamification/territory_map_screen.dart`'s
+  `_TerritoryColumnLayer`/`_ColumnPainter`): the glow version above read
+  better than flat rectangles but was compared side by side against two
+  other options — three mocked-up "cube" concepts, each grounded in a
+  real precedent (deck.gl's HexagonLayer, fixed-viewpoint isometric
+  voxels like R's `isocubes`/Cesium Heatbox, and a flat CSS bevel) — and
+  the deck.gl-style extruded-column look won. Since flutter_map has no
+  tiltable 3D camera the way deck.gl/Mapbox do, this fakes it in 2D: each
+  cell's real geographic footprint is drawn as normal, a second copy of
+  that same rectangle is drawn shifted up-and-right by the column's
+  height, and the gap between the two is filled in as the column's front
+  and right walls (flat-shaded lighter-top/right-darker, not dynamically
+  lit) — the classic "shift the roof, fill the walls" cheat behind most
+  flat isometric icon art, not real 3D geometry. `visit_count` now drives
+  column *height* (capped at 6 visits for the tallest column) instead of
+  glow intensity, and color is constant per rider rather than
+  intensity-modulated. Columns are painted back-to-front by their base's
+  screen position in one global pass — not grouped per rider like the
+  glow version's `BlendMode.plus` layers — since opaque solid faces need
+  correct occlusion between *every* column regardless of owner, not just
+  overlaps within one rider's own cells.
 - **One shared BLE connection, not two** (`vehicle/ble_connection_service.dart`):
   the standalone Vehicle tab (`screens/vehicle_screen.dart`) and the
   Record tab's "Connect bike" card (`trip/recording_screen.dart`) used to
