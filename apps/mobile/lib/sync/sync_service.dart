@@ -150,7 +150,17 @@ class SyncService {
       if (cellRows.isNotEmpty) {
         await _client.from('territory_cells').upsert(
           cellRows
-              .map((r) => {'user_id': r['user_id'], 'cell_key': r['cell_key'], 'first_seen_at': r['first_seen_at']})
+              .map(
+                (r) => {
+                  'user_id': r['user_id'],
+                  'cell_key': r['cell_key'],
+                  'first_seen_at': r['first_seen_at'],
+                  // Overwrite, not increment — the local row is already the
+                  // authoritative cumulative count (see
+                  // GamificationRepository.addTerritoryCells).
+                  'visit_count': r['visit_count'],
+                },
+              )
               .toList(),
         );
         final cellBatch = db.batch();

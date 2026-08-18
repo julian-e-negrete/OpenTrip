@@ -143,10 +143,10 @@
 - **Territory map, as its own tab** (`gamification/territory_map_screen.dart`,
   `get_territory_map()`/`get_friends_territory_map()` in
   `supabase/leaderboard.sql`/`friends.sql`): a world map of conquered
-  zones — every rider's claimed grid cells drawn as filled rectangles
-  over OpenStreetMap tiles, yours highlighted, everyone else's colored
-  by a stable per-rider hash so the same person always reads as the
-  same color across loads. A Global/Friends `SegmentedButton` (same
+  zones — every rider's claimed grid cells drawn as a soft heat glow (see
+  the redesign below) over a CARTO basemap, yours highlighted, everyone
+  else's colored by a stable per-rider hash so the same person always
+  reads as the same color across loads. A Global/Friends `SegmentedButton` (same
   pattern as the Leaderboard tab's) switches between every non-opted-out
   rider and just you plus your accepted friends. Needed its own
   `security definer` functions for the same reason the leaderboard did
@@ -156,6 +156,33 @@
   actual path. Promoted from an icon buried on the Leaderboard screen to
   a full bottom-nav tab (`home_shell.dart`) on request; guests get the
   same "sign in" gate as the leaderboard itself.
+- **Territory map redesign: heat glow instead of flat rectangles**
+  (`gamification/territory_map_screen.dart`'s `_TerritoryHeatLayer`/
+  `_HeatPainter`, `territory_cells.visit_count` in
+  `supabase/leaderboard.sql`): the original version drew every claimed
+  cell as a flat-colored rectangle with a visible border — functionally
+  fine, visually a checkerboard, and didn't read as "territory" so much
+  as "a spreadsheet over a map." Replaced with a purpose-built heatmap
+  layer (flutter_map has no built-in one): each cell becomes a soft
+  radial-gradient blob sized to overlap its neighbors, so a contiguous
+  ridden area reads as one continuous glow. Cells from the same rider are
+  composited on their own `saveLayer` with `BlendMode.plus` so
+  overlapping visits *brighten* together instead of just re-drawing the
+  same flat color — which is also what makes intensity meaningful: a
+  cell's glow strength now comes from `territory_cells.visit_count`
+  (incremented on every revisit — `GamificationRepository.addTerritoryCells`
+  switched from insert-and-ignore-duplicates to a
+  `... ON CONFLICT DO UPDATE SET visit_count = visit_count + 1` upsert),
+  capped at 6 visits for full intensity so a daily-commute cell lights up
+  solid without needing dozens of passes. `get_territory_map()`/
+  `get_friends_territory_map()` both return `visit_count` now, and the
+  local→remote push overwrites (not increments) the remote value, since
+  the local row is already the authoritative cumulative count. Paired
+  with switching the basemap from OpenStreetMap's default colorful street
+  tiles — which fought the glow for attention and didn't sit well with
+  either theme — to CARTO's Dark Matter/Positron tile sets, picked by the
+  app's current brightness so the map always matches
+  `theme/app_theme.dart` instead of looking bolted on.
 - **One shared BLE connection, not two** (`vehicle/ble_connection_service.dart`):
   the standalone Vehicle tab (`screens/vehicle_screen.dart`) and the
   Record tab's "Connect bike" card (`trip/recording_screen.dart`) used to

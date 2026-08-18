@@ -15,22 +15,30 @@ class GamificationRepository {
     return result ?? 0;
   }
 
-  /// Inserts any cell keys not already recorded for this user. Duplicate
-  /// cells (revisiting the same area) are silently ignored via the
-  /// (user_id, cell_key) primary key — that's the whole point, "how much
-  /// *new* ground" only counts a cell once.
+  /// Records a trip's cells for this user: a cell seen for the first time
+  /// gets a fresh row at visit_count 1; a cell seen again bumps its
+  /// existing visit_count instead of being ignored. [territoryCellCount]
+  /// (unique cells claimed, for the leaderboard's "territory" stat) is
+  /// unaffected either way — it's a row count, and this never changes the
+  /// row count for an already-seen cell. visit_count only feeds the
+  /// territory map's heat intensity (gamification/territory_map_screen.dart):
+  /// the more times you've ridden through a cell, the stronger it glows.
   Future<void> addTerritoryCells(String userId, Set<String> cellKeys) async {
     if (cellKeys.isEmpty) return;
     final db = await LocalDatabase.instance.database;
     final now = DateTime.now().toIso8601String();
     final batch = db.batch();
     for (final cellKey in cellKeys) {
-      batch.insert('territory_cells', {
-        'user_id': userId,
-        'cell_key': cellKey,
-        'first_seen_at': now,
-        'synced': 0,
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+      batch.rawInsert(
+        '''
+        INSERT INTO territory_cells (user_id, cell_key, first_seen_at, visit_count, synced)
+        VALUES (?, ?, ?, 1, 0)
+        ON CONFLICT(user_id, cell_key) DO UPDATE SET
+          visit_count = visit_count + 1,
+          synced = 0
+        ''',
+        [userId, cellKey, now],
+      );
     }
     await batch.commit(noResult: true);
     DataEvents.instance.notifyChanged();

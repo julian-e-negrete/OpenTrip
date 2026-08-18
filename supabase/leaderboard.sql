@@ -20,8 +20,20 @@ create table if not exists public.territory_cells (
   user_id uuid not null references auth.users(id) on delete cascade,
   cell_key text not null,
   first_seen_at timestamptz not null default now(),
+  -- How many trips have passed through this cell — drives the
+  -- territory map's heat intensity (gamification/territory_map_screen.dart):
+  -- a cell you've ridden through once glows faint, one you cross on every
+  -- commute glows solid. Incremented locally on every revisit
+  -- (data/repositories/gamification_repository.dart), then pushed as an
+  -- overwrite (not a server-side increment) since the local count is
+  -- already the authoritative cumulative total.
+  visit_count integer not null default 1,
   primary key (user_id, cell_key)
 );
+
+-- Safe to re-run on a project that already had this table before this
+-- column existed.
+alter table public.territory_cells add column if not exists visit_count integer not null default 1;
 
 alter table public.territory_cells enable row level security;
 
@@ -29,6 +41,14 @@ create policy "territory_cells_select_own" on public.territory_cells
   for select using (auth.uid() = user_id);
 create policy "territory_cells_insert_own" on public.territory_cells
   for insert with check (auth.uid() = user_id);
+-- A revisited cell's visit_count push (sync/sync_service.dart) is an
+-- upsert — once a cell already exists remotely, bumping its count is an
+-- UPDATE, not an INSERT, so this needs its own policy alongside the two
+-- above. Postgres has no `create policy if not exists`, so drop-then-
+-- create is what makes this safe to re-run.
+drop policy if exists "territory_cells_update_own" on public.territory_cells;
+create policy "territory_cells_update_own" on public.territory_cells
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 
 create table if not exists public.trophies (
@@ -107,17 +127,23 @@ revoke execute on function public.get_leaderboard() from anon, public;
 -- app's current scale; if the territory map ever gets slow to load, the
 -- fix is adding bounding-box parameters here, not filtering client-side
 -- (that would still ship every row over the wire first).
-create or replace function public.get_territory_map()
+-- Re-running this after visit_count was added to the returned columns
+-- needs the drop first — Postgres won't let create-or-replace change an
+-- existing function's return-row shape.
+drop function if exists public.get_territory_map();
+create function public.get_territory_map()
 returns table (
   cell_key text,
   user_id uuid,
-  display_name text
+  display_name text,
+  visit_count integer
 )
 language sql
 security definer
 set search_path = public
 as $$
-  select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name
+  select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name,
+    tc.visit_count
   from public.territory_cells tc
   join public.profiles p on p.user_id = tc.user_id
   where coalesce(p.leaderboard_visible, true);

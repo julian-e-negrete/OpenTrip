@@ -236,11 +236,16 @@ revoke execute on function public.get_friends_leaderboard() from anon, public;
 -- counterpart to get_friends_leaderboard() above. Same
 -- leaderboard_visible + "never a raw route, just cell ownership"
 -- posture as get_territory_map()'s own comment explains.
-create or replace function public.get_friends_territory_map()
+-- Re-running this after visit_count was added to the returned columns
+-- needs the drop first — Postgres won't let create-or-replace change an
+-- existing function's return-row shape.
+drop function if exists public.get_friends_territory_map();
+create function public.get_friends_territory_map()
 returns table (
   cell_key text,
   user_id uuid,
-  display_name text
+  display_name text,
+  visit_count integer
 )
 language sql
 security definer
@@ -253,7 +258,8 @@ as $$
     union
     select auth.uid()
   )
-  select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name
+  select tc.cell_key, tc.user_id, coalesce(nullif(p.display_name, ''), 'Unnamed rider') as display_name,
+    tc.visit_count
   from public.territory_cells tc
   join public.profiles p on p.user_id = tc.user_id
   join friend_ids f on f.friend_id = tc.user_id

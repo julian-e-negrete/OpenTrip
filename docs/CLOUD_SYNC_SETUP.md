@@ -59,10 +59,12 @@ route. Skipping this step just means the Leaderboard screen shows "no
 data yet" and the territory map (the map icon on that screen) shows
 nothing — nothing else is affected.
 
-**Already ran `leaderboard.sql` before `get_territory_map()` existed, or
-before step 1's `leaderboard_visible` column existed?** Just re-run the
-current file — every statement in it is safe to run again (`create
-table if not exists`, `create or replace function`).
+**Already ran `leaderboard.sql` before `get_territory_map()` existed,
+before step 1's `leaderboard_visible` column existed, or before
+`territory_cells.visit_count` existed?** Just re-run the current file —
+every statement in it is safe to run again (`create table if not
+exists`, `drop function if exists` + `create function`, `add column if
+not exists`).
 
 **Already ran an earlier version of this file (or `friends.sql`) before
 they revoked `anon` execute access?** Definitely re-run both — Supabase
@@ -92,9 +94,9 @@ Leaderboard screen still opens, but search and every list on it (and
 the Map tab's "Friends" toggle) come back empty.
 
 **Already ran `friends.sql` before `get_friends_territory_map()`
-existed, or before every function in it revoked `anon` execute access?**
-Re-run the current file — every statement is safe to run again, and the
-`anon` revoke matters: Supabase grants `EXECUTE` on new functions to the
+existed, before every function in it revoked `anon` execute access, or
+before it returned `visit_count`?** Re-run the current file — every
+statement is safe to run again, and the `anon` revoke matters: Supabase grants `EXECUTE` on new functions to the
 unauthenticated `anon` role by default (sometimes via an explicit grant,
 sometimes via the `public` pseudo-role — both got closed here), so an
 earlier run of this file may have left these callable without signing
