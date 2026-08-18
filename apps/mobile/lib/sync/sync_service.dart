@@ -200,6 +200,16 @@ class SyncService {
 
       lastSyncAt = DateTime.now();
       lastError = null;
+      // gamification/territory_map_screen.dart reads *remote* aggregate
+      // state (get_territory_map()), not local rows — the local write
+      // that triggered this push already fired a DataEvents notification,
+      // but that reload could easily race ahead of this push actually
+      // landing. Firing again once the push genuinely completes is what
+      // lets that screen (and anything else keyed off synced state) catch
+      // up without the user having to know to pull-to-refresh.
+      if (cellRows.isNotEmpty || trophyRows.isNotEmpty) {
+        DataEvents.instance.notifyChanged();
+      }
     } catch (e) {
       lastError = e.toString();
     } finally {

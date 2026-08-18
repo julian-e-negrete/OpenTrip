@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
 import '../auth/current_user.dart';
+import '../data/data_events.dart';
 import '../sync/sync_service.dart';
 import 'territory.dart';
 import 'territory_map_cell.dart';
@@ -57,6 +58,17 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
   void initState() {
     super.initState();
     _load();
+    // This screen lives inside HomeShell's IndexedStack, so initState only
+    // ever runs once — without this, a trip recorded (and synced) after
+    // the tab's first load would never appear until the user thought to
+    // pull-to-refresh. See data/data_events.dart.
+    DataEvents.instance.listenable.addListener(_load);
+  }
+
+  @override
+  void dispose() {
+    DataEvents.instance.listenable.removeListener(_load);
+    super.dispose();
   }
 
   Future<void> _load() async {
