@@ -186,7 +186,10 @@
   app's current brightness so the map always matches
   `theme/app_theme.dart` instead of looking bolted on.
 - **Territory map redesign, take two: extruded columns instead of a
-  glow** (`gamification/territory_map_screen.dart`'s
+  glow** (superseded by take three below — actually rendered and looked
+  at this one before shipping the next redesign, and it was bad enough
+  in practice to revert outright rather than tune; kept as the
+  historical record) (`gamification/territory_map_screen.dart`'s
   `_TerritoryColumnLayer`/`_ColumnPainter`): the glow version above read
   better than flat rectangles but was compared side by side against two
   other options — three mocked-up "cube" concepts, each grounded in a
@@ -207,6 +210,40 @@
   glow version's `BlendMode.plus` layers — since opaque solid faces need
   correct occlusion between *every* column regardless of owner, not just
   overlaps within one rider's own cells.
+- **Territory map redesign, take three: flat hexagons, copying TripRank
+  directly** (`gamification/territory.dart` rewritten around hexagonal
+  axial coordinates, `territory_map_screen.dart` back to a plain
+  `PolygonLayer`): take two's columns were rendered and actually looked
+  at (a Flutter `CustomPainter` recorded straight to a PNG via
+  `PictureRecorder`/`toImage`, no device needed) before deciding whether
+  to ship again — and they looked bad. Since territory cells are dense
+  and contiguous (you ride through *adjacent* streets, not scattered
+  points), leaning columns on cells that touch every neighbor collided
+  into each other on all sides; insetting a gap and shrinking the lean
+  made it less bad but never actually clean. deck.gl's HexagonLayer
+  (take two's inspiration) is normally used for sparse point-density
+  data with real gaps between cells — territory doesn't have that
+  property, so the whole approach was the wrong tool, not a tuning
+  problem. Replaced with a direct copy of how TripRank itself renders
+  this (screenshots provided directly): flat-topped hexagons, not
+  squares, semi-transparent fill + a visible border, no height, no glow.
+  Hexagons tile a winding road more naturally than a rectangular grid —
+  the chain follows the actual street shape instead of a stair-stepped
+  checkerboard. Cell addressing moved from `"latCell:lngCell"` to axial
+  hex coordinates `"q:r"` (see territory.dart's cube-rounding comment for
+  why naive per-axis rounding doesn't work near a hex boundary) — same
+  two-integers-separated-by-a-colon shape as before, completely
+  different meaning, so old `territory_cells` rows couldn't just keep
+  working: they'd silently reinterpret as hex coordinates and draw in
+  the wrong place. Cleared instead of migrated (`LocalDatabase` version
+  12's `onUpgrade`, and a one-time `delete from territory_cells` run
+  directly against Supabase — not folded into `leaderboard.sql`, since
+  that file is meant to be safely re-run and a delete doesn't belong in
+  a "safe to re-run" script). Claims refill as each area is ridden
+  through again. `territory_cells.visit_count` (take one's addition)
+  is untouched and still collected — just not visually used by this
+  screen anymore, since matching the reference meant a flat, uniform
+  color per rider rather than intensity-modulated.
 - **One shared BLE connection, not two** (`vehicle/ble_connection_service.dart`):
   the standalone Vehicle tab (`screens/vehicle_screen.dart`) and the
   Record tab's "Connect bike" card (`trip/recording_screen.dart`) used to

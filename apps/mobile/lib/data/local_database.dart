@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -239,6 +239,17 @@ class LocalDatabase {
           if (!hasVisitCount) {
             await db.execute('ALTER TABLE territory_cells ADD COLUMN visit_count INTEGER NOT NULL DEFAULT 1');
           }
+        }
+        if (oldVersion < 12) {
+          // gamification/territory.dart switched its cell_key encoding from
+          // a square lat/lng grid ("latCell:lngCell") to hexagonal axial
+          // coordinates ("q:r") — same two-integers-separated-by-a-colon
+          // shape, completely different meaning. A pre-existing row's key
+          // would silently get reinterpreted as a hex coordinate and drawn
+          // in the wrong place, so unlike every other migration in this
+          // file, this one can't be additive. Clearing local claims here;
+          // they refill the next time each cell is ridden through again.
+          await db.delete('territory_cells');
         }
       },
     );
