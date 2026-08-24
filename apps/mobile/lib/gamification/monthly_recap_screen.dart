@@ -154,13 +154,19 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
                         ],
                       ),
                       if (_trophiesEarned.isNotEmpty) ...[
-                        const Padding(
-                          padding: EdgeInsets.only(top: 24, bottom: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 24, bottom: 8),
                           child: Text(
                             'Trophies this month',
-                            style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              fontWeight: FontWeight.w800,
+                            ),
                           ),
                         ),
+                        // Trophies stay gold regardless of theme — the same
+                        // reason a real medal doesn't change color to match
+                        // the room it's displayed in.
                         ..._trophiesEarned.map(
                           (t) => ListTile(
                             leading: Icon(t.icon, color: Colors.amber),
@@ -192,8 +198,8 @@ class _RecapStat extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
           ],
         ),
       ),

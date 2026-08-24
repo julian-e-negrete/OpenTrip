@@ -113,10 +113,17 @@ class _StatCard extends StatelessWidget {
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
+          // Fixed brand colors, not Theme.of(context) — this is a poster
+          // exported as a PNG for sharing outside the app (see
+          // StatCardScreen's doc comment), so it should look the same
+          // regardless of the viewing device's light/dark setting, the
+          // same way a logo doesn't reflow with a website's theme toggle.
+          // Matches app_theme.dart's dark palette + coral accent directly
+          // rather than tracking it live.
           gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0D2B2A), Color(0xFF061A19)],
+            colors: [Color(0xFF251731), Color(0xFF160D1F)],
           ),
         ),
         child: Column(
@@ -124,13 +131,13 @@ class _StatCard extends StatelessWidget {
           children: [
             const Row(
               children: [
-                Icon(Icons.route_outlined, color: Colors.tealAccent, size: 20),
+                Icon(Icons.route_outlined, color: Color(0xFFFF4D6D), size: 20),
                 SizedBox(width: 8),
                 Text(
                   'OPENTRIP',
                   style: TextStyle(
-                    color: Colors.tealAccent,
-                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFF4D6D),
+                    fontWeight: FontWeight.w800,
                     letterSpacing: 2,
                     fontSize: 13,
                   ),

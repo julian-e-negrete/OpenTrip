@@ -157,6 +157,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('⚠ $label ahead — ${alert.distanceMeters.toStringAsFixed(0)}m'),
+        // A safety warning stays universal orange regardless of theme —
+        // it shouldn't read as "just the app's accent color."
         backgroundColor: Colors.orange.shade800,
         behavior: SnackBarBehavior.floating,
       ),
@@ -313,6 +315,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
+          // Gold regardless of theme — see monthly_recap_screen.dart's
+          // matching comment on its own trophy list.
           icon: Icon(trophy.icon, size: 40, color: Colors.amber),
           title: Text('Trophy earned: ${trophy.name}'),
           content: Text(trophy.description),

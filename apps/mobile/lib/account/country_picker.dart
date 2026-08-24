@@ -66,7 +66,7 @@ class _CountryPickerScreenState extends State<_CountryPickerScreen> {
           final selected = country.code == widget.currentCode;
           return ListTile(
             title: Text(country.name),
-            trailing: selected ? const Icon(Icons.check, color: Colors.tealAccent) : null,
+            trailing: selected ? Icon(Icons.check, color: Theme.of(context).colorScheme.primary) : null,
             onTap: () => Navigator.of(context).pop(country),
           );
         },

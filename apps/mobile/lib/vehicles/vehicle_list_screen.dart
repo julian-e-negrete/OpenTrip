@@ -60,7 +60,11 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
         content: Text('"${vehicle.name}" and its trips will be removed from this device.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -100,22 +104,29 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
               ),
             )
           : ListView.builder(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               itemCount: _vehicles.length,
               itemBuilder: (context, i) {
                 final vehicle = _vehicles[i];
-                return ListTile(
-                  leading: vehicle.photoPath != null
-                      ? CircleAvatar(backgroundImage: FileImage(File(vehicle.photoPath!)))
-                      : CircleAvatar(child: Icon(_iconFor(vehicle.type))),
-                  title: Text(vehicle.name),
-                  subtitle: Text(
-                    vehicle.bleConnector == VehicleBleConnector.none
-                        ? vehicle.type.name
-                        : '${vehicle.type.name} · Kawasaki Rideology BLE',
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => _deleteVehicle(vehicle),
+                final scheme = Theme.of(context).colorScheme;
+                return Card(
+                  child: ListTile(
+                    leading: vehicle.photoPath != null
+                        ? CircleAvatar(backgroundImage: FileImage(File(vehicle.photoPath!)))
+                        : CircleAvatar(
+                            backgroundColor: scheme.primary.withValues(alpha: 0.16),
+                            child: Icon(_iconFor(vehicle.type), color: scheme.primary),
+                          ),
+                    title: Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                    subtitle: Text(
+                      vehicle.bleConnector == VehicleBleConnector.none
+                          ? vehicle.type.name
+                          : '${vehicle.type.name} · Kawasaki Rideology BLE',
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => _deleteVehicle(vehicle),
+                    ),
                   ),
                 );
               },

@@ -274,6 +274,12 @@ class _RouteMapState extends State<_RouteMap> with SingleTickerProviderStateMixi
                     ),
                   ],
                 ),
+                // Start/end pin colors and the chip's black54 background
+                // below are deliberately fixed, not Theme.of(context) —
+                // they sit on top of unpredictable street/satellite tile
+                // imagery, not app chrome, and green-start/red-end is a
+                // universal map convention worth keeping recognizable
+                // regardless of the app's own accent palette.
                 MarkerLayer(
                   markers: [
                     Marker(

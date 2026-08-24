@@ -154,12 +154,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.check, color: Colors.tealAccent),
+                              icon: Icon(Icons.check, color: Theme.of(context).colorScheme.tertiary),
                               tooltip: 'Accept',
                               onPressed: () => _accept(p),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.close, color: Colors.redAccent),
+                              icon: Icon(Icons.close, color: Theme.of(context).colorScheme.error),
                               tooltip: 'Decline',
                               onPressed: () => _remove(p.requesterId),
                             ),
@@ -170,9 +170,12 @@ class _FriendsScreenState extends State<FriendsScreen> {
                   ],
                   const _SectionHeader('Your friends'),
                   if (_friends.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Text('No friends yet — search above to add one.', style: TextStyle(color: Colors.grey)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Text(
+                        'No friends yet — search above to add one.',
+                        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
                     )
                   else
                     ..._friends.map(
@@ -199,7 +202,11 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(top: 20, bottom: 4),
       child: Text(
         text,
-        style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
