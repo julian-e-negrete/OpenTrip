@@ -6,6 +6,7 @@ import '../data/models/trip.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../friends/friends_screen.dart';
 import '../leaderboard/leaderboard_screen.dart';
 import 'trip_detail_screen.dart';
 
@@ -80,6 +81,13 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       appBar: AppBar(
         title: const Text('Trips'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'Friends',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FriendsScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.leaderboard_outlined),
             tooltip: 'Leaderboard',

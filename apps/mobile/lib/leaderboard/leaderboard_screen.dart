@@ -18,7 +18,8 @@ enum _Scope { global, friends }
 /// Two scopes, matching TripRank's "global & friends leaderboards": every
 /// rider who hasn't opted out (see the Account tab's "Show me on
 /// leaderboards" toggle), or just you and your accepted friends (see
-/// friends/friends_screen.dart, reachable via the people icon here).
+/// friends/friends_screen.dart, reachable via the people icon here, on
+/// the Trips tab, or on the Territory Map tab).
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
 

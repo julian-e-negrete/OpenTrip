@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 
 import '../auth/current_user.dart';
 import '../data/data_events.dart';
+import '../friends/friends_screen.dart';
 import '../sync/sync_service.dart';
 import 'territory.dart';
 import 'territory_map_cell.dart';
@@ -40,7 +41,8 @@ enum _Scope { global, friends }
 /// Two scopes, same Global/Friends split as leaderboard/leaderboard_screen.dart:
 /// every rider who hasn't opted out (Account tab's "Show me on
 /// leaderboards" toggle), or just you and your accepted friends (see
-/// friends/friends_screen.dart, reachable from the Leaderboard tab).
+/// friends/friends_screen.dart, reachable via the people icon here or on
+/// the Trips tab).
 class TerritoryMapScreen extends StatefulWidget {
   const TerritoryMapScreen({super.key});
 
@@ -119,6 +121,15 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Territory map'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'Friends',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const FriendsScreen()),
+            ),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(52),
           child: Padding(
@@ -145,8 +156,8 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
     if (cells.isEmpty) {
       final message = _scope == _Scope.global
           ? 'No territory claimed yet — this fills in as riders record trips.'
-          : 'No friends\' territory yet — add a friend from the Leaderboard '
-                'tab, or check that "Show me on leaderboards" is on for both of you.';
+          : 'No friends\' territory yet — add a friend using the people icon '
+                'above, or check that "Show me on leaderboards" is on for both of you.';
       return ListView(
         children: [
           Padding(
