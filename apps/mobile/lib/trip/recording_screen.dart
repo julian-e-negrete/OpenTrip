@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
@@ -6,6 +7,7 @@ import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 import '../auth/current_user.dart';
 import '../data/data_events.dart';
 import '../data/models/trip.dart';
+import '../data/models/trip_music_event.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
@@ -15,6 +17,7 @@ import '../vehicle/ble_connection_service.dart';
 import 'camera_alerts.dart';
 import 'lean_angle_tracker.dart';
 import 'location_recorder.dart';
+import 'spotify_now_playing.dart';
 
 class RecordingScreen extends StatefulWidget {
   const RecordingScreen({super.key});
@@ -76,6 +79,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
   StreamSubscription<double>? _leanAngleSub;
   double? _currentLeanDeg;
 
+  // Music logging (trip/spotify_now_playing.dart) — opt-in (see the "Log
+  // music" toggle below), since it only does anything once the rider has
+  // Spotify installed and its "Device Broadcast Status" setting on.
+  // Independent of vehicle type, unlike lean tracking — this is about the
+  // rider, not the bike.
+  bool _logMusic = false;
+  StreamSubscription<SpotifyTrackEvent>? _musicSub;
+  final _musicBuffer = <TripMusicEvent>[];
+  int _musicSeq = 0;
+  SpotifyTrackEvent? _currentTrack;
+
   late String _userId;
 
   bool get _vehicleSupportsBle => _selectedVehicle?.bleConnector == VehicleBleConnector.kawasakiRideology;
@@ -111,6 +125,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _bleTelemetrySub?.cancel();
     _leanAngleSub?.cancel();
     _leanTracker?.dispose();
+    _musicSub?.cancel();
     // Deliberately doesn't call _ble.disconnect() — this is a shared
     // connection (see vehicle/ble_connection_service.dart), so this
     // screen going away shouldn't drop it out from under the Vehicle tab.
@@ -243,6 +258,23 @@ class _RecordingScreenState extends State<RecordingScreen> {
         });
       }
 
+      if (_logMusic && Platform.isAndroid) {
+        _musicSub = SpotifyNowPlaying.instance.trackChanges.listen((event) {
+          _musicBuffer.add(
+            TripMusicEvent(
+              tripId: trip.id,
+              seq: _musicSeq++,
+              track: event.track,
+              artist: event.artist,
+              album: event.album,
+              spotifyUri: event.spotifyUri,
+              startedAt: event.timestamp,
+            ),
+          );
+          if (mounted) setState(() => _currentTrack = event);
+        });
+      }
+
       setState(() => _activeTrip = trip);
     } catch (e) {
       setState(() => _error = e.toString());
@@ -276,6 +308,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
       await leanTracker.dispose();
       _leanTracker = null;
     }
+
+    await _musicSub?.cancel();
+    _musicSub = null;
+    if (_musicBuffer.isNotEmpty) {
+      await TripRepository.instance.appendMusicEvents(_musicBuffer);
+      _musicBuffer.clear();
+    }
+    _musicSeq = 0;
 
     await _flushPoints();
 
@@ -331,6 +371,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _bleMaxWaterTemp = null;
       _bleOdometerKm = null;
       _currentLeanDeg = null;
+      _currentTrack = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Trip saved: ${finished.distanceKm.toStringAsFixed(2)} km')),
@@ -415,8 +456,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
             onChanged: (v) => setState(() => _trackLean = v ?? false),
           ),
         ],
+        if (!recording && Platform.isAndroid) ...[
+          const SizedBox(height: 8),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: const Text('Log music (Spotify)'),
+            subtitle: const Text(
+              'Needs Spotify installed with "Device Broadcast Status" turned on '
+              '(Spotify app → Settings → Playback). Logs each track change to the trip.',
+            ),
+            value: _logMusic,
+            onChanged: (v) => setState(() => _logMusic = v ?? false),
+          ),
+        ],
         const SizedBox(height: 24),
-        if (recording) _StatsView(stats: _stats, currentLeanDeg: _currentLeanDeg) else const Spacer(),
+        if (recording)
+          _StatsView(stats: _stats, currentLeanDeg: _currentLeanDeg, currentTrack: _currentTrack)
+        else
+          const Spacer(),
         const SizedBox(height: 24),
         if (_error != null) ...[
           Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -501,9 +559,10 @@ class _BleConnectionCard extends StatelessWidget {
 }
 
 class _StatsView extends StatelessWidget {
-  const _StatsView({required this.stats, this.currentLeanDeg});
+  const _StatsView({required this.stats, this.currentLeanDeg, this.currentTrack});
   final RecordingStats? stats;
   final double? currentLeanDeg;
+  final SpotifyTrackEvent? currentTrack;
 
   String _fmtDuration(Duration d) {
     String two(int n) => n.toString().padLeft(2, '0');
@@ -557,6 +616,25 @@ class _StatsView extends StatelessWidget {
                   _Stat(label: 'Lean', value: '${currentLeanDeg!.toStringAsFixed(0)}°', color: scheme.tertiary),
               ],
             ),
+            if (currentTrack != null) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.music_note, size: 16, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      currentTrack!.artist == null
+                          ? currentTrack!.track
+                          : '${currentTrack!.track} — ${currentTrack!.artist}',
+                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

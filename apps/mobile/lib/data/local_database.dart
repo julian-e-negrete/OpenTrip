@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 13,
+      version: 14,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -110,6 +110,19 @@ class LocalDatabase {
             ble_throttle_percent REAL,
             ble_lean_deg REAL,
             ble_water_temp_c INTEGER,
+            PRIMARY KEY (trip_id, seq)
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE trip_music_events (
+            trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+            seq INTEGER NOT NULL,
+            track TEXT NOT NULL,
+            artist TEXT,
+            album TEXT,
+            spotify_uri TEXT,
+            started_at TEXT NOT NULL,
             PRIMARY KEY (trip_id, seq)
           )
         ''');
@@ -296,6 +309,20 @@ class LocalDatabase {
               await db.execute('ALTER TABLE trip_points ADD COLUMN $column');
             }
           }
+        }
+        if (oldVersion < 14) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS trip_music_events (
+              trip_id TEXT NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+              seq INTEGER NOT NULL,
+              track TEXT NOT NULL,
+              artist TEXT,
+              album TEXT,
+              spotify_uri TEXT,
+              started_at TEXT NOT NULL,
+              PRIMARY KEY (trip_id, seq)
+            )
+          ''');
         }
       },
     );

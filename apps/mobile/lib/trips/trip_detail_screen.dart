@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../data/models/trip.dart';
+import '../data/models/trip_music_event.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
@@ -21,11 +22,13 @@ class TripDetailScreen extends StatefulWidget {
 
 class _TripDetailScreenState extends State<TripDetailScreen> {
   List<TripPoint>? _points;
+  List<TripMusicEvent>? _musicEvents;
 
   @override
   void initState() {
     super.initState();
     _loadPoints();
+    _loadMusicEvents();
   }
 
   Future<void> _loadPoints() async {
@@ -34,6 +37,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     // another device) — see sync/sync_service.dart.
     final points = await TripRepository.instance.pointsForTrip(widget.trip.id);
     if (mounted) setState(() => _points = points);
+  }
+
+  Future<void> _loadMusicEvents() async {
+    final events = await TripRepository.instance.musicEventsForTrip(widget.trip.id);
+    if (mounted) setState(() => _musicEvents = events);
   }
 
   String _fmtDuration(int seconds) {
@@ -176,6 +184,18 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                     ),
                   if (trip.phoneLeanMaxDeg != null)
                     _Row('Max lean angle (phone)', '${trip.phoneLeanMaxDeg!.toStringAsFixed(0)}°'),
+                ],
+                if (_musicEvents != null && _musicEvents!.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 4),
+                    child: Text(
+                      'Soundtrack',
+                      style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                    ),
+                  ),
+                  ..._musicEvents!.map(
+                    (event) => _MusicRow(event: event, tripStartedAt: trip.startedAt),
+                  ),
                 ],
               ],
             ),
@@ -597,6 +617,61 @@ class _Row extends StatelessWidget {
         children: [
           Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
           Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+/// One track in the "Soundtrack" list — the track/artist plus how far
+/// into the trip it started playing, so scrolling the list doubles as a
+/// rough timeline of the ride.
+class _MusicRow extends StatelessWidget {
+  const _MusicRow({required this.event, required this.tripStartedAt});
+  final TripMusicEvent event;
+  final DateTime tripStartedAt;
+
+  String _fmtOffset(Duration d) {
+    final clamped = d.isNegative ? Duration.zero : d;
+    final hours = clamped.inHours;
+    final minutes = clamped.inMinutes % 60;
+    return hours > 0 ? '${hours}h ${minutes}m in' : '${clamped.inMinutes}m in';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(Icons.music_note, size: 16, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  event.track,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (event.artist != null)
+                  Text(
+                    event.artist!,
+                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _fmtOffset(event.startedAt.difference(tripStartedAt)),
+            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+          ),
         ],
       ),
     );

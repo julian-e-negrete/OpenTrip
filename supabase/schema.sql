@@ -159,6 +159,41 @@ create policy "trip_points_delete_own" on public.trip_points
   );
 
 
+-- One row per track change during a trip, captured from Spotify's own
+-- local "now playing" broadcast on-device (see
+-- apps/mobile/lib/trip/spotify_now_playing.dart) — not Spotify's Web
+-- API, so no OAuth token or third-party-app user cap involved on
+-- Spotify's side; this table is just where OpenTrip stores what it
+-- already received. Same "pushed in bulk once the trip finishes, pulled
+-- lazily per-trip" shape as trip_points, just far lower volume (tens of
+-- rows per trip, not hundreds).
+create table if not exists public.trip_music_events (
+  trip_id uuid not null references public.trips(id) on delete cascade,
+  seq integer not null,
+  track text not null,
+  artist text,
+  album text,
+  spotify_uri text,
+  started_at timestamptz not null,
+  primary key (trip_id, seq)
+);
+
+alter table public.trip_music_events enable row level security;
+
+create policy "trip_music_events_select_own" on public.trip_music_events
+  for select using (
+    exists (select 1 from public.trips t where t.id = trip_music_events.trip_id and t.user_id = auth.uid())
+  );
+create policy "trip_music_events_insert_own" on public.trip_music_events
+  for insert with check (
+    exists (select 1 from public.trips t where t.id = trip_music_events.trip_id and t.user_id = auth.uid())
+  );
+create policy "trip_music_events_delete_own" on public.trip_music_events
+  for delete using (
+    exists (select 1 from public.trips t where t.id = trip_music_events.trip_id and t.user_id = auth.uid())
+  );
+
+
 -- Display name + country for now — avatar/vehicle photo sync needs
 -- Supabase Storage (a bucket + its own policies), not set up yet.
 -- country_code is a picked ISO 3166-1 alpha-2 code (see

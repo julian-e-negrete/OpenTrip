@@ -27,10 +27,12 @@ class AccountDataService {
     final db = await LocalDatabase.instance.database;
     await db.transaction((txn) async {
       // sqflite doesn't enforce the schema's ON DELETE CASCADE (foreign
-      // keys aren't turned on), so trip_points needs an explicit delete.
+      // keys aren't turned on), so trip_points/trip_music_events need an
+      // explicit delete.
       final tripRows = await txn.query('trips', columns: ['id'], where: 'user_id = ?', whereArgs: [userId]);
       for (final row in tripRows) {
         await txn.delete('trip_points', where: 'trip_id = ?', whereArgs: [row['id']]);
+        await txn.delete('trip_music_events', where: 'trip_id = ?', whereArgs: [row['id']]);
       }
       await txn.delete('trips', where: 'user_id = ?', whereArgs: [userId]);
       await txn.delete('vehicles', where: 'user_id = ?', whereArgs: [userId]);

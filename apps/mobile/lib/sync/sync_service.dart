@@ -8,6 +8,7 @@ import '../config/app_config.dart';
 import '../data/data_events.dart';
 import '../data/local_database.dart';
 import '../data/models/trip.dart';
+import '../data/models/trip_music_event.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/user_profile.dart';
 import '../data/models/vehicle.dart';
@@ -126,6 +127,7 @@ class SyncService {
         final trip = Trip.fromRow(row);
         await _client.from('trips').upsert(trip.toSupabaseRow());
         await _pushTripPoints(trip.id);
+        await _pushMusicEvents(trip.id);
         await db.update('trips', {'synced': 1}, where: 'id = ?', whereArgs: [trip.id]);
       }
 
@@ -245,6 +247,29 @@ class SyncService {
       await batch.commit(noResult: true);
     }
     return points;
+  }
+
+  Future<void> _pushMusicEvents(String tripId) async {
+    final events = await TripRepository.instance.musicEventsForTrip(tripId);
+    if (events.isEmpty) return;
+    await _client.from('trip_music_events').upsert(events.map((e) => e.toSupabaseRow()).toList());
+  }
+
+  /// Same lazy-pull-per-trip shape as [pullTripPoints], for a trip's
+  /// music timeline instead of its GPS route.
+  Future<List<TripMusicEvent>> pullMusicEvents(String tripId) async {
+    if (!_canSync) return const [];
+    final rows = await _client.from('trip_music_events').select().eq('trip_id', tripId).order('seq');
+    final events = rows.map((row) => TripMusicEvent.fromSupabaseRow(row)).toList();
+    if (events.isNotEmpty) {
+      final db = await LocalDatabase.instance.database;
+      final batch = db.batch();
+      for (final event in events) {
+        batch.insert('trip_music_events', event.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    }
+    return events;
   }
 
   /// Pulls every vehicle/trip/profile row for the signed-in user into

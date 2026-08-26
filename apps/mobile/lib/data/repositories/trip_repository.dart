@@ -6,6 +6,7 @@ import '../../sync/sync_service.dart';
 import '../data_events.dart';
 import '../local_database.dart';
 import '../models/trip.dart';
+import '../models/trip_music_event.dart';
 import '../models/trip_point.dart';
 
 class TripRepository {
@@ -100,16 +101,50 @@ class TripRepository {
     return SyncService.instance.pullTripPoints(tripId);
   }
 
-  /// Deletes a trip and its points. Deliberately leaves territory_cells
-  /// and trophies (gamification/) untouched — you still physically
-  /// covered that ground and earned those trophies even if you delete
-  /// the trip record itself.
+  /// Appends music events in one batch — mirrors [appendPoints]. Called
+  /// once at the end of a recording (see trip/recording_screen.dart),
+  /// not per-event, since a trip's track-change count is small enough
+  /// (tens, not hundreds) that there's no benefit to periodic flushing
+  /// the way GPS points get.
+  Future<void> appendMusicEvents(List<TripMusicEvent> events) async {
+    if (events.isEmpty) return;
+    final db = await LocalDatabase.instance.database;
+    final batch = db.batch();
+    for (final event in events) {
+      batch.insert('trip_music_events', event.toRow());
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<List<TripMusicEvent>> musicEventsForTrip(String tripId) async {
+    final db = await LocalDatabase.instance.database;
+    final rows = await db.query(
+      'trip_music_events',
+      where: 'trip_id = ?',
+      whereArgs: [tripId],
+      orderBy: 'seq ASC',
+    );
+    if (rows.isNotEmpty) {
+      return rows.map(TripMusicEvent.fromRow).toList();
+    }
+    // Same "this trip arrived via cloud sync, pull its details lazily"
+    // fallback as pointsForTrip — a harmless no-op if there's genuinely
+    // nothing (no music logged, or sync unavailable).
+    return SyncService.instance.pullMusicEvents(tripId);
+  }
+
+  /// Deletes a trip and its points/music events. Deliberately leaves
+  /// territory_cells and trophies (gamification/) untouched — you still
+  /// physically covered that ground and earned those trophies even if
+  /// you delete the trip record itself.
   Future<void> deleteTrip(String tripId) async {
     final db = await LocalDatabase.instance.database;
-    // No local FK enforcement (see local_database.dart) — trip_points
-    // needs its own explicit delete, unlike the remote side where
-    // Postgres's real ON DELETE CASCADE (supabase/schema.sql) handles it.
+    // No local FK enforcement (see local_database.dart) — trip_points/
+    // trip_music_events need their own explicit delete, unlike the
+    // remote side where Postgres's real ON DELETE CASCADE
+    // (supabase/schema.sql) handles it.
     await db.delete('trip_points', where: 'trip_id = ?', whereArgs: [tripId]);
+    await db.delete('trip_music_events', where: 'trip_id = ?', whereArgs: [tripId]);
     await db.delete('trips', where: 'id = ?', whereArgs: [tripId]);
     DataEvents.instance.notifyChanged();
     // Best-effort — a local delete should never block on network.

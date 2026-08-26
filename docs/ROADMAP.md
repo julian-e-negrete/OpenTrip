@@ -447,6 +447,48 @@
     `lastServiceOdometerKm` to the current mileage; the card shows a
     progress bar and a "N km until service" / "overdue by N km" readout
     either way.
+- **Music logging via Spotify's own local broadcast, not its Web API**
+  (`android/app/src/main/kotlin/co/opentrip/opentrip_mobile/SpotifyNowPlayingStreamHandler.kt`,
+  `trip/spotify_now_playing.dart`, `data/models/trip_music_event.dart`):
+  investigated syncing with Spotify to log what was playing during a
+  trip and — separately — creating "Jams" to share with friends on a
+  group ride. Jam has zero third-party API/SDK/deep-link surface
+  (confirmed against current docs) — nothing to build there. Spotify's
+  Web API `currently-playing` endpoint works, but Development Mode caps
+  a registered app at 5 authorized Spotify accounts total and requires
+  the app owner to keep Premium active; scaling past that needs
+  "Extended Quota Mode," which requires being a registered business with
+  roughly 250K MAU — unreachable for a small open-source app, so that
+  route was rejected as a real feature (would work for a 5-person beta,
+  not for every OpenTrip user).
+
+  Instead, this uses a completely different, undocumented-by-Spotify-as-
+  an-API-but-actually-supported mechanism: Spotify's Android app sends
+  `com.spotify.music.metadatachanged` as a plain Android broadcast intent
+  whenever a track starts (extras: `track`/`artist`/`album`/`id`/`length`/
+  `timeSent` — see
+  [Spotify's own Android media-notifications tutorial](https://developer.spotify.com/documentation/android/tutorials/android-media-notifications)),
+  once the user flips "Device Broadcast Status" on in Spotify's own
+  Settings -> Playback. No OAuth, no developer-app registration, no user
+  cap — works for every install. `SpotifyNowPlayingStreamHandler.kt`
+  registers a `BroadcastReceiver` dynamically (not manifest-declared,
+  since Android 8+ blocks most manifest-declared implicit receivers —
+  Spotify's own tutorial registers this way too) via
+  `ContextCompat.registerReceiver(..., RECEIVER_EXPORTED)`, required on
+  API 33+ for receiving broadcasts sent by another app, and streams
+  events to Dart over an `EventChannel`.
+
+  Track changes are a sparse, event-driven timeline (tens per trip, not
+  hundreds), so `trip_music_events` is its own table rather than riding
+  along on `trip_points` the way per-point BLE telemetry does — same
+  "pushed in bulk once the trip finishes, pulled lazily per-trip" shape
+  as `trip_points`, just lower volume. Opt-in per recording ("Log music
+  (Spotify)" toggle on trip/recording_screen.dart, independent of
+  vehicle type — this is about the rider, not the bike) since it only
+  does anything if Spotify is installed and that one setting is on.
+  Shows a live "now playing" readout during recording, and a
+  "Soundtrack" list on trip detail with how far into the trip each track
+  started.
 
 ## Removed
 
