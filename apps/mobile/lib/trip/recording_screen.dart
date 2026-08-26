@@ -62,6 +62,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
   int? _bleMinWaterTemp;
   int? _bleMaxWaterTemp;
 
+  /// The bike's own odometer reading, last-write-wins (not a max/min —
+  /// see data/models/trip.dart's field comment) from whichever telemetry
+  /// frame most recently reported one.
+  double? _bleOdometerKm;
+
   // Phone-accelerometer lean-angle tracking (trip/lean_angle_tracker.dart)
   // — opt-in (see the "Track lean angle" toggle below), since it only
   // means anything if the phone is actually mounted rigidly to the bike,
@@ -185,6 +190,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _bleMaxWaterTemp = t.waterTemperatureC;
       }
     }
+    if (t.odometerTenthKm != null) _bleOdometerKm = t.odometerTenthKm! / 10.0;
   }
 
   Future<void> _start() async {
@@ -197,7 +203,24 @@ class _RecordingScreenState extends State<RecordingScreen> {
       await _recorder.start(trip.id);
 
       _pointSub = _recorder.pointStream.listen((point) {
-        _pointBuffer.add(point);
+        // Stamp whatever the bike's latest telemetry frame was onto this
+        // GPS fix — sampled at GPS-fix cadence, not BLE frame rate, so
+        // point storage doesn't balloon (see trip_point.dart's field
+        // comment). LocationRecorder itself stays GPS-only on purpose;
+        // this is the one place recording a trip and reading the shared
+        // BLE connection actually meet.
+        final telemetry = _ble.isConnected ? _ble.telemetryNotifier.value : null;
+        final enriched = telemetry == null
+            ? point
+            : point.copyWith(
+                bleSpeedKph: telemetry.speedKph?.toDouble(),
+                bleRpm: telemetry.rpm,
+                bleGear: telemetry.gear,
+                bleThrottlePercent: telemetry.throttlePercent,
+                bleLeanDeg: telemetry.leanDeg,
+                bleWaterTemperatureC: telemetry.waterTemperatureC,
+              );
+        _pointBuffer.add(enriched);
         if (_pointBuffer.length >= _flushEvery) _flushPoints();
       });
       _statsSub = _recorder.statsStream.listen((stats) {
@@ -269,6 +292,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       bleMaxBrakePressureKpa: _bleMaxBrakeKpa,
       bleMinWaterTemperatureC: _bleMinWaterTemp,
       bleMaxWaterTemperatureC: _bleMaxWaterTemp,
+      bleOdometerKm: _bleOdometerKm,
       behaviorMaxAccelG: _recorder.behaviorMaxAccelG,
       behaviorMaxBrakeG: _recorder.behaviorMaxBrakeG,
       behaviorMaxCorneringG: _recorder.behaviorMaxCorneringG,
@@ -305,6 +329,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _bleMaxBrakeKpa = null;
       _bleMinWaterTemp = null;
       _bleMaxWaterTemp = null;
+      _bleOdometerKm = null;
       _currentLeanDeg = null;
     });
     ScaffoldMessenger.of(context).showSnackBar(

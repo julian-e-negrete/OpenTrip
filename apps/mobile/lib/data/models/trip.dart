@@ -24,6 +24,17 @@ class Trip {
   final int? bleMinWaterTemperatureC;
   final int? bleMaxWaterTemperatureC;
 
+  /// The bike's own odometer reading (Kawasaki Rideology's 0x41 "MC info"
+  /// frame, `RidingTelemetry.odometerTenthKm`) at the last telemetry frame
+  /// received during this trip — not a max/min like the fields above,
+  /// just the latest reading, since a real odometer only ever counts up.
+  /// This is what vehicles/vehicle_detail_screen.dart prefers for a
+  /// vehicle's current mileage whenever it's available, over the
+  /// app-tracked distance sum, since it's the bike's own hardware count
+  /// rather than an estimate built from however much of the vehicle's
+  /// life has been ridden with this app installed.
+  final double? bleOdometerKm;
+
   // GPS-derived driving-behavior stats (trip/driving_math.dart) —
   // available for every trip regardless of vehicle, unlike the BLE
   // fields above. See that file's doc comment for why these come from
@@ -67,6 +78,7 @@ class Trip {
     this.bleMaxBrakePressureKpa,
     this.bleMinWaterTemperatureC,
     this.bleMaxWaterTemperatureC,
+    this.bleOdometerKm,
     this.behaviorMaxAccelG,
     this.behaviorMaxBrakeG,
     this.behaviorMaxCorneringG,
@@ -102,6 +114,7 @@ class Trip {
     double? bleMaxBrakePressureKpa,
     int? bleMinWaterTemperatureC,
     int? bleMaxWaterTemperatureC,
+    double? bleOdometerKm,
     double? behaviorMaxAccelG,
     double? behaviorMaxBrakeG,
     double? behaviorMaxCorneringG,
@@ -127,6 +140,7 @@ class Trip {
       bleMaxBrakePressureKpa: bleMaxBrakePressureKpa,
       bleMinWaterTemperatureC: bleMinWaterTemperatureC,
       bleMaxWaterTemperatureC: bleMaxWaterTemperatureC,
+      bleOdometerKm: bleOdometerKm,
       behaviorMaxAccelG: behaviorMaxAccelG,
       behaviorMaxBrakeG: behaviorMaxBrakeG,
       behaviorMaxCorneringG: behaviorMaxCorneringG,
@@ -154,6 +168,7 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'ble_odometer_km': bleOdometerKm,
     'behavior_max_accel_g': behaviorMaxAccelG,
     'behavior_max_brake_g': behaviorMaxBrakeG,
     'behavior_max_cornering_g': behaviorMaxCorneringG,
@@ -181,6 +196,7 @@ class Trip {
     bleMaxBrakePressureKpa: row['ble_max_brake_kpa'] as double?,
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    bleOdometerKm: row['ble_odometer_km'] as double?,
     behaviorMaxAccelG: row['behavior_max_accel_g'] as double?,
     behaviorMaxBrakeG: row['behavior_max_brake_g'] as double?,
     behaviorMaxCorneringG: row['behavior_max_cornering_g'] as double?,
@@ -209,6 +225,7 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'ble_odometer_km': bleOdometerKm,
     'behavior_max_accel_g': behaviorMaxAccelG,
     'behavior_max_brake_g': behaviorMaxBrakeG,
     'behavior_max_cornering_g': behaviorMaxCorneringG,
@@ -236,6 +253,7 @@ class Trip {
     bleMaxBrakePressureKpa: (row['ble_max_brake_kpa'] as num?)?.toDouble(),
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    bleOdometerKm: (row['ble_odometer_km'] as num?)?.toDouble(),
     behaviorMaxAccelG: (row['behavior_max_accel_g'] as num?)?.toDouble(),
     behaviorMaxBrakeG: (row['behavior_max_brake_g'] as num?)?.toDouble(),
     behaviorMaxCorneringG: (row['behavior_max_cornering_g'] as num?)?.toDouble(),

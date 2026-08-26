@@ -38,6 +38,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _customBrandController = TextEditingController();
   final _customModelController = TextEditingController();
   final _freeNameController = TextEditingController();
+  final _startingOdometerController = TextEditingController();
+  final _serviceIntervalController = TextEditingController();
   File? _photoFile;
   // The vehicle's photo before this screen touched anything — kept
   // separate from [_photoFile] (only set once the user picks a *new*
@@ -88,13 +90,26 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     } else {
       _freeNameController.text = vehicle.name;
     }
+    if (vehicle.startingOdometerKm != null) {
+      _startingOdometerController.text = _trimZero(vehicle.startingOdometerKm!);
+    }
+    if (vehicle.serviceIntervalKm != null) {
+      _serviceIntervalController.text = _trimZero(vehicle.serviceIntervalKm!);
+    }
   }
+
+  /// "5000.0" reads oddly in a form field meant for a whole-km estimate —
+  /// drop the trailing ".0" a plain [toString] would otherwise show.
+  String _trimZero(double value) =>
+      value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toString();
 
   @override
   void dispose() {
     _customBrandController.dispose();
     _customModelController.dispose();
     _freeNameController.dispose();
+    _startingOdometerController.dispose();
+    _serviceIntervalController.dispose();
     super.dispose();
   }
 
@@ -146,6 +161,19 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       connector = VehicleBleConnector.none;
     }
 
+    final startingOdometerText = _startingOdometerController.text.trim();
+    final serviceIntervalText = _serviceIntervalController.text.trim();
+    final startingOdometerKm = startingOdometerText.isEmpty ? null : double.tryParse(startingOdometerText);
+    final serviceIntervalKm = serviceIntervalText.isEmpty ? null : double.tryParse(serviceIntervalText);
+    if (startingOdometerText.isNotEmpty && (startingOdometerKm == null || startingOdometerKm < 0)) {
+      setState(() => _error = 'Starting odometer must be a positive number.');
+      return;
+    }
+    if (serviceIntervalText.isNotEmpty && (serviceIntervalKm == null || serviceIntervalKm <= 0)) {
+      setState(() => _error = 'Service interval must be a positive number.');
+      return;
+    }
+
     setState(() {
       _saving = true;
       _error = null;
@@ -171,6 +199,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             model: model,
             bleConnector: connector,
             photoPath: photoPath,
+            startingOdometerKm: startingOdometerKm,
+            serviceIntervalKm: serviceIntervalKm,
+            clearServiceInterval: serviceIntervalKm == null,
             // Every field above just changed locally — re-push on next sync
             // rather than leaving the remote row stale.
             synced: false,
@@ -185,6 +216,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           model: model,
           bleConnector: connector,
           photoPath: photoPath,
+          startingOdometerKm: startingOdometerKm,
+          serviceIntervalKm: serviceIntervalKm,
         );
       }
 
@@ -252,6 +285,37 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 24),
+          Text(
+            'Mileage & service',
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _startingOdometerController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Starting odometer (km)',
+              helperText: 'Mileage before this vehicle started being tracked here — leave blank if unknown.',
+              helperMaxLines: 2,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _serviceIntervalController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Service interval (km)',
+              helperText: 'Leave blank to turn off service tracking for this vehicle.',
+              helperMaxLines: 2,
+              border: OutlineInputBorder(),
+            ),
+          ),
           const SizedBox(height: 24),
           if (_error != null) ...[
             Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),

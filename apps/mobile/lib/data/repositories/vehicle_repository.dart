@@ -33,6 +33,8 @@ class VehicleRepository {
     String model = '',
     VehicleBleConnector bleConnector = VehicleBleConnector.none,
     String? photoPath,
+    double? startingOdometerKm,
+    double? serviceIntervalKm,
   }) async {
     final vehicle = Vehicle(
       id: _uuid.v4(),
@@ -44,6 +46,8 @@ class VehicleRepository {
       bleConnector: bleConnector,
       photoPath: photoPath,
       createdAt: DateTime.now(),
+      startingOdometerKm: startingOdometerKm,
+      serviceIntervalKm: serviceIntervalKm,
     );
     final db = await LocalDatabase.instance.database;
     await db.insert('vehicles', vehicle.toRow());

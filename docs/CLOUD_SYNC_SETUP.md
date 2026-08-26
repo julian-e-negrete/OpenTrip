@@ -19,10 +19,12 @@ ever read/write their own rows, enforced by Postgres itself, not just app
 code.
 
 **Already ran this before `profiles.country_code`,
-`profiles.leaderboard_visible`, `trips.behavior_*`, or
-`trips.phone_lean_max_deg` existed?** Just re-run the current
-`schema.sql` — every statement in it, including all of these columns,
-is safe to run again (`create table if not exists`,
+`profiles.leaderboard_visible`, `trips.behavior_*`,
+`trips.phone_lean_max_deg`, `trips.ble_odometer_km`,
+`trip_points.ble_*`, or `vehicles.starting_odometer_km`/
+`service_interval_km`/`last_service_odometer_km` existed?** Just re-run
+the current `schema.sql` — every statement in it, including all of
+these columns, is safe to run again (`create table if not exists`,
 `add column if not exists`).
 
 ## 2. Enable Realtime (for continuous, not on-demand, sync)

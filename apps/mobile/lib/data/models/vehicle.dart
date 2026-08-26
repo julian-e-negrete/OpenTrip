@@ -25,6 +25,28 @@ class Vehicle {
   final String? photoPath;
   final DateTime createdAt;
 
+  /// Odometer reading before this vehicle started being tracked in the
+  /// app — a used vehicle, or one ridden before this app existed, has
+  /// mileage the app never recorded a trip for. Null means "unknown",
+  /// treated as 0 (so current mileage is estimated as just the sum of
+  /// every recorded trip's distance) rather than blocking mileage/service
+  /// tracking on a number the user might not know.
+  final double? startingOdometerKm;
+
+  /// Distance between services (oil change, chain, tires — whatever this
+  /// vehicle needs) — null disables service tracking entirely for this
+  /// vehicle, since not every vehicle type has a meaningful fixed
+  /// interval and the interval itself varies a lot by
+  /// vehicle/manufacturer, so there's no sane app-wide default to assume.
+  final double? serviceIntervalKm;
+
+  /// Odometer reading at the last logged service. Null means "never
+  /// serviced since tracking began" — the interval is then measured from
+  /// [startingOdometerKm] (or 0) instead. See
+  /// vehicles/vehicle_detail_screen.dart's "Log service" action, which is
+  /// the only thing that sets this to anything other than null.
+  final double? lastServiceOdometerKm;
+
   /// Whether this row has been pushed to Supabase. Always true for rows
   /// that came from a pull. See sync/sync_service.dart.
   final bool synced;
@@ -39,6 +61,9 @@ class Vehicle {
     required this.bleConnector,
     this.photoPath,
     required this.createdAt,
+    this.startingOdometerKm,
+    this.serviceIntervalKm,
+    this.lastServiceOdometerKm,
     this.synced = false,
   });
 
@@ -49,6 +74,10 @@ class Vehicle {
     String? model,
     VehicleBleConnector? bleConnector,
     String? photoPath,
+    double? startingOdometerKm,
+    double? serviceIntervalKm,
+    double? lastServiceOdometerKm,
+    bool clearServiceInterval = false,
     bool? synced,
   }) {
     return Vehicle(
@@ -61,6 +90,13 @@ class Vehicle {
       bleConnector: bleConnector ?? this.bleConnector,
       photoPath: photoPath ?? this.photoPath,
       createdAt: createdAt,
+      startingOdometerKm: startingOdometerKm ?? this.startingOdometerKm,
+      // Unlike every other field, service tracking needs a real way to
+      // turn back off (a vehicle's owner decides they don't want to
+      // track it anymore) — `?? this.x` alone can only ever set a value,
+      // never clear one back to null.
+      serviceIntervalKm: clearServiceInterval ? null : (serviceIntervalKm ?? this.serviceIntervalKm),
+      lastServiceOdometerKm: lastServiceOdometerKm ?? this.lastServiceOdometerKm,
       synced: synced ?? this.synced,
     );
   }
@@ -75,6 +111,9 @@ class Vehicle {
     'ble_connector': bleConnector.name,
     'photo_path': photoPath,
     'created_at': createdAt.toIso8601String(),
+    'starting_odometer_km': startingOdometerKm,
+    'service_interval_km': serviceIntervalKm,
+    'last_service_odometer_km': lastServiceOdometerKm,
     'synced': synced ? 1 : 0,
   };
 
@@ -88,6 +127,9 @@ class Vehicle {
     bleConnector: VehicleBleConnector.values.byName(row['ble_connector'] as String),
     photoPath: row['photo_path'] as String?,
     createdAt: DateTime.parse(row['created_at'] as String),
+    startingOdometerKm: row['starting_odometer_km'] as double?,
+    serviceIntervalKm: row['service_interval_km'] as double?,
+    lastServiceOdometerKm: row['last_service_odometer_km'] as double?,
     synced: (row['synced'] as int? ?? 0) != 0,
   );
 
@@ -102,6 +144,9 @@ class Vehicle {
     'model': model,
     'ble_connector': bleConnector.name,
     'created_at': createdAt.toIso8601String(),
+    'starting_odometer_km': startingOdometerKm,
+    'service_interval_km': serviceIntervalKm,
+    'last_service_odometer_km': lastServiceOdometerKm,
   };
 
   /// A row pulled from Supabase — always synced, never has a local photo.
@@ -114,6 +159,9 @@ class Vehicle {
     model: row['model'] as String? ?? '',
     bleConnector: VehicleBleConnector.values.byName(row['ble_connector'] as String),
     createdAt: DateTime.parse(row['created_at'] as String),
+    startingOdometerKm: (row['starting_odometer_km'] as num?)?.toDouble(),
+    serviceIntervalKm: (row['service_interval_km'] as num?)?.toDouble(),
+    lastServiceOdometerKm: (row['last_service_odometer_km'] as num?)?.toDouble(),
     synced: true,
   );
 }

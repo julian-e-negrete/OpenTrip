@@ -23,8 +23,20 @@ create table if not exists public.vehicles (
   model text not null default '',
   ble_connector text not null default 'none',
   created_at timestamptz not null default now(),
+  -- Mileage/service tracking (apps/mobile/lib/vehicles/vehicle_detail_screen.dart)
+  -- — see data/models/vehicle.dart's field comments for what null means
+  -- on each of these.
+  starting_odometer_km double precision,
+  service_interval_km double precision,
+  last_service_odometer_km double precision,
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run on a project that already had this table before these
+-- columns existed.
+alter table public.vehicles add column if not exists starting_odometer_km double precision;
+alter table public.vehicles add column if not exists service_interval_km double precision;
+alter table public.vehicles add column if not exists last_service_odometer_km double precision;
 
 alter table public.vehicles enable row level security;
 
@@ -67,6 +79,11 @@ create table if not exists public.trips (
   -- — opt-in per recording, independent of ble_max_lean_deg above (two
   -- different sensors; a BLE-connected bike can have both).
   phone_lean_max_deg double precision,
+  -- The bike's own odometer reading (Kawasaki Rideology's "MC info"
+  -- frame) at the last telemetry frame received during this trip — see
+  -- data/models/trip.dart's field comment. Not a max/min like the ble_*
+  -- columns above; an odometer only ever counts up.
+  ble_odometer_km double precision,
   updated_at timestamptz not null default now()
 );
 
@@ -79,6 +96,7 @@ alter table public.trips add column if not exists behavior_hard_accel_count inte
 alter table public.trips add column if not exists behavior_hard_brake_count integer;
 alter table public.trips add column if not exists behavior_hard_cornering_count integer;
 alter table public.trips add column if not exists phone_lean_max_deg double precision;
+alter table public.trips add column if not exists ble_odometer_km double precision;
 
 alter table public.trips enable row level security;
 
@@ -104,8 +122,26 @@ create table if not exists public.trip_points (
   altitude_meters double precision,
   speed_kph double precision,
   "timestamp" timestamptz not null,
+  -- Vehicle-reported (BLE) telemetry at this exact GPS fix — see
+  -- data/models/trip_point.dart's field comment. Powers
+  -- trip_detail_screen.dart's route-replay instrument HUD.
+  ble_speed_kph double precision,
+  ble_rpm integer,
+  ble_gear integer,
+  ble_throttle_percent double precision,
+  ble_lean_deg double precision,
+  ble_water_temp_c integer,
   primary key (trip_id, seq)
 );
+
+-- Safe to re-run on a project that already had this table before these
+-- columns existed.
+alter table public.trip_points add column if not exists ble_speed_kph double precision;
+alter table public.trip_points add column if not exists ble_rpm integer;
+alter table public.trip_points add column if not exists ble_gear integer;
+alter table public.trip_points add column if not exists ble_throttle_percent double precision;
+alter table public.trip_points add column if not exists ble_lean_deg double precision;
+alter table public.trip_points add column if not exists ble_water_temp_c integer;
 
 alter table public.trip_points enable row level security;
 

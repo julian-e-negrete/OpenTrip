@@ -403,6 +403,50 @@
   worse than not having the feature. No new permission (motion
   sensors don't need one on Android, unlike the activity-recognition
   signal the now-removed auto-start feature used).
+- **Per-point BLE telemetry, a live replay HUD, and vehicle mileage/service
+  tracking.** Three related additions, all built on top of the trip-level
+  BLE max/min stats above:
+  - **Point-level telemetry** (`data/models/trip_point.dart`): each GPS
+    fix now optionally carries the bike's speed/RPM/gear/throttle/lean/
+    water-temp reading from whatever the latest telemetry frame happened
+    to be at that moment — sampled once per accepted GPS point
+    (`trip/recording_screen.dart`'s `_pointSub` listener merges in
+    `_ble.telemetryNotifier.value`), not once per BLE frame (which
+    arrives much faster), so point storage doesn't multiply by the
+    telemetry frame rate. `trip/location_recorder.dart` itself stays
+    GPS-only and knows nothing about BLE — recording_screen.dart is the
+    one place a trip's GPS stream and the shared BLE connection actually
+    meet.
+  - **Live replay HUD** (`trips/trip_detail_screen.dart`'s
+    `_TelemetryHud`): while the route replay marker is moving (or paused
+    partway through), a compact instrument readout shows live speed and,
+    if this trip has any point-level BLE telemetry, RPM/gear/lean too —
+    read off whichever point `route_replay.dart`'s
+    `pointCountAtProgress` says the marker has most recently reached, so
+    the numbers track the marker rather than the trip's ever
+    (behavior-stats) max/min. The replay also gained a speed control
+    (1×/2×/4×/8×, cycled by tapping a chip) — `AnimationController`'s
+    `duration` is only consulted when `forward()` restarts the
+    simulation, so speeding up mid-replay means changing `duration` and
+    calling `forward()` again to pick up the new pace for whatever
+    fraction is left, not just mutating the field.
+  - **Vehicle mileage & service tracking**
+    (`vehicles/vehicle_detail_screen.dart`'s mileage card,
+    `data/models/vehicle.dart`'s `startingOdometerKm`/
+    `serviceIntervalKm`/`lastServiceOdometerKm`): current mileage prefers
+    the bike's own odometer (Kawasaki Rideology's `odometerTenthKm`,
+    captured last-write-wins per trip as `Trip.bleOdometerKm` — an
+    odometer only ever counts up, so the most recent trip that reported
+    one is authoritative) over summing recorded-trip distances, since
+    the hardware count is exact and doesn't care how much of the
+    vehicle's life was ridden before this app existed. Falls back to
+    `startingOdometerKm + sum(trip distances)` for anything without BLE.
+    Service tracking is opt-in per vehicle (a null `serviceIntervalKm`
+    disables it entirely) since there's no sane app-wide default
+    interval across motorcycle/car/bicycle/other. "Log service now" sets
+    `lastServiceOdometerKm` to the current mileage; the card shows a
+    progress bar and a "N km until service" / "overdue by N km" readout
+    either way.
 
 ## Removed
 

@@ -104,6 +104,44 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// This vehicle's current mileage, and whether that number came from
+  /// the bike's own odometer or is an app-side estimate. Prefers the
+  /// most recent trip that reported a BLE odometer reading (see
+  /// data/models/trip.dart's [Trip.bleOdometerKm] comment — it only ever
+  /// counts up, so the latest reading is the authoritative one) over
+  /// summing recorded-trip distances, since the bike's own hardware
+  /// count is exact and doesn't care how much of the vehicle's life was
+  /// ridden before this app was installed. [_trips] is already ordered
+  /// newest-first (TripRepository.listForVehicle), so the first match is
+  /// the most recent one.
+  ({double km, bool fromBike}) _currentMileage() {
+    for (final t in _trips) {
+      if (t.bleOdometerKm != null) return (km: t.bleOdometerKm!, fromBike: true);
+    }
+    final totalDistanceKm = _trips.fold<double>(0, (sum, t) => sum + t.distanceMeters) / 1000.0;
+    return (km: (_vehicle.startingOdometerKm ?? 0) + totalDistanceKm, fromBike: false);
+  }
+
+  Future<void> _logService() async {
+    final mileage = _currentMileage();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Log a service?'),
+        content: Text(
+          'Marks ${mileage.km.toStringAsFixed(0)} km as this vehicle\'s last service — '
+          'the next one is due ${_vehicle.serviceIntervalKm?.toStringAsFixed(0)} km after that.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Log it')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await VehicleRepository.instance.update(_vehicle.copyWith(lastServiceOdometerKm: mileage.km, synced: false));
+  }
+
   Future<bool> _confirmDeleteTrip(Trip trip) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -157,7 +195,9 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 padding: const EdgeInsets.all(16),
                 children: [
                   _Header(vehicle: _vehicle, iconFor: _iconFor),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
+                  _buildMileageCard(scheme),
+                  const SizedBox(height: 20),
                   _buildStatsGrid(scheme),
                   ..._buildBikeRecords(scheme),
                   const SizedBox(height: 24),
@@ -181,6 +221,95 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                 ],
               ),
             ),
+    );
+  }
+
+  Widget _buildMileageCard(ColorScheme scheme) {
+    final mileage = _currentMileage();
+    final serviceInterval = _vehicle.serviceIntervalKm;
+
+    double? remainingKm;
+    double? progress;
+    var overdue = false;
+    if (serviceInterval != null && serviceInterval > 0) {
+      final baseline = _vehicle.lastServiceOdometerKm ?? (_vehicle.startingOdometerKm ?? 0);
+      remainingKm = baseline + serviceInterval - mileage.km;
+      overdue = remainingKm < 0;
+      progress = ((mileage.km - baseline) / serviceInterval).clamp(0.0, 1.0);
+    }
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.speed_outlined, color: scheme.primary, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Mileage',
+                  style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${mileage.km.toStringAsFixed(0)} km',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: scheme.primary),
+            ),
+            Text(
+              mileage.fromBike ? "From the bike's own odometer" : 'Estimated from recorded trips',
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+            ),
+            if (serviceInterval != null) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    overdue ? 'Service overdue' : 'Next service in',
+                    style: TextStyle(color: scheme.onSurfaceVariant),
+                  ),
+                  Text(
+                    overdue
+                        ? '${(-remainingKm!).toStringAsFixed(0)} km ago'
+                        : '${remainingKm!.toStringAsFixed(0)} km',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: overdue ? scheme.error : scheme.tertiary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 8,
+                  backgroundColor: scheme.surfaceContainerHighest,
+                  color: overdue ? scheme.error : scheme.tertiary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: _logService,
+                  icon: const Icon(Icons.build_outlined, size: 18),
+                  label: const Text('Log service now'),
+                ),
+              ),
+            ] else
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(onPressed: _edit, child: const Text('Set a service interval')),
+              ),
+          ],
+        ),
+      ),
     );
   }
 

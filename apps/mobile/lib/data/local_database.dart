@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -39,6 +39,9 @@ class LocalDatabase {
             ble_connector TEXT NOT NULL,
             photo_path TEXT,
             created_at TEXT NOT NULL,
+            starting_odometer_km REAL,
+            service_interval_km REAL,
+            last_service_odometer_km REAL,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -85,6 +88,7 @@ class LocalDatabase {
             -- a harmless, always-0 leftover.
             auto_started INTEGER NOT NULL DEFAULT 0,
             phone_lean_max_deg REAL,
+            ble_odometer_km REAL,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -100,6 +104,12 @@ class LocalDatabase {
             altitude_meters REAL,
             speed_kph REAL,
             timestamp TEXT NOT NULL,
+            ble_speed_kph REAL,
+            ble_rpm INTEGER,
+            ble_gear INTEGER,
+            ble_throttle_percent REAL,
+            ble_lean_deg REAL,
+            ble_water_temp_c INTEGER,
             PRIMARY KEY (trip_id, seq)
           )
         ''');
@@ -250,6 +260,42 @@ class LocalDatabase {
           // file, this one can't be additive. Clearing local claims here;
           // they refill the next time each cell is ridden through again.
           await db.delete('territory_cells');
+        }
+        if (oldVersion < 13) {
+          final vehicleColumns = await db.rawQuery('PRAGMA table_info(vehicles)');
+          final vehicleExisting = vehicleColumns.map((c) => c['name']).toSet();
+          for (final column in [
+            'starting_odometer_km REAL',
+            'service_interval_km REAL',
+            'last_service_odometer_km REAL',
+          ]) {
+            final name = column.split(' ').first;
+            if (!vehicleExisting.contains(name)) {
+              await db.execute('ALTER TABLE vehicles ADD COLUMN $column');
+            }
+          }
+
+          final tripColumns = await db.rawQuery('PRAGMA table_info(trips)');
+          final hasOdometer = tripColumns.any((c) => c['name'] == 'ble_odometer_km');
+          if (!hasOdometer) {
+            await db.execute('ALTER TABLE trips ADD COLUMN ble_odometer_km REAL');
+          }
+
+          final pointColumns = await db.rawQuery('PRAGMA table_info(trip_points)');
+          final pointExisting = pointColumns.map((c) => c['name']).toSet();
+          for (final column in [
+            'ble_speed_kph REAL',
+            'ble_rpm INTEGER',
+            'ble_gear INTEGER',
+            'ble_throttle_percent REAL',
+            'ble_lean_deg REAL',
+            'ble_water_temp_c INTEGER',
+          ]) {
+            final name = column.split(' ').first;
+            if (!pointExisting.contains(name)) {
+              await db.execute('ALTER TABLE trip_points ADD COLUMN $column');
+            }
+          }
         }
       },
     );
