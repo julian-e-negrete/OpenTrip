@@ -482,11 +482,13 @@
   hundreds), so `trip_music_events` is its own table rather than riding
   along on `trip_points` the way per-point BLE telemetry does — same
   "pushed in bulk once the trip finishes, pulled lazily per-trip" shape
-  as `trip_points`, just lower volume. Opt-in per recording ("Log music
-  (Spotify)" toggle on trip/recording_screen.dart, independent of
-  vehicle type — this is about the rider, not the bike) since it only
-  does anything if Spotify is installed and that one setting is on.
-  Shows a live "now playing" readout during recording, and a
+  as `trip_points`, just lower volume. Always on for every recording,
+  same posture as camera_alerts.dart/driving-behavior stats rather than
+  an opt-in toggle like lean tracking — there's no way for this to
+  produce misleading data the way handheld lean tracking can, it just
+  silently does nothing unless Spotify is installed with that one
+  setting on. Independent of vehicle type — this is about the rider, not
+  the bike. Shows a live "now playing" readout during recording, and a
   "Soundtrack" list on trip detail with how far into the trip each track
   started.
 

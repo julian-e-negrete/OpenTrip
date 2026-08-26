@@ -79,12 +79,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
   StreamSubscription<double>? _leanAngleSub;
   double? _currentLeanDeg;
 
-  // Music logging (trip/spotify_now_playing.dart) — opt-in (see the "Log
-  // music" toggle below), since it only does anything once the rider has
-  // Spotify installed and its "Device Broadcast Status" setting on.
-  // Independent of vehicle type, unlike lean tracking — this is about the
-  // rider, not the bike.
-  bool _logMusic = false;
+  // Music logging (trip/spotify_now_playing.dart) — always on for every
+  // recording, same posture as camera_alerts.dart/driving-behavior
+  // stats, not opt-in like lean tracking: there's no way for this to
+  // produce misleading data the way handheld lean tracking can, it just
+  // silently does nothing unless the rider has Spotify installed with
+  // its "Device Broadcast Status" setting on. Independent of vehicle
+  // type — this is about the rider, not the bike.
   StreamSubscription<SpotifyTrackEvent>? _musicSub;
   final _musicBuffer = <TripMusicEvent>[];
   int _musicSeq = 0;
@@ -258,7 +259,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         });
       }
 
-      if (_logMusic && Platform.isAndroid) {
+      if (Platform.isAndroid) {
         _musicSub = SpotifyNowPlaying.instance.trackChanges.listen((event) {
           _musicBuffer.add(
             TripMusicEvent(
@@ -454,20 +455,6 @@ class _RecordingScreenState extends State<RecordingScreen> {
             ),
             value: _trackLean,
             onChanged: (v) => setState(() => _trackLean = v ?? false),
-          ),
-        ],
-        if (!recording && Platform.isAndroid) ...[
-          const SizedBox(height: 8),
-          CheckboxListTile(
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: const Text('Log music (Spotify)'),
-            subtitle: const Text(
-              'Needs Spotify installed with "Device Broadcast Status" turned on '
-              '(Spotify app → Settings → Playback). Logs each track change to the trip.',
-            ),
-            value: _logMusic,
-            onChanged: (v) => setState(() => _logMusic = v ?? false),
           ),
         ],
         const SizedBox(height: 24),
