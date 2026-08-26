@@ -45,6 +45,26 @@
 	<array>
 		<string>location</string>
 	</array>
+	<!-- Google Sign-In's redirect back into the app after the system
+	     account picker — needs the iOS OAuth client's own ID *reversed*
+	     (e.g. client ID "1234-abc.apps.googleusercontent.com" becomes
+	     scheme "com.googleusercontent.apps.1234-abc"), not the Web client
+	     ID used elsewhere in this app. See docs/AUTH_SETUP.md for where to
+	     create that iOS client in Google Cloud Console. Guest mode works
+	     without this being filled in — see auth/current_user.dart — so an
+	     iOS build with the placeholder left as-is still runs, it just
+	     can't complete Google sign-in. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>REPLACE_WITH_REVERSED_IOS_CLIENT_ID</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

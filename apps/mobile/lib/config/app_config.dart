@@ -15,6 +15,17 @@ abstract final class AppConfig {
   /// the app's package name + SHA-1; it's never referenced in code).
   static const googleWebClientId = String.fromEnvironment('GOOGLE_WEB_CLIENT_ID');
 
+  /// The **iOS** OAuth client ID from Google Cloud Console — unlike
+  /// Android (where the client only needs to exist registered against
+  /// the app's package name + SHA-1, and is never referenced in code),
+  /// `google_sign_in` on iOS needs its own client's ID passed explicitly
+  /// as `clientId`, plus that same client's reversed form registered as
+  /// a URL scheme in ios/Runner/Info.plist so the sign-in redirect can
+  /// return to the app. See docs/AUTH_SETUP.md. Optional — guest mode
+  /// (auth/current_user.dart) works without any of this, so an iOS build
+  /// missing this can still be tested end-to-end.
+  static const googleIosClientId = String.fromEnvironment('GOOGLE_IOS_CLIENT_ID');
+
   static bool get isSupabaseConfigured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   static bool get isGoogleSignInConfigured => googleWebClientId.isNotEmpty;

@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -37,7 +39,17 @@ class AuthService {
       );
     }
 
-    final googleSignIn = GoogleSignIn(serverClientId: AppConfig.googleWebClientId);
+    // clientId is "not supported on all platforms (e.g. Android)" per the
+    // google_sign_in package itself — Android resolves its client purely
+    // from the package name + SHA-1 registered in Google Cloud Console,
+    // never from a value in code, so this is iOS-only on purpose (see
+    // AppConfig.googleIosClientId's doc comment for why iOS needs it at
+    // all). Unverified on a real device — this project has no way to
+    // build/run iOS yet (see docs/IOS_TESTING_SETUP.md).
+    final googleSignIn = GoogleSignIn(
+      serverClientId: AppConfig.googleWebClientId,
+      clientId: Platform.isIOS && AppConfig.googleIosClientId.isNotEmpty ? AppConfig.googleIosClientId : null,
+    );
     final account = await googleSignIn.signIn();
     if (account == null) return null; // user cancelled
 

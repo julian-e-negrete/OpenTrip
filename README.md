@@ -36,6 +36,10 @@ This repo is in active development. What exists today:
   configure login ([`AUTH_SETUP.md`](docs/AUTH_SETUP.md) — you'll need your
   own free Supabase project and Google OAuth client; nothing shared is
   pre-configured, by design, since this is meant to be self-hostable).
+  Everything so far has only ever been built/tested on Android — the iOS
+  project files exist and are set up as far as possible without a Mac to
+  verify on; see [`IOS_TESTING_SETUP.md`](docs/IOS_TESTING_SETUP.md) if
+  you have access to one and want to be the first real test.
 
 ## Why this exists
 

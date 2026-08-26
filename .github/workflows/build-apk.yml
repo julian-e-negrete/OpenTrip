@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK & Verify iOS
 
 # Builds and publishes the app on every push to main, plus on demand.
 # This is the intended way to get a testable APK onto a phone — it sidesteps
@@ -82,3 +82,33 @@ jobs:
             from the last ~8 years — sideload it (enable "install unknown
             apps" for whatever app you downloaded it with) and open it.
           files: apps/mobile/build/app/outputs/flutter-apk/*.apk
+
+  # Compile-only sanity check for iOS — this project has no way to build
+  # or run iOS locally (see docs/IOS_TESTING_SETUP.md), so this is the
+  # only automated signal that an iOS-affecting change (or a change that
+  # accidentally isn't platform-guarded) still compiles at all.
+  # Deliberately doesn't produce an installable build: --no-codesign
+  # skips the code-signing step entirely, since there's no Apple
+  # Developer account/certificate configured as a repo secret to sign
+  # with, and an unsigned .app can't be installed on a real device
+  # anyway (see IOS_TESTING_SETUP.md for the actual, signed, on-Mac way
+  # to install and test a build). macOS runners are free/unlimited for
+  # this repo since it's public.
+  verify-ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.0"
+          channel: stable
+          cache: true
+
+      - name: Install app dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Build iOS (no code signing — compile check only)
+        working-directory: apps/mobile
+        run: flutter build ios --release --no-codesign

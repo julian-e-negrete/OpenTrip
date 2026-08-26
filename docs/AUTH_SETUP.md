@@ -22,6 +22,7 @@ they're all meant to be embedded in a shipped app:
 | `SUPABASE_URL` | Your project's API URL |
 | `SUPABASE_ANON_KEY` | Public/anon key — safe to embed in a client app by design |
 | `GOOGLE_WEB_CLIENT_ID` | Identifies your app to Google's OAuth for the sign-in flow |
+| `GOOGLE_IOS_CLIENT_ID` | iOS builds only (see step 2) — Google sign-in on Android needs nothing extra here, but iOS does. Leave unset if you're not testing on iOS yet; everything else still works, including guest mode. |
 
 The one value that **is** actually secret — the Google OAuth **client
 secret** — never goes into the app or into git. It's typed once into the
@@ -75,6 +76,17 @@ Supabase dashboard and stays there.
      Cloud allows multiple SHA-1 fingerprints on one Android OAuth client).
      This Android client's ID is never referenced in code — Google's SDK
      finds it automatically via the package name + SHA-1 match.
+   - **Type: iOS** — only needed if you're building for iOS (see
+     `docs/IOS_TESTING_SETUP.md`); skip this one otherwise. Bundle ID:
+     `co.opentrip.opentripMobile` (note: no App Store ID needed for local
+     testing on your own device). Unlike the Android client, this one's ID
+     **is** referenced directly:
+     - Paste it as `GOOGLE_IOS_CLIENT_ID` in the build command below.
+     - Reverse it (`1234-abc.apps.googleusercontent.com` becomes
+       `com.googleusercontent.apps.1234-abc`) and paste that into
+       `apps/mobile/ios/Runner/Info.plist`, replacing the
+       `REPLACE_WITH_REVERSED_IOS_CLIENT_ID` placeholder already there
+       under `CFBundleURLTypes`.
 4. Back in **Supabase Dashboard → Authentication → Sign In / Providers →
    Google**: enable it, paste the **Web** client's Client ID and Client
    Secret (not the Android one).
@@ -98,7 +110,10 @@ flutter build apk --release --split-per-abi \
 ```
 
 Or for `flutter run` during development, the same three `--dart-define`
-flags work.
+flags work. On iOS (see `docs/IOS_TESTING_SETUP.md`), the same command
+becomes `flutter build ios`/`flutter run`, plus
+`--dart-define=GOOGLE_IOS_CLIENT_ID=YOUR_IOS_CLIENT_ID.apps.googleusercontent.com`
+if you set up Google sign-in there too.
 
 ## Want me to build it instead of you?
 
