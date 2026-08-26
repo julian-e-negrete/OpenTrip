@@ -15,8 +15,17 @@ import '../data/repositories/vehicle_repository.dart';
 /// "Z500 ABS" auto-wires the same BLE connector this app already ships,
 /// instead of the user having to know to check a box. Bicycle/other keep
 /// simple free-text naming — there's no connector catalog for those yet.
+///
+/// Doubles as the edit screen — pass [vehicle] to prefill every field from
+/// an existing one and save via [VehicleRepository.update] instead of
+/// [VehicleRepository.create]. A stored brand/model is matched back to a
+/// catalog entry by name; if nothing matches (the catalog changed, or it
+/// was saved under "Other" originally) it falls back to the free-text
+/// "Other" fields instead of silently losing the value.
 class AddVehicleScreen extends StatefulWidget {
-  const AddVehicleScreen({super.key});
+  const AddVehicleScreen({super.key, this.vehicle});
+
+  final Vehicle? vehicle;
 
   @override
   State<AddVehicleScreen> createState() => _AddVehicleScreenState();
@@ -30,11 +39,56 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
   final _customModelController = TextEditingController();
   final _freeNameController = TextEditingController();
   File? _photoFile;
+  // The vehicle's photo before this screen touched anything — kept
+  // separate from [_photoFile] (only set once the user picks a *new*
+  // photo) so save knows whether to actually replace the file on disk.
+  String? _existingPhotoPath;
   bool _saving = false;
   String? _error;
 
+  bool get _editing => widget.vehicle != null;
   bool get _usesCatalog => _type == VehicleType.motorcycle || _type == VehicleType.car;
   bool get _isOtherBrand => _brand?.name == otherBrandName;
+
+  @override
+  void initState() {
+    super.initState();
+    final vehicle = widget.vehicle;
+    if (vehicle != null) _prefillFrom(vehicle);
+  }
+
+  void _prefillFrom(Vehicle vehicle) {
+    _type = vehicle.type;
+    _existingPhotoPath = vehicle.photoPath;
+    if (_usesCatalog) {
+      final brands = brandsFor(vehicle.type);
+      CatalogBrand? matchedBrand;
+      for (final b in brands) {
+        if (b.name == vehicle.brand) {
+          matchedBrand = b;
+          break;
+        }
+      }
+      if (matchedBrand != null) {
+        _brand = matchedBrand;
+        for (final m in matchedBrand.models) {
+          if (m.name == vehicle.model) {
+            _model = m;
+            break;
+          }
+        }
+      } else {
+        // Not in the catalog (or the catalog changed since this vehicle
+        // was saved) — fall back to "Other" rather than dropping the
+        // stored brand/model on the floor.
+        _brand = brands.firstWhere((b) => b.name == otherBrandName);
+        _customBrandController.text = vehicle.brand;
+        _customModelController.text = vehicle.model;
+      }
+    } else {
+      _freeNameController.text = vehicle.name;
+    }
+  }
 
   @override
   void dispose() {
@@ -98,21 +152,41 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
     });
 
     try {
-      String? photoPath;
-      final photo = _photoFile;
-      if (photo != null) {
-        photoPath = await LocalImageStore.save(photo);
+      var photoPath = _existingPhotoPath;
+      final newPhoto = _photoFile;
+      if (newPhoto != null) {
+        photoPath = await LocalImageStore.save(newPhoto);
+        // Only reachable in edit mode ­— replacing a photo that was never
+        // set has nothing to clean up.
+        await LocalImageStore.deleteIfExists(_existingPhotoPath);
       }
 
-      await VehicleRepository.instance.create(
-        userId: await CurrentUser.instance.id(),
-        name: name,
-        type: _type,
-        brand: brand,
-        model: model,
-        bleConnector: connector,
-        photoPath: photoPath,
-      );
+      final vehicle = widget.vehicle;
+      if (vehicle != null) {
+        await VehicleRepository.instance.update(
+          vehicle.copyWith(
+            name: name,
+            type: _type,
+            brand: brand,
+            model: model,
+            bleConnector: connector,
+            photoPath: photoPath,
+            // Every field above just changed locally — re-push on next sync
+            // rather than leaving the remote row stale.
+            synced: false,
+          ),
+        );
+      } else {
+        await VehicleRepository.instance.create(
+          userId: await CurrentUser.instance.id(),
+          name: name,
+          type: _type,
+          brand: brand,
+          model: model,
+          bleConnector: connector,
+          photoPath: photoPath,
+        );
+      }
 
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -125,8 +199,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final displayedPhoto = _photoFile ?? (_existingPhotoPath != null ? File(_existingPhotoPath!) : null);
     return Scaffold(
-      appBar: AppBar(title: const Text('Add vehicle')),
+      appBar: AppBar(title: Text(_editing ? 'Edit vehicle' : 'Add vehicle')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -135,8 +210,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               onTap: _pickPhoto,
               child: CircleAvatar(
                 radius: 48,
-                backgroundImage: _photoFile != null ? FileImage(_photoFile!) : null,
-                child: _photoFile == null ? const Icon(Icons.add_a_photo_outlined, size: 32) : null,
+                backgroundImage: displayedPhoto != null ? FileImage(displayedPhoto) : null,
+                child: displayedPhoto == null ? const Icon(Icons.add_a_photo_outlined, size: 32) : null,
               ),
             ),
           ),
@@ -144,7 +219,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           Center(
             child: TextButton(
               onPressed: _pickPhoto,
-              child: Text(_photoFile == null ? 'Add photo' : 'Change photo'),
+              child: Text(displayedPhoto == null ? 'Add photo' : 'Change photo'),
             ),
           ),
           const SizedBox(height: 16),
@@ -190,7 +265,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save vehicle'),
+                : Text(_editing ? 'Save changes' : 'Save vehicle'),
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import '../data/data_events.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/vehicle_repository.dart';
 import 'add_vehicle_screen.dart';
+import 'vehicle_detail_screen.dart';
 
 class VehicleListScreen extends StatefulWidget {
   const VehicleListScreen({super.key});
@@ -50,26 +51,6 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddVehicleScreen()));
     // No manual _load() needed here — VehicleRepository.create fires
     // DataEvents, which this screen already listens to.
-  }
-
-  Future<void> _deleteVehicle(Vehicle vehicle) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete vehicle?'),
-        content: Text('"${vehicle.name}" and its trips will be removed from this device.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await VehicleRepository.instance.delete(vehicle.id);
   }
 
   IconData _iconFor(VehicleType type) => switch (type) {
@@ -123,9 +104,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                           ? vehicle.type.name
                           : '${vehicle.type.name} · Kawasaki Rideology BLE',
                     ),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => _deleteVehicle(vehicle),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => VehicleDetailScreen(vehicle: vehicle)),
                     ),
                   ),
                 );
