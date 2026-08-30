@@ -269,7 +269,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
               artist: event.artist,
               album: event.album,
               spotifyUri: event.spotifyUri,
-              startedAt: event.timestamp,
+              // Receive time, deliberately not event.timestamp (Spotify's
+              // own self-reported send time) — see that field's doc
+              // comment in spotify_now_playing.dart for why: the first
+              // broadcast a freshly-registered receiver gets can be a
+              // replay of whatever was already playing, timestamped from
+              // whenever that track actually started, which reads as a
+              // bogus multi-hour offset once shown relative to the
+              // trip's real start time on trip_detail_screen.dart's
+              // Soundtrack list.
+              startedAt: DateTime.now(),
             ),
           );
           if (mounted) setState(() => _currentTrack = event);
@@ -458,9 +467,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
           ),
         ],
         const SizedBox(height: 24),
-        if (recording)
-          _StatsView(stats: _stats, currentLeanDeg: _currentLeanDeg, currentTrack: _currentTrack)
-        else
+        if (recording) ...[
+          _StatsView(stats: _stats, currentLeanDeg: _currentLeanDeg),
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 12),
+            _NowPlayingCard(track: _currentTrack),
+          ],
+        ] else
           const Spacer(),
         const SizedBox(height: 24),
         if (_error != null) ...[
@@ -546,10 +559,9 @@ class _BleConnectionCard extends StatelessWidget {
 }
 
 class _StatsView extends StatelessWidget {
-  const _StatsView({required this.stats, this.currentLeanDeg, this.currentTrack});
+  const _StatsView({required this.stats, this.currentLeanDeg});
   final RecordingStats? stats;
   final double? currentLeanDeg;
-  final SpotifyTrackEvent? currentTrack;
 
   String _fmtDuration(Duration d) {
     String two(int n) => n.toString().padLeft(2, '0');
@@ -603,25 +615,72 @@ class _StatsView extends StatelessWidget {
                   _Stat(label: 'Lean', value: '${currentLeanDeg!.toStringAsFixed(0)}°', color: scheme.tertiary),
               ],
             ),
-            if (currentTrack != null) ...[
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.music_note, size: 16, color: scheme.onSurfaceVariant),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      currentTrack!.artist == null
-                          ? currentTrack!.track
-                          : '${currentTrack!.track} — ${currentTrack!.artist}',
-                      style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12.5),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A standalone card docked near the bottom of the Record screen (see
+/// _buildContent), separate from _StatsView's own card, so live "what's
+/// playing" reads as its own persistent thing rather than one more line
+/// buried inside the trip stats. Shows a "listening" placeholder before
+/// the first track arrives, rather than only appearing once one does —
+/// otherwise there's no visible sign the feature is even active until a
+/// track change happens to fire.
+class _NowPlayingCard extends StatelessWidget {
+  const _NowPlayingCard({required this.track});
+  final SpotifyTrackEvent? track;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final t = track;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(10),
               ),
-            ],
+              child: Icon(Icons.music_note, color: scheme.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: t == null
+                    ? [
+                        const Text('Listening for music…', style: TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                          'Play something on Spotify',
+                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                        ),
+                      ]
+                    : [
+                        Text(
+                          t.track,
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (t.artist != null)
+                          Text(
+                            t.artist!,
+                            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+              ),
+            ),
+            if (t != null) Icon(Icons.graphic_eq, color: scheme.primary, size: 20),
           ],
         ),
       ),

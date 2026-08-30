@@ -13,6 +13,18 @@ class SpotifyTrackEvent {
   final String? artist;
   final String? album;
   final String? spotifyUri;
+
+  /// When Spotify's own broadcast says it was sent (`timeSentMs`) — *not*
+  /// necessarily when this app actually received it. Don't use this for
+  /// "how far into the trip did this track start" (see
+  /// trip/recording_screen.dart, which stamps trip/data/models/trip_music_event.dart's
+  /// startedAt with the receive-time DateTime.now() instead): the very
+  /// first broadcast a freshly-registered receiver gets can be a replay
+  /// of whatever was already playing, carrying a `timeSentMs` from
+  /// whenever that track actually started — which, if it's been playing
+  /// a while, reads as a wildly large "N hours in" once compared against
+  /// the trip's actual start time. Kept here only as informational
+  /// metadata about the broadcast itself.
   final DateTime timestamp;
 
   const SpotifyTrackEvent({
