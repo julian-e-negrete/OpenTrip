@@ -7,9 +7,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'flutter_blue_plus_transport.dart';
 
 /// Scans for, connects to, and runs the startup handshake against a
-/// Kawasaki Rideology-equipped bike. Shared by the standalone BLE demo
-/// screen (screens/vehicle_screen.dart) and the trip recorder's optional
-/// live-telemetry hookup (trip/recording_screen.dart), so both paths
+/// Kawasaki Rideology-equipped bike. Shared by every path that can
+/// trigger a connection — the vehicle row's connection pill
+/// (vehicles/vehicle_list_screen.dart) and the trip recorder's optional
+/// live-telemetry hookup (trip/recording_screen.dart) — so all of them
 /// behave identically and this logic exists in exactly one place.
 class KawasakiConnector {
   KawasakiConnector._();

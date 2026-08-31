@@ -9,18 +9,19 @@ enum BleConnectionState { disconnected, scanning, connecting, connected, failed 
 
 /// The single, shared Kawasaki BLE connection for the whole app.
 ///
-/// Before this existed, the standalone Vehicle tab
-/// (screens/vehicle_screen.dart) and the Record tab's "Connect bike" card
-/// (trip/recording_screen.dart) each ran their own
+/// Before this existed, the standalone Vehicle tab (since removed — BLE
+/// connection is now a property of a vehicle, surfaced from its row on
+/// vehicles/vehicle_list_screen.dart) and the Record tab's "Connect
+/// bike" card (trip/recording_screen.dart) each ran their own
 /// `KawasakiConnector.connect()` and held their own `KawasakiClient`.
-/// Connecting on one tab and switching to the other triggered a second,
+/// Connecting on one and switching to the other triggered a second,
 /// independent scan + GATT connect to the same physical bike — most BLE
 /// peripherals (this one included) only accept one active GATT
 /// connection, so the second attempt would fail outright or silently
 /// disconnect the first. This singleton owns the one real connection;
 /// every screen reads and drives it through here instead of owning its
-/// own `KawasakiClient`, so "connect" on either tab means the same
-/// connection shows up on both.
+/// own `KawasakiClient`, so "connect" from anywhere means the same
+/// connection shows up everywhere.
 class BleConnectionService {
   BleConnectionService._();
   static final instance = BleConnectionService._();
