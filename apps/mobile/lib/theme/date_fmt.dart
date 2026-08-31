@@ -16,6 +16,15 @@ String fmtDayMonth(DateTime d) => '${d.day} ${monthAbbrev(d.month)}';
 /// e.g. "Sat 24 Aug".
 String fmtWeekdayDayMonth(DateTime d) => '${weekdayAbbrev(d)} ${fmtDayMonth(d)}';
 
+/// e.g. "2 min ago", "3h ago", "5d ago" — Account's "synced …" caption.
+String fmtRelative(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inSeconds < 60) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} min ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${diff.inDays}d ago';
+}
+
 /// e.g. "August".
 String fmtMonthName(DateTime d) => switch (d.month) {
   1 => 'January',

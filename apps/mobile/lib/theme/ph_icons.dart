@@ -51,6 +51,11 @@ abstract final class Ph {
   static const IconData x = IconData(0xe4f6, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData pause = IconData(0xe39e, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData bluetooth = IconData(0xe0da, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData repeat = IconData(0xe3f6, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowsClockwise = IconData(0xe094, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData gauge = IconData(0xe628, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData compass = IconData(0xe1c8, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData mapTrifold = IconData(0xe31a, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
 
   /// Fill weight — used only for the now-playing music note and the
   /// replay play glyph, per the design handoff.

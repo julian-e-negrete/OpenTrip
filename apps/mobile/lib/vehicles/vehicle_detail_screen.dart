@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../data/data_events.dart';
@@ -7,18 +5,19 @@ import '../data/models/trip.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../theme/app_theme.dart';
+import '../theme/date_fmt.dart';
+import '../theme/num_fmt.dart';
+import '../theme/ph_icons.dart';
+import '../theme/primitives.dart';
 import '../trips/trip_detail_screen.dart';
 import 'add_vehicle_screen.dart';
 
 /// A vehicle's own profile — its photo/name/type up top, lifetime stats
 /// folded from every trip ever recorded on it (client-side, same pattern
 /// account_screen.dart and gamification/monthly_recap_screen.dart already
-/// use — cheap at this app's scale, no new aggregate query needed), and
-/// the full list of its trips below, each tapping into the same
-/// trips/trip_detail_screen.dart the Trips tab uses. Reached by tapping a
-/// vehicle on vehicles/vehicle_list_screen.dart; edit/delete live here
-/// now instead of on the list row, the same way a profile page — not a
-/// list item — is where you'd expect to manage one specific thing.
+/// use), and the full list of its trips below, each tapping into the
+/// same trips/trip_detail_screen.dart the Trips tab uses.
 class VehicleDetailScreen extends StatefulWidget {
   const VehicleDetailScreen({super.key, required this.vehicle});
 
@@ -38,14 +37,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     super.initState();
     _vehicle = widget.vehicle;
     _load();
-    // Unlike the tabs inside HomeShell's IndexedStack, this screen is
-    // pushed fresh each time (see vehicle_list_screen.dart), so it
-    // wouldn't strictly need a listener to catch its *own* first load —
-    // but it does need one to catch a trip finishing on this vehicle
-    // while this detail screen is still on screen (e.g. after backing
-    // out of a just-finished recording), and to pick up this vehicle's
-    // own edits reflected back from add_vehicle_screen.dart. See
-    // data/data_events.dart.
     DataEvents.instance.listenable.addListener(_load);
   }
 
@@ -68,10 +59,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     }
     setState(() {
       _trips = trips;
-      // refreshed comes back null if this vehicle was just deleted (from
-      // this same screen's own delete button, which pops immediately
-      // after) — keep showing the last-known vehicle rather than crash
-      // on a still-in-flight frame.
       if (refreshed != null) _vehicle = refreshed;
       _loading = false;
     });
@@ -79,8 +66,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 
   Future<void> _edit() async {
     await Navigator.of(context).push(MaterialPageRoute(builder: (_) => AddVehicleScreen(vehicle: _vehicle)));
-    // No manual _load() needed — VehicleRepository.update fires
-    // DataEvents, which this screen already listens to.
   }
 
   Future<void> _delete() async {
@@ -104,16 +89,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// This vehicle's current mileage, and whether that number came from
-  /// the bike's own odometer or is an app-side estimate. Prefers the
-  /// most recent trip that reported a BLE odometer reading (see
-  /// data/models/trip.dart's [Trip.bleOdometerKm] comment — it only ever
-  /// counts up, so the latest reading is the authoritative one) over
-  /// summing recorded-trip distances, since the bike's own hardware
-  /// count is exact and doesn't care how much of the vehicle's life was
-  /// ridden before this app was installed. [_trips] is already ordered
-  /// newest-first (TripRepository.listForVehicle), so the first match is
-  /// the most recent one.
   ({double km, bool fromBike}) _currentMileage() {
     for (final t in _trips) {
       if (t.bleOdometerKm != null) return (km: t.bleOdometerKm!, fromBike: true);
@@ -161,13 +136,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     return confirmed ?? false;
   }
 
-  IconData _iconFor(VehicleType type) => switch (type) {
-    VehicleType.motorcycle => Icons.two_wheeler,
-    VehicleType.car => Icons.directions_car,
-    VehicleType.bicycle => Icons.pedal_bike,
-    VehicleType.other => Icons.directions,
-  };
-
   String _fmtDuration(int seconds) {
     final d = Duration(seconds: seconds);
     final hours = d.inHours;
@@ -176,15 +144,24 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     return '${hours}h ${minutes}m';
   }
 
+  String _typeLabel(VehicleType type) => switch (type) {
+    VehicleType.motorcycle => 'Motorcycle',
+    VehicleType.car => 'Car',
+    VehicleType.bicycle => 'Bicycle',
+    VehicleType.other => 'Vehicle',
+  };
+
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final supportsBle = _vehicle.bleConnector == VehicleBleConnector.kawasakiRideology;
+    final kicker = supportsBle ? '${_typeLabel(_vehicle.type)} · Kawasaki Rideology BLE' : _typeLabel(_vehicle.type);
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_vehicle.name),
+        title: const SizedBox.shrink(),
         actions: [
-          IconButton(icon: const Icon(Icons.edit_outlined), tooltip: 'Edit', onPressed: _edit),
-          IconButton(icon: const Icon(Icons.delete_outline), tooltip: 'Delete', onPressed: _delete),
+          IconButton(icon: const Icon(Ph.pencilSimple, size: 18, color: Noct.n400), tooltip: 'Edit', onPressed: _edit),
+          IconButton(icon: const Icon(Ph.trash, size: 18, color: Noct.n400), tooltip: 'Delete', onPressed: _delete),
         ],
       ),
       body: _loading
@@ -192,319 +169,297 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
           : RefreshIndicator(
               onRefresh: _load,
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.zero,
                 children: [
-                  _Header(vehicle: _vehicle, iconFor: _iconFor),
-                  const SizedBox(height: 20),
-                  _buildMileageCard(scheme),
-                  const SizedBox(height: 20),
-                  _buildStatsGrid(scheme),
-                  ..._buildBikeRecords(scheme),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Trips',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: scheme.onSurface),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_trips.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Text(
-                        'No trips recorded with this vehicle yet.',
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
-                    )
-                  else
-                    ..._trips.map(
-                      (trip) => _TripRow(trip: trip, vehicle: _vehicle, onConfirmDelete: _confirmDeleteTrip),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          kicker.toUpperCase(),
+                          style: const TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.n500, fontWeight: FontWeight.w400),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _vehicle.name,
+                          style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w500, letterSpacing: -0.7, color: Noct.text),
+                        ),
+                      ],
                     ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 20, 18, 0),
+                    child: _OdometerPanel(vehicle: _vehicle, mileage: _currentMileage(), onLogService: _logService),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                    child: _ThreeStatGrid(trips: _trips, fmtDuration: _fmtDuration),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
+                    child: _BikeRecords(trips: _trips),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 22, 18, 8),
+                    child: _RecentTrips(trips: _trips, vehicle: _vehicle, onConfirmDelete: _confirmDeleteTrip),
+                  ),
                 ],
               ),
             ),
     );
   }
+}
 
-  Widget _buildMileageCard(ColorScheme scheme) {
-    final mileage = _currentMileage();
-    final serviceInterval = _vehicle.serviceIntervalKm;
+class _OdometerPanel extends StatelessWidget {
+  const _OdometerPanel({required this.vehicle, required this.mileage, required this.onLogService});
+  final Vehicle vehicle;
+  final ({double km, bool fromBike}) mileage;
+  final VoidCallback onLogService;
 
+  @override
+  Widget build(BuildContext context) {
+    final serviceInterval = vehicle.serviceIntervalKm;
     double? remainingKm;
     double? progress;
     var overdue = false;
     if (serviceInterval != null && serviceInterval > 0) {
-      final baseline = _vehicle.lastServiceOdometerKm ?? (_vehicle.startingOdometerKm ?? 0);
+      final baseline = vehicle.lastServiceOdometerKm ?? (vehicle.startingOdometerKm ?? 0);
       remainingKm = baseline + serviceInterval - mileage.km;
       overdue = remainingKm < 0;
       progress = ((mileage.km - baseline) / serviceInterval).clamp(0.0, 1.0);
     }
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return NoctPanel(
+      padding: const EdgeInsets.all(15),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
               children: [
-                Icon(Icons.speed_outlined, color: scheme.primary, size: 20),
-                const SizedBox(width: 8),
+                TextSpan(text: fmtThousands(mileage.km.round()), style: Noct.stat(34)),
+                TextSpan(
+                  text: mileage.fromBike ? " km · from the bike's odometer" : ' km · estimated from recorded trips',
+                  style: const TextStyle(fontSize: 12, color: Noct.n400, fontWeight: FontWeight.w400),
+                ),
+              ],
+            ),
+          ),
+          if (serviceInterval != null) ...[
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                 Text(
-                  'Mileage',
-                  style: TextStyle(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w800, letterSpacing: 0.3),
+                  overdue ? 'Service overdue' : 'Next service in',
+                  style: const TextStyle(fontSize: 11.5, color: Noct.n400, fontWeight: FontWeight.w400),
+                ),
+                Text(
+                  overdue ? '${fmtThousands((-remainingKm!).round())} km ago' : '${fmtThousands(remainingKm!.round())} km',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: overdue ? Theme.of(context).colorScheme.error : Noct.a300,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(
-              '${mileage.km.toStringAsFixed(0)} km',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: scheme.primary),
-            ),
-            Text(
-              mileage.fromBike ? "From the bike's own odometer" : 'Estimated from recorded trips',
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-            ),
-            if (serviceInterval != null) ...[
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    overdue ? 'Service overdue' : 'Next service in',
-                    style: TextStyle(color: scheme.onSurfaceVariant),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: SizedBox(
+                height: 6,
+                child: ColoredBox(
+                  color: Noct.n900,
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progress ?? 0,
+                    child: ColoredBox(color: overdue ? Theme.of(context).colorScheme.error : Noct.accent),
                   ),
-                  Text(
-                    overdue
-                        ? '${(-remainingKm!).toStringAsFixed(0)} km ago'
-                        : '${remainingKm!.toStringAsFixed(0)} km',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: overdue ? scheme.error : scheme.tertiary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 8,
-                  backgroundColor: scheme.surfaceContainerHighest,
-                  color: overdue ? scheme.error : scheme.tertiary,
                 ),
               ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(
-                  onPressed: _logService,
-                  icon: const Icon(Icons.build_outlined, size: 18),
-                  label: const Text('Log service now'),
-                ),
-              ),
-            ] else
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(onPressed: _edit, child: const Text('Set a service interval')),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatsGrid(ColorScheme scheme) {
-    final totalDistanceMeters = _trips.fold<double>(0, (sum, t) => sum + t.distanceMeters);
-    final totalDurationSeconds = _trips.fold<int>(0, (sum, t) => sum + t.durationSeconds);
-    final longestMeters = _trips.fold<double>(0, (max, t) => t.distanceMeters > max ? t.distanceMeters : max);
-    double? topSpeedKph;
-    for (final t in _trips) {
-      if (t.maxSpeedKph != null && (topSpeedKph == null || t.maxSpeedKph! > topSpeedKph)) {
-        topSpeedKph = t.maxSpeedKph;
-      }
-    }
-    final avgSpeedKph = totalDurationSeconds > 0 ? totalDistanceMeters / totalDurationSeconds * 3.6 : null;
-
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.7,
-      children: [
-        _StatCard('Trips', '${_trips.length}', scheme.onSurface),
-        _StatCard('Distance', '${(totalDistanceMeters / 1000).toStringAsFixed(0)} km', scheme.secondary),
-        _StatCard('Time riding', _fmtDuration(totalDurationSeconds), scheme.onSurface),
-        _StatCard('Longest trip', '${(longestMeters / 1000).toStringAsFixed(0)} km', scheme.secondary),
-        _StatCard('Avg speed', avgSpeedKph == null ? '—' : '${avgSpeedKph.toStringAsFixed(0)} km/h', scheme.primary),
-        _StatCard('Top speed', topSpeedKph == null ? '—' : '${topSpeedKph.toStringAsFixed(0)} km/h', scheme.primary),
-      ],
-    );
-  }
-
-  /// A second, optional row of stats — only shown once this vehicle has
-  /// actually reported BLE telemetry on at least one trip (see
-  /// data/models/trip.dart's [Trip.hasBleTelemetry]), same gating
-  /// trips/trip_detail_screen.dart uses for its own "From the bike"
-  /// section on a single trip. Here it's folded across every trip
-  /// instead of just one.
-  List<Widget> _buildBikeRecords(ColorScheme scheme) {
-    double? maxBleSpeed;
-    double? maxBleLean;
-    for (final t in _trips) {
-      if (t.bleMaxSpeedKph != null && (maxBleSpeed == null || t.bleMaxSpeedKph! > maxBleSpeed)) {
-        maxBleSpeed = t.bleMaxSpeedKph;
-      }
-      if (t.bleMaxLeanDeg != null && (maxBleLean == null || t.bleMaxLeanDeg! > maxBleLean)) {
-        maxBleLean = t.bleMaxLeanDeg;
-      }
-    }
-    if (maxBleSpeed == null && maxBleLean == null) return const [];
-
-    return [
-      const SizedBox(height: 20),
-      Text(
-        'Bike records',
-        style: TextStyle(color: scheme.tertiary, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-      ),
-      if (maxBleSpeed != null) _KeyValueRow('Fastest recorded (bike)', '${maxBleSpeed.toStringAsFixed(0)} km/h'),
-      if (maxBleLean != null) _KeyValueRow('Deepest lean (bike)', '${maxBleLean.toStringAsFixed(0)}°'),
-    ];
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.vehicle, required this.iconFor});
-  final Vehicle vehicle;
-  final IconData Function(VehicleType) iconFor;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 44,
-          backgroundColor: scheme.primary.withValues(alpha: 0.16),
-          backgroundImage: vehicle.photoPath != null ? FileImage(File(vehicle.photoPath!)) : null,
-          child: vehicle.photoPath == null ? Icon(iconFor(vehicle.type), size: 36, color: scheme.primary) : null,
-        ),
-        const SizedBox(height: 12),
-        Text(vehicle.name, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20)),
-        const SizedBox(height: 4),
-        Text(
-          vehicle.bleConnector == VehicleBleConnector.none
-              ? vehicle.type.name
-              : '${vehicle.type.name} · Kawasaki Rideology BLE',
-          style: TextStyle(color: scheme.onSurfaceVariant),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard(this.label, this.value, this.valueColor);
-  final String label;
-  final String value;
-  final Color valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: valueColor)),
-            Text(
-              label,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KeyValueRow extends StatelessWidget {
-  const _KeyValueRow(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton(
+                onPressed: onLogService,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                  side: const BorderSide(color: Noct.accent, width: 1),
+                  textStyle: const TextStyle(fontSize: 12),
+                ),
+                child: const Text('Log service now'),
+              ),
+            ),
+          ] else
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: onLogService, child: const Text('Set a service interval')),
+            ),
         ],
       ),
     );
   }
 }
 
-class _TripRow extends StatelessWidget {
-  const _TripRow({required this.trip, required this.vehicle, required this.onConfirmDelete});
-  final Trip trip;
+class _ThreeStatGrid extends StatelessWidget {
+  const _ThreeStatGrid({required this.trips, required this.fmtDuration});
+  final List<Trip> trips;
+  final String Function(int) fmtDuration;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalDistanceMeters = trips.fold<double>(0, (sum, t) => sum + t.distanceMeters);
+    final totalDurationSeconds = trips.fold<int>(0, (sum, t) => sum + t.durationSeconds);
+    return Row(
+      children: [
+        Expanded(child: NoctPanel(padding: const EdgeInsets.all(12), child: NoctStat(value: '${trips.length}', label: 'Trips', valueSize: 19))),
+        const SizedBox(width: 9),
+        Expanded(
+          child: NoctPanel(
+            padding: const EdgeInsets.all(12),
+            child: NoctStat(value: fmtThousands((totalDistanceMeters / 1000).round()), suffix: ' km', label: 'Total', valueSize: 19),
+          ),
+        ),
+        const SizedBox(width: 9),
+        Expanded(
+          child: NoctPanel(padding: const EdgeInsets.all(12), child: NoctStat(value: fmtDuration(totalDurationSeconds), label: 'Riding', valueSize: 19)),
+        ),
+      ],
+    );
+  }
+}
+
+class _BikeRecords extends StatelessWidget {
+  const _BikeRecords({required this.trips});
+  final List<Trip> trips;
+
+  @override
+  Widget build(BuildContext context) {
+    double? maxBleSpeed;
+    double? maxLean;
+    double longestMeters = 0;
+    for (final t in trips) {
+      if (t.bleMaxSpeedKph != null && (maxBleSpeed == null || t.bleMaxSpeedKph! > maxBleSpeed)) {
+        maxBleSpeed = t.bleMaxSpeedKph;
+      }
+      final leanDeg = t.bleMaxLeanDeg ?? t.phoneLeanMaxDeg;
+      if (leanDeg != null && (maxLean == null || leanDeg > maxLean)) maxLean = leanDeg;
+      if (t.distanceMeters > longestMeters) longestMeters = t.distanceMeters;
+    }
+
+    final rows = [
+      if (maxBleSpeed != null) ('Fastest recorded', '${maxBleSpeed.toStringAsFixed(0)} km/h'),
+      if (maxLean != null) ('Deepest lean', '${maxLean.toStringAsFixed(0)}°'),
+      if (longestMeters > 0) ('Longest trip', '${(longestMeters / 1000).toStringAsFixed(0)} km'),
+    ];
+    if (rows.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'BIKE RECORDS',
+          style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.accent, fontWeight: FontWeight.w400),
+        ),
+        const SizedBox(height: 8),
+        for (final (label, value) in rows)
+          Container(
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Noct.n900, width: 1))),
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(label, style: const TextStyle(fontSize: 13, color: Noct.n400, fontWeight: FontWeight.w400)),
+                Text(value, style: const TextStyle(fontSize: 13, color: Noct.text, fontWeight: FontWeight.w400)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _RecentTrips extends StatelessWidget {
+  const _RecentTrips({required this.trips, required this.vehicle, required this.onConfirmDelete});
+  final List<Trip> trips;
   final Vehicle vehicle;
   final Future<bool> Function(Trip) onConfirmDelete;
 
   String _fmtDuration(int seconds) {
     final d = Duration(seconds: seconds);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
+    final hours = d.inHours;
+    final minutes = d.inMinutes % 60;
+    return hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
   }
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Dismissible(
-      key: ValueKey(trip.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(color: scheme.error, borderRadius: BorderRadius.circular(18)),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Icon(Icons.delete_outline, color: scheme.onError),
-      ),
-      confirmDismiss: (_) => onConfirmDelete(trip),
-      onDismissed: (_) => TripRepository.instance.deleteTrip(trip.id),
-      child: Card(
-        child: ListTile(
-          leading: CircleAvatar(
-            radius: 20,
-            backgroundColor: scheme.secondary.withValues(alpha: 0.16),
-            child: Icon(Icons.route_outlined, color: scheme.secondary),
-          ),
-          title: Text(
-            '${trip.distanceKm.toStringAsFixed(2)} km',
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
-          ),
-          subtitle: Text(
-            '${trip.startedAt.toLocal().toString().substring(0, 16)} · ${_fmtDuration(trip.durationSeconds)}',
-          ),
-          trailing: trip.isFinished
-              ? null
-              : Chip(
-                  label: const Text('In progress'),
-                  backgroundColor: scheme.primary.withValues(alpha: 0.16),
-                  labelStyle: TextStyle(color: scheme.primary, fontWeight: FontWeight.w700),
-                  side: BorderSide.none,
-                ),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle)),
-          ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'RECENT TRIPS',
+          style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.n500, fontWeight: FontWeight.w400),
         ),
-      ),
+        const SizedBox(height: 8),
+        if (trips.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Text('No trips recorded with this vehicle yet.', style: TextStyle(color: Noct.n500, fontSize: 13)),
+          )
+        else
+          for (final trip in trips)
+            Dismissible(
+              key: ValueKey(trip.id),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                margin: const EdgeInsets.symmetric(vertical: 2),
+                decoration: BoxDecoration(color: Theme.of(context).colorScheme.error, borderRadius: BorderRadius.circular(Noct.rMd)),
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Icon(Ph.trash, color: Theme.of(context).colorScheme.onError, size: 16),
+              ),
+              confirmDismiss: (_) => onConfirmDelete(trip),
+              onDismissed: (_) => TripRepository.instance.deleteTrip(trip.id),
+              child: InkWell(
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle))),
+                overlayColor: WidgetStatePropertyAll(Noct.accent.withValues(alpha: 0.05)),
+                child: Container(
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Noct.n900, width: 1))),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${trip.distanceKm.toStringAsFixed(1)} km',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Noct.text,
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                            Text(
+                              '${fmtDayMonth(trip.startedAt)} · ${_fmtDuration(trip.durationSeconds)}',
+                              style: const TextStyle(fontSize: 11, color: Noct.n500),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Ph.caretRight, size: 13, color: Noct.n600),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+      ],
     );
   }
 }
