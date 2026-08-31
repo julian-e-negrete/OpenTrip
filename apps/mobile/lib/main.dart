@@ -47,9 +47,8 @@ class OpenTripApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OpenTrip',
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+      theme: AppTheme.dark,
+      themeMode: ThemeMode.dark,
       home: const _AuthGate(),
     );
   }

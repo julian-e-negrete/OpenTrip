@@ -41,6 +41,13 @@ dependencies:
   # Phone-based lean angle tracking (trip/lean_angle_tracker.dart) — the
   # accelerometer, not activity/location sensors, so no runtime permission.
   sensors_plus: ^6.1.1
+  # Nocturne theme (see theme/app_theme.dart): Inter everywhere.
+  google_fonts: ^8.2.1
+  # Bundled only for its font assets (lib/fonts/Phosphor*.ttf) — its own
+  # Dart icon-data classes don't compile against this Flutter SDK anymore
+  # (they `extend IconData`, which is now a `final` class). See
+  # theme/ph_icons.dart, which references the same glyphs by codepoint.
+  phosphor_flutter: ^2.1.0
 
 dev_dependencies:
   flutter_test:

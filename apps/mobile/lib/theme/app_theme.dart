@@ -1,256 +1,319 @@
+// OpenTrip — Nocturne theme
+// Drop-in replacement for apps/mobile/lib/theme/app_theme.dart.
+// Every value here comes from the Nocturne token sheet
+// (_ds/nocturne-.../styles.css). Do not introduce colours outside this file.
+//
+// Requires in pubspec.yaml:
+//   google_fonts: ^6.1.0
+// (or vendor Inter under assets/fonts and set fontFamily: 'Inter')
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-/// OpenTrip's "Bold & Energetic" visual identity: vibrant coral/violet/lime
-/// accents on a warm-black (dark) or warm-white (light) ground, heavier
-/// type at a bigger scale than stock Material. Chosen by comparing three
-/// mocked-up directions (automotive-dashboard, refined-minimal, this one)
-/// side by side — see docs/ROADMAP.md.
-///
-/// The three accent roles map onto specific stats everywhere they're shown
-/// (recording_screen.dart, trip_detail_screen.dart) rather than being
-/// interchangeable Material roles:
-///   - [ColorScheme.primary]   (coral)  — speed, the record button, the
-///     active bottom-nav tab.
-///   - [ColorScheme.secondary] (violet) — distance, the route line on the
-///     map, BLE/bike telemetry.
-///   - [ColorScheme.tertiary]  (lime)   — lean angle, anything about
-///     cornering/grip.
-/// [ColorScheme.error] is a separate, more purely-red hue from primary's
-/// coral-pink on purpose — a delete/error action needs to read as distinct
-/// from routine "this is the brand accent" coral.
-class AppTheme {
-  AppTheme._();
+/// Raw Nocturne tokens. Reference these directly for anything ThemeData
+/// cannot express (stat labels, gauge strokes, map overlays).
+abstract final class Noct {
+  // Core roles
+  static const bg = Color(0xFF161826);
+  static const surface = Color(0xFF232532);
+  static const text = Color(0xFFE9E9ED);
+  static const accent = Color(0xFF9184D9);
+  static const divider = Color(0x29E9E9ED); // #e9e9ed @ 16%
 
-  static const _lightBg = Color(0xFFFFF4EC);
-  static const _lightSurface = Color(0xFFFFFFFF);
-  static const _lightInk = Color(0xFF1A1025);
-  static const _lightMuted = Color(0xFF7A6E82);
-  static const _lightBorder = Color(0xFFF0DCCB);
-  static const _lightCoral = Color(0xFFD1225A);
-  static const _lightViolet = Color(0xFF5B32D6);
-  static const _lightLime = Color(0xFF1C8F57);
-  static const _lightError = Color(0xFFBA1A1A);
+  // Neutral ramp
+  static const n100 = Color(0xFFF3F5FE);
+  static const n200 = Color(0xFFE4E7F5);
+  static const n300 = Color(0xFFCFD3E5);
+  static const n400 = Color(0xFFB2B6CA);
+  static const n500 = Color(0xFF9397AB);
+  static const n600 = Color(0xFF75798C);
+  static const n700 = Color(0xFF595D6C);
+  static const n800 = Color(0xFF3F424D);
+  static const n900 = Color(0xFF292B31);
 
-  static const _darkBg = Color(0xFF1A1025);
-  static const _darkSurface = Color(0xFF251731);
-  static const _darkInk = Color(0xFFF5EFFF);
-  static const _darkMuted = Color(0xFFA99BB8);
-  static const _darkBorder = Color(0xFF33223F);
-  static const _darkCoral = Color(0xFFFF4D6D);
-  static const _darkViolet = Color(0xFF9C6BFF);
-  static const _darkLime = Color(0xFFC6FF3D);
-  static const _darkError = Color(0xFFFFB4AB);
+  // Accent ramp
+  static const a100 = Color(0xFFF5F4FF);
+  static const a200 = Color(0xFFE7E5FE);
+  static const a300 = Color(0xFFD2CEFD);
+  static const a400 = Color(0xFFB5ABFC);
+  static const a500 = Color(0xFF968AE0);
+  static const a600 = Color(0xFF796CBF);
+  static const a700 = Color(0xFF5D5294);
+  static const a800 = Color(0xFF423A6A);
+  static const a900 = Color(0xFF2B2741);
 
-  static final ThemeData light = _build(
-    brightness: Brightness.light,
-    bg: _lightBg,
-    surface: _lightSurface,
-    ink: _lightInk,
-    muted: _lightMuted,
-    border: _lightBorder,
-    coral: _lightCoral,
-    violet: _lightViolet,
-    lime: _lightLime,
-    error: _lightError,
+  /// Map / media canvas — one step below the page ground.
+  static const canvas = Color(0xFF10121C);
+
+  /// Share-card ground (the only saturated fill in the app).
+  static const section = Color(0xFF262A60);
+
+  // Spacing scale (density 0.70x). Round to these, not to 8-pt.
+  static const s1 = 2.8, s2 = 5.6, s3 = 8.4, s4 = 11.2, s6 = 16.8, s8 = 22.4;
+
+  // Radii
+  static const rSm = 4.0, rMd = 8.0, rLg = 14.0;
+
+  /// Elevation is a hairline edge, never a drop shadow, at rest.
+  static const shadowSm = <BoxShadow>[];
+  static Border get edgeSm => Border.all(color: n800, width: 1);
+  static const shadowMd = <BoxShadow>[
+    BoxShadow(color: Color(0x8C000000), blurRadius: 18, offset: Offset(0, 6)),
+  ];
+
+  /// Standard surface panel: flat fill + hairline edge, 8px radius.
+  static BoxDecoration get panel => BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(rMd),
+        border: Border.all(color: n800, width: 1),
+      );
+
+  /// "Yours / live" panel — the only tinted surface.
+  static BoxDecoration get panelAccent => BoxDecoration(
+        color: a900,
+        borderRadius: BorderRadius.circular(rMd),
+        border: Border.all(color: a700, width: 1),
+      );
+
+  /// The uppercase micro-label under every statistic.
+  static const statLabel = TextStyle(
+    fontSize: 9.5,
+    height: 1.2,
+    letterSpacing: 1.05, // ~.11em
+    fontWeight: FontWeight.w400,
+    color: n500,
   );
 
-  static final ThemeData dark = _build(
-    brightness: Brightness.dark,
-    bg: _darkBg,
-    surface: _darkSurface,
-    ink: _darkInk,
-    muted: _darkMuted,
-    border: _darkBorder,
-    coral: _darkCoral,
-    violet: _darkViolet,
-    lime: _darkLime,
-    error: _darkError,
-  );
+  /// Big numerals. Always tabular, always w500, never bold.
+  static TextStyle stat(double size, {Color? color}) => TextStyle(
+        fontSize: size,
+        height: 0.9,
+        letterSpacing: size * -0.03,
+        fontWeight: FontWeight.w500,
+        color: color ?? text,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
+}
 
-  static ThemeData _build({
-    required Brightness brightness,
-    required Color bg,
-    required Color surface,
-    required Color ink,
-    required Color muted,
-    required Color border,
-    required Color coral,
-    required Color violet,
-    required Color lime,
-    required Color error,
-  }) {
-    final isDark = brightness == Brightness.dark;
-    final onCoral = isDark ? _darkBg : Colors.white;
-    final onLime = isDark ? _darkBg : Colors.white;
-    final onError = isDark ? _darkBg : Colors.white;
-
-    final colorScheme = ColorScheme(
-      brightness: brightness,
-      primary: coral,
-      onPrimary: onCoral,
-      secondary: violet,
-      onSecondary: Colors.white,
-      tertiary: lime,
-      onTertiary: onLime,
-      error: error,
-      onError: onError,
-      surface: surface,
-      onSurface: ink,
-      surfaceContainerHighest: border,
-      onSurfaceVariant: muted,
-      outline: border,
-      outlineVariant: border,
-      inverseSurface: ink,
-      onInverseSurface: surface,
+abstract final class AppTheme {
+  static ThemeData get dark {
+    final base = ThemeData.dark(useMaterial3: true);
+    final scheme = const ColorScheme.dark(
+      brightness: Brightness.dark,
+      primary: Noct.accent,
+      onPrimary: Noct.a100,
+      primaryContainer: Noct.a900,
+      onPrimaryContainer: Noct.a200,
+      secondary: Noct.accent,
+      onSecondary: Noct.a100,
+      secondaryContainer: Noct.a900,
+      onSecondaryContainer: Noct.a200,
+      surface: Noct.bg,
+      onSurface: Noct.text,
+      surfaceContainerLowest: Noct.canvas,
+      surfaceContainerLow: Noct.bg,
+      surfaceContainer: Noct.surface,
+      surfaceContainerHigh: Noct.surface,
+      surfaceContainerHighest: Noct.surface,
+      onSurfaceVariant: Noct.n500,
+      outline: Noct.n800,
+      outlineVariant: Noct.n900,
+      error: Color(0xFFE8899B),
+      onError: Color(0xFF2B1A1F),
     );
 
-    final textTheme = Typography.material2021(platform: TargetPlatform.android).black.apply(
-      bodyColor: ink,
-      displayColor: ink,
+    final textTheme = GoogleFonts.interTextTheme(base.textTheme).apply(
+      bodyColor: Noct.text,
+      displayColor: Noct.text,
     );
 
-    return ThemeData(
-      useMaterial3: true,
-      brightness: brightness,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: bg,
-      canvasColor: bg,
-      splashFactory: InkSparkle.splashFactory,
+    return base.copyWith(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: Noct.bg,
+      canvasColor: Noct.bg,
+      dividerColor: Noct.n900,
+      splashFactory: InkRipple.splashFactory,
+      // Hierarchy is size and space — nothing is heavier than w500.
       textTheme: textTheme.copyWith(
-        titleLarge: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800, letterSpacing: -0.2),
-        titleMedium: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-        bodyMedium: textTheme.bodyMedium?.copyWith(color: ink),
-        bodySmall: textTheme.bodySmall?.copyWith(color: muted),
-        labelLarge: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-        labelSmall: textTheme.labelSmall?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-          color: muted,
-        ),
+        displayLarge: textTheme.displayLarge?.copyWith(fontWeight: FontWeight.w500, letterSpacing: -2.4, height: 0.88),
+        displayMedium: textTheme.displayMedium?.copyWith(fontWeight: FontWeight.w500, letterSpacing: -1.8, height: 0.9),
+        headlineLarge: textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.w500, letterSpacing: -0.9),
+        headlineMedium: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w500, letterSpacing: -0.7),
+        titleLarge: textTheme.titleLarge?.copyWith(fontSize: 26, fontWeight: FontWeight.w500, letterSpacing: -0.52),
+        titleMedium: textTheme.titleMedium?.copyWith(fontSize: 15, fontWeight: FontWeight.w500, letterSpacing: 0),
+        bodyLarge: textTheme.bodyLarge?.copyWith(fontSize: 13.5, height: 1.5),
+        bodyMedium: textTheme.bodyMedium?.copyWith(fontSize: 12.5, height: 1.55, color: Noct.n400),
+        bodySmall: textTheme.bodySmall?.copyWith(fontSize: 11, height: 1.45, color: Noct.n500),
+        labelSmall: Noct.statLabel,
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: bg,
-        foregroundColor: ink,
+        backgroundColor: Noct.bg,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: Noct.text,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: false,
+        titleSpacing: 18,
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        iconTheme: const IconThemeData(color: Noct.n400, size: 19),
+        actionsIconTheme: const IconThemeData(color: Noct.n400, size: 19),
+        titleTextStyle: GoogleFonts.inter(
+          fontSize: 26, fontWeight: FontWeight.w500, letterSpacing: -0.52, color: Noct.text,
+        ),
+      ),
+      // Flat surface + hairline edge. No Material elevation anywhere.
+      cardTheme: CardThemeData(
+        color: Noct.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        centerTitle: false,
-        titleTextStyle: TextStyle(
-          color: ink,
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          letterSpacing: -0.2,
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: surface,
-        elevation: 0,
-        margin: const EdgeInsets.symmetric(vertical: 6),
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: border),
+          borderRadius: BorderRadius.circular(Noct.rMd),
+          side: const BorderSide(color: Noct.n800, width: 1),
         ),
       ),
-      listTileTheme: ListTileThemeData(
-        iconColor: muted,
-        textColor: ink,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      listTileTheme: const ListTileThemeData(
+        contentPadding: EdgeInsets.symmetric(horizontal: 0, vertical: 4),
+        minVerticalPadding: 13,
+        iconColor: Noct.n500,
+        textColor: Noct.text,
+        titleTextStyle: TextStyle(fontSize: 13.5, color: Noct.text),
+        subtitleTextStyle: TextStyle(fontSize: 11, color: Noct.n500),
+      ),
+      dividerTheme: const DividerThemeData(color: Noct.n900, thickness: 1, space: 1),
+      // Primary actions are OUTLINED, never filled.
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: const WidgetStatePropertyAll(Noct.a200),
+          side: const WidgetStatePropertyAll(BorderSide(color: Noct.accent, width: 1.5)),
+          padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 18, vertical: 15)),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(Noct.rMd)),
+          ),
+          textStyle: WidgetStatePropertyAll(
+            GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w500),
+          ),
+          overlayColor: WidgetStateProperty.resolveWith((s) {
+            if (s.contains(WidgetState.pressed)) return Noct.a800.withValues(alpha: 0.55);
+            if (s.contains(WidgetState.hovered)) return Noct.accent.withValues(alpha: 0.14);
+            return null;
+          }),
+        ),
+      ),
+      // Secondary: neutral outline.
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: const WidgetStatePropertyAll(Noct.n300),
+          padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 14, vertical: 10)),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(Noct.rMd)),
+          ),
+          textStyle: WidgetStatePropertyAll(GoogleFonts.inter(fontSize: 13)),
+          overlayColor: WidgetStatePropertyAll(Noct.n100.withValues(alpha: 0.05)),
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          iconColor: const WidgetStatePropertyAll(Noct.n400),
+          iconSize: const WidgetStatePropertyAll(19),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(Noct.rMd)),
+          ),
+          overlayColor: WidgetStatePropertyAll(Noct.n100.withValues(alpha: 0.05)),
+        ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: border.withValues(alpha: isDark ? 0.35 : 0.6),
-        labelStyle: TextStyle(color: ink, fontWeight: FontWeight.w700, fontSize: 12),
-        side: BorderSide(color: border),
-        shape: const StadiumBorder(),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        backgroundColor: Colors.transparent,
+        selectedColor: Noct.a900,
+        side: const BorderSide(color: Noct.divider),
+        labelStyle: GoogleFonts.inter(fontSize: 12, color: Noct.n400),
+        secondaryLabelStyle: GoogleFonts.inter(fontSize: 12, color: Noct.a100),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Noct.rMd)),
+        showCheckmark: false,
       ),
-      dividerTheme: DividerThemeData(color: border, thickness: 1, space: 24),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surface,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: border)),
+        fillColor: Noct.surface,
+        hintStyle: GoogleFonts.inter(fontSize: 13, color: Noct.n500),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 13, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(Noct.rMd),
+          borderSide: const BorderSide(color: Noct.divider),
+        ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: border),
+          borderRadius: BorderRadius.circular(Noct.rMd),
+          borderSide: const BorderSide(color: Noct.divider),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: coral, width: 2),
-        ),
-        labelStyle: TextStyle(color: muted),
-      ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: coral,
-          foregroundColor: onCoral,
-          textStyle: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.1),
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: ink,
-          side: BorderSide(color: border),
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-      ),
-      textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          foregroundColor: coral,
-          textStyle: const TextStyle(fontWeight: FontWeight.w700),
-        ),
-      ),
-      checkboxTheme: CheckboxThemeData(
-        fillColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected) ? coral : Colors.transparent,
-        ),
-        checkColor: WidgetStateProperty.all(onCoral),
-        side: BorderSide(color: muted, width: 1.6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-      ),
-      switchTheme: SwitchThemeData(
-        thumbColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected) ? coral : muted,
-        ),
-        trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected) ? coral.withValues(alpha: 0.35) : border,
+          borderRadius: BorderRadius.circular(Noct.rMd),
+          borderSide: const BorderSide(color: Noct.accent, width: 1.5),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: surface,
+        backgroundColor: Noct.surface,
         surfaceTintColor: Colors.transparent,
-        indicatorColor: coral.withValues(alpha: isDark ? 0.22 : 0.14),
+        indicatorColor: Colors.transparent, // no Material pill
         elevation: 0,
-        height: 68,
-        labelTextStyle: WidgetStateProperty.resolveWith(
-          (states) => TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: states.contains(WidgetState.selected) ? coral : muted,
+        height: 62,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (s) => IconThemeData(
+            size: 20,
+            color: s.contains(WidgetState.selected) ? Noct.accent : Noct.n500,
           ),
         ),
-        iconTheme: WidgetStateProperty.resolveWith(
-          (states) => IconThemeData(
-            color: states.contains(WidgetState.selected) ? coral : muted,
-            size: 24,
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (s) => GoogleFonts.inter(
+            fontSize: 10,
+            color: s.contains(WidgetState.selected) ? Noct.accent : Noct.n500,
           ),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? Noct.a200 : Noct.n600,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? Noct.a800 : Noct.n900,
+        ),
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+      ),
+      sliderTheme: const SliderThemeData(
+        activeTrackColor: Noct.accent,
+        inactiveTrackColor: Noct.n800,
+        thumbColor: Noct.a200,
+        trackHeight: 3,
+      ),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: Noct.accent,
+        linearTrackColor: Noct.n900,
+        linearMinHeight: 6,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Noct.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(Noct.rLg)),
+        ),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: Noct.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Noct.rLg),
+          side: const BorderSide(color: Noct.n700, width: 1),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: ink,
-        contentTextStyle: TextStyle(color: surface, fontWeight: FontWeight.w600),
+        backgroundColor: Noct.surface,
+        contentTextStyle: GoogleFonts.inter(fontSize: 13, color: Noct.text),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(Noct.rMd)),
       ),
-      dialogTheme: DialogThemeData(
-        backgroundColor: surface,
-        surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        titleTextStyle: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800),
-        contentTextStyle: TextStyle(color: muted, fontSize: 14),
-      ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: coral),
-      iconTheme: IconThemeData(color: ink),
     );
   }
 }

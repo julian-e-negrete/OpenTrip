@@ -17,6 +17,7 @@ import '../vehicle/ble_connection_service.dart';
 import 'camera_alerts.dart';
 import 'lean_angle_tracker.dart';
 import 'location_recorder.dart';
+import 'recording_controller.dart';
 import 'spotify_now_playing.dart';
 
 class RecordingScreen extends StatefulWidget {
@@ -286,6 +287,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
 
       setState(() => _activeTrip = trip);
+      RecordingController.instance.isRecording.value = true;
     } catch (e) {
       setState(() => _error = e.toString());
     }
@@ -369,6 +371,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
       points: points,
     );
 
+    RecordingController.instance.isRecording.value = false;
     if (!mounted) return;
     setState(() {
       _activeTrip = null;

@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../account/account_screen.dart';
 import '../auth/current_user.dart';
 import '../data/data_events.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../theme/ph_icons.dart';
 import 'add_vehicle_screen.dart';
 import 'vehicle_detail_screen.dart';
 
@@ -64,8 +66,17 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vehicles'),
-        actions: [IconButton(icon: const Icon(Icons.add), onPressed: _addVehicle)],
+        title: const Text('Garage'),
+        actions: [
+          IconButton(icon: const Icon(Icons.add), onPressed: _addVehicle),
+          IconButton(
+            icon: const Icon(Ph.userCircle, size: 20),
+            tooltip: 'Account',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AccountScreen()),
+            ),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
