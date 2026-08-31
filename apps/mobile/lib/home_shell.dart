@@ -49,6 +49,18 @@ class _HomeShellState extends State<HomeShell> {
     _Tab.garage: VehicleListScreen(),
   };
 
+  @override
+  void initState() {
+    super.initState();
+    RecordingController.instance.openRecordScreen = () => setState(() => _showingRecord = true);
+  }
+
+  @override
+  void dispose() {
+    RecordingController.instance.openRecordScreen = null;
+    super.dispose();
+  }
+
   void _selectTab(_Tab tab) {
     setState(() => _showingRecord = false);
     if (tab == _tab) {
@@ -59,7 +71,23 @@ class _HomeShellState extends State<HomeShell> {
     setState(() => _tab = tab);
   }
 
-  void _toggleRecord() => setState(() => _showingRecord = !_showingRecord);
+  /// The raised control does double duty: from another tab, the first
+  /// tap just opens Record (showing its idle state — the rider may still
+  /// need to pick a vehicle). From there, the same control starts and
+  /// later stops the trip — inside the app it's the only record control,
+  /// per the handoff's Record section.
+  void _onTapRecord() {
+    if (!_showingRecord) {
+      setState(() => _showingRecord = true);
+      return;
+    }
+    final rc = RecordingController.instance;
+    if (rc.isRecording.value) {
+      rc.onRequestStop?.call();
+    } else {
+      rc.onRequestStart?.call();
+    }
+  }
 
   Widget _buildTabNavigator(_Tab tab) {
     return Navigator(
@@ -82,13 +110,17 @@ class _HomeShellState extends State<HomeShell> {
               index: _Tab.values.indexOf(_tab),
               children: [for (final tab in _Tab.values) _buildTabNavigator(tab)],
             ),
-            if (_showingRecord) const RecordingScreen(),
+            // Offstage, not a conditional child: RecordingScreen owns the
+            // GPS/BLE subscriptions for whatever trip is in progress, and
+            // those must keep running when the rider switches tabs, not
+            // just while this is the front-most screen.
+            Offstage(offstage: !_showingRecord, child: const RecordingScreen()),
           ],
         ),
         bottomNavigationBar: _NocturneBottomBar(
           activeTab: _tab,
           onSelectTab: _selectTab,
-          onTapRecord: _toggleRecord,
+          onTapRecord: _onTapRecord,
         ),
       ),
     );

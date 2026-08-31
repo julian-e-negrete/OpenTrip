@@ -11,6 +11,7 @@ import 'home_shell.dart';
 import 'logging/log_buffer.dart';
 import 'sync/sync_service.dart';
 import 'theme/app_theme.dart';
+import 'theme/layout_prefs.dart';
 
 void main() {
   // Capture every print() in the app — including flutter_blue_plus's own
@@ -27,6 +28,9 @@ void main() {
         await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
       }
       SyncService.instance.startListening();
+      // Loaded before the first frame so no screen flashes a default
+      // layout variant and then jumps once this resolves.
+      await LayoutPrefs.instance.load();
 
       runApp(const OpenTripApp());
     },

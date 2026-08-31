@@ -56,4 +56,5 @@ abstract final class Ph {
   /// replay play glyph, per the design handoff.
   static const IconData musicNoteFill = IconData(0xe33c, fontFamily: _fill, fontPackage: _pkg, matchTextDirection: true);
   static const IconData playFill = IconData(0xe3d0, fontFamily: _fill, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData pauseFill = IconData(0xe39e, fontFamily: _fill, fontPackage: _pkg, matchTextDirection: true);
 }
