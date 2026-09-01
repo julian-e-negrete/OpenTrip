@@ -83,6 +83,51 @@ jobs:
             apps" for whatever app you downloaded it with) and open it.
           files: apps/mobile/build/app/outputs/flutter-apk/*.apk
 
+  # Drives the real app on a real Android system — integration_test/
+  # (unlike test/, which flutter test's own comments already document as
+  # host-side only: no sqflite/geolocator/etc. platform channels, so
+  # anything past the login screen hangs there). This is deliberately its
+  # own job, not a step in build/, so a flaky/slow emulator never holds up
+  # publishing a build.
+  #
+  # This runs on GitHub's own runners on purpose rather than a
+  # contributor's dev machine: KVM there is real, dedicated hardware
+  # acceleration with nothing else competing for it. Attempting the same
+  # thing locally on a modest, already-busy desktop (a live GUI session,
+  # an IDE, browser tabs) is a well-known way to get exactly what this
+  # was built to catch on the first attempt instead — the emulator's own
+  # system_server crashing or ANRing under contention, unrelated to
+  # anything the app itself did.
+  integration-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.0"
+          channel: stable
+          cache: true
+
+      - name: Install app dependencies
+        working-directory: apps/mobile
+        run: flutter pub get
+
+      - name: Run integration tests on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          working-directory: apps/mobile
+          script: flutter test integration_test/app_test.dart
+
   # Compile-only sanity check for iOS — this project has no way to build
   # or run iOS locally (see docs/IOS_TESTING_SETUP.md), so this is the
   # only automated signal that an iOS-affecting change (or a change that

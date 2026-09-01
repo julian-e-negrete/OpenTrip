@@ -176,7 +176,7 @@ class _NocturneBottomBar extends StatelessWidget {
             left: 0,
             right: 0,
             child: Center(
-              child: _RaisedRecordControl(onTap: onTapRecord),
+              child: _RaisedRecordControl(key: const Key('raisedRecordControl'), onTap: onTapRecord),
             ),
           ),
         ],
@@ -217,7 +217,7 @@ class _NocturneBottomBar extends StatelessWidget {
 /// circle. Recording: an accent square (the "stop" affordance) with an
 /// infinite pulsing ring, per the handoff's Shell & navigation spec.
 class _RaisedRecordControl extends StatefulWidget {
-  const _RaisedRecordControl({required this.onTap});
+  const _RaisedRecordControl({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
