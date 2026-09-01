@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -842,10 +843,40 @@ class _MapVariantState extends State<_MapVariant> {
   final _mapController = MapController();
   int _lastCenteredCount = 0;
 
+  // Before a trip has produced any points of its own, this is what
+  // "map first" actually shows — the rider's current position, so the
+  // screen reads as ready-to-go rather than a blank box. Fetched once on
+  // first mount; silently stays null (map stays blank, same as before
+  // this fix) if there's no location permission/fix yet.
+  LatLng? _idleLocation;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIdleLocation();
+  }
+
+  Future<void> _loadIdleLocation() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
+
+      final last = await Geolocator.getLastKnownPosition();
+      final pos = last ?? await Geolocator.getCurrentPosition();
+      if (mounted) setState(() => _idleLocation = LatLng(pos.latitude, pos.longitude));
+    } catch (_) {
+      // Location services off, or no fix yet — the map just stays blank
+      // until a trip actually starts producing points.
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final pts = widget.points;
-    final current = pts.isNotEmpty ? LatLng(pts.last.latitude, pts.last.longitude) : null;
+    final current = pts.isNotEmpty ? LatLng(pts.last.latitude, pts.last.longitude) : _idleLocation;
 
     if (current != null && pts.length != _lastCenteredCount) {
       _lastCenteredCount = pts.length;
