@@ -439,9 +439,15 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
                 ),
                 children: [
                   TileLayer(
+                    // Dark Matter, not OSM's colorful default street
+                    // style — matches territory_map_screen.dart, the only
+                    // other place this app tiles a street basemap.
+                    // Satellite imagery is exempt (a photograph can't be
+                    // made to match an app palette); only the street mode
+                    // needs to.
                     urlTemplate: _satellite
                         ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        : 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
                     userAgentPackageName: 'co.opentrip.opentrip_mobile',
                   ),
                   PolylineLayer(

@@ -899,7 +899,11 @@ class _MapVariantState extends State<_MapVariant> {
                   options: MapOptions(initialCenter: current, initialZoom: 16),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      // Dark Matter, not OSM's colorful default street
+                      // style — matches territory_map_screen.dart and
+                      // trip_detail_screen.dart, the app's other two
+                      // street basemaps.
+                      urlTemplate: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
                       userAgentPackageName: 'co.opentrip.opentrip_mobile',
                     ),
                     if (pts.length >= 2)
