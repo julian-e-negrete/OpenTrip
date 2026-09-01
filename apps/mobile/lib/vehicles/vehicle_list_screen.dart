@@ -184,68 +184,90 @@ class _VehicleRow extends StatelessWidget {
         ? null
         : (vehicle.lastServiceOdometerKm ?? vehicle.startingOdometerKm ?? 0) + vehicle.serviceIntervalKm! - mileageKm;
 
+    // The name/icon area and the connection pill are two independent tap
+    // targets (navigate vs. toggle BLE) — deliberately siblings, not one
+    // nested inside the other's InkWell. Nesting two tap regions here
+    // made the connection pill's own tap ambiguous with the row's
+    // navigate-to-detail tap (both being simple, non-competing
+    // TapGestureRecognizers in the same gesture arena), which is what
+    // made BLE effectively unreachable from this row.
     return NoctPanel(
-      onTap: onTap,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: supportsBle ? Noct.a900 : Noct.n900,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: vehicle.photoPath != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(File(vehicle.photoPath!), width: 44, height: 44, fit: BoxFit.cover),
-                      )
-                    : Icon(
-                        supportsBle ? Ph.motorcycle : Ph.car,
-                        size: 22,
-                        color: supportsBle ? Noct.a200 : Noct.n400,
-                      ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      vehicle.name,
-                      style: const TextStyle(fontSize: 15, color: Noct.text, fontWeight: FontWeight.w400),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      supportsBle ? '${vehicle.type.name} · Kawasaki Rideology BLE' : vehicle.type.name,
-                      style: const TextStyle(fontSize: 11.5, color: Noct.n500),
-                    ),
-                  ],
+                child: InkWell(
+                  onTap: onTap,
+                  borderRadius: BorderRadius.circular(Noct.rMd),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: supportsBle ? Noct.a900 : Noct.n900,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: vehicle.photoPath != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.file(File(vehicle.photoPath!), width: 44, height: 44, fit: BoxFit.cover),
+                              )
+                            : Icon(
+                                supportsBle ? Ph.motorcycle : Ph.car,
+                                size: 22,
+                                color: supportsBle ? Noct.a200 : Noct.n400,
+                              ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              vehicle.name,
+                              style: const TextStyle(fontSize: 15, color: Noct.text, fontWeight: FontWeight.w400),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              supportsBle ? '${vehicle.type.name} · Kawasaki Rideology BLE' : vehicle.type.name,
+                              style: const TextStyle(fontSize: 11.5, color: Noct.n500),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (!supportsBle) const SizedBox(width: 14),
+                    ],
+                  ),
                 ),
               ),
               if (!supportsBle)
-                const Icon(Ph.caretRight, size: 14, color: Noct.n600)
+                const Padding(
+                  padding: EdgeInsets.only(top: 15),
+                  child: Icon(Ph.caretRight, size: 14, color: Noct.n600),
+                )
               else
-                GestureDetector(
+                InkWell(
                   onTap: onTapConnection,
-                  child: connected
-                      ? const _ConnectionPill()
-                      : connecting
-                      ? const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 4),
-                          child: SizedBox(
+                  borderRadius: BorderRadius.circular(Noct.rMd),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: connected
+                        ? const _ConnectionPill()
+                        : connecting
+                        ? const SizedBox(
                             width: 14,
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n500),
-                          ),
-                        )
-                      : const Icon(Ph.caretRight, size: 14, color: Noct.n600),
+                          )
+                        : const Icon(Ph.caretRight, size: 14, color: Noct.n600),
+                  ),
                 ),
             ],
           ),

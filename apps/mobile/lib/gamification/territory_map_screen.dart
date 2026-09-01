@@ -168,7 +168,11 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
           ],
         ),
         Positioned(
-          top: 14,
+          // The map is deliberately full-bleed under the status bar/notch,
+          // but these controls have to be real tap targets — without the
+          // safe-area inset they render (and hit-test) right under the
+          // system status bar, unreachable.
+          top: 14 + MediaQuery.paddingOf(context).top,
           left: 16,
           right: 16,
           child: Row(

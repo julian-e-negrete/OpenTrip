@@ -588,6 +588,27 @@ class _RecordingScreenState extends State<RecordingScreen> {
             ),
           },
         ),
+        // The raised control on the tab bar can also start/stop a trip
+        // (see home_shell.dart's onTapRecord), but nothing about it reads
+        // as a record button on first glance, and a rider with no
+        // vehicle-detail context has no other way to tell that tapping it
+        // again — rather than a second navigation — is what starts the
+        // trip. This is the reliable, unambiguous fallback for that.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          child: SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: recording ? _stop : (_selectedVehicle == null ? null : _start),
+              style: OutlinedButton.styleFrom(
+                side: BorderSide(color: recording ? Theme.of(context).colorScheme.error : Noct.accent, width: 1.5),
+                foregroundColor: recording ? Theme.of(context).colorScheme.error : Noct.a200,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+              ),
+              child: Text(recording ? 'Stop & save' : 'Start recording'),
+            ),
+          ),
+        ),
       ],
     );
   }

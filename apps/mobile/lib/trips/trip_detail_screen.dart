@@ -493,7 +493,11 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
                 ),
               ),
               Positioned(
-                top: 12,
+                // The hero map is deliberately full-bleed under the status
+                // bar/notch, but these chips have to be real tap targets —
+                // without the safe-area inset they render (and hit-test)
+                // right under the system status bar, unreachable.
+                top: 12 + MediaQuery.paddingOf(context).top,
                 left: 10,
                 right: 10,
                 child: Row(
