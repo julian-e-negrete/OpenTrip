@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'gamification/territory_map_screen.dart';
 import 'leaderboard/leaderboard_screen.dart';
@@ -35,6 +36,27 @@ class _HomeShellState extends State<HomeShell> {
   _Tab _tab = _Tab.trips;
   bool _showingRecord = false;
 
+  /// Whether the *active* tab's own Navigator is currently pushed past
+  /// its root screen (Add vehicle, Trip detail, Friends, ...). Every
+  /// screen like that was designed full-screen — a full-bleed hero map,
+  /// its own back arrow — on the assumption nothing else is on screen
+  /// below it, so the bottom bar hides for as long as this is true.
+  /// Recomputed on every push/pop via a [_TabPopObserver] on each tab's
+  /// Navigator (see [_buildTabNavigator]), since nothing else tells this
+  /// widget when a *descendant* screen pushes a route on its own.
+  bool _canPopActiveTab = false;
+
+  void _refreshCanPopActiveTab() {
+    // Observers can fire mid-transition, before the new route has
+    // actually settled into the Navigator's stack — defer to the next
+    // frame rather than risk a setState during build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final canPop = _navigatorKeys[_tab]!.currentState?.canPop() ?? false;
+      if (canPop != _canPopActiveTab) setState(() => _canPopActiveTab = canPop);
+    });
+  }
+
   final _navigatorKeys = {
     _Tab.trips: GlobalKey<NavigatorState>(),
     _Tab.ranks: GlobalKey<NavigatorState>(),
@@ -68,7 +90,10 @@ class _HomeShellState extends State<HomeShell> {
       _navigatorKeys[tab]!.currentState?.popUntil((route) => route.isFirst);
       return;
     }
-    setState(() => _tab = tab);
+    setState(() {
+      _tab = tab;
+      _canPopActiveTab = _navigatorKeys[tab]!.currentState?.canPop() ?? false;
+    });
   }
 
   /// The raised control does double duty: from another tab, the first
@@ -92,6 +117,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _buildTabNavigator(_Tab tab) {
     return Navigator(
       key: _navigatorKeys[tab],
+      observers: [_TabPopObserver(_refreshCanPopActiveTab)],
       onGenerateRoute: (settings) => MaterialPageRoute(builder: (_) => _roots[tab]!),
     );
   }
@@ -99,9 +125,33 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: !_showingRecord,
+      // Always false: with four independent per-tab Navigators (see the
+      // class doc comment), only this one — the outermost, wrapping the
+      // whole shell — is wired into the platform back button/gesture at
+      // all. A plain `canPop: !_showingRecord` let the framework complete
+      // a "real" pop (and, finding no more routes at the root, exit the
+      // app) for *any* back press anywhere except the Record overlay —
+      // including one meant to back out of a screen several levels deep
+      // in a tab's own stack (Add vehicle, Trip detail, Friends, ...),
+      // which killed the app outright instead. Deciding this always in
+      // the callback below, against each nested Navigator's live state,
+      // is the only way to get that right.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _showingRecord) setState(() => _showingRecord = false);
+        if (didPop) return;
+        if (_showingRecord) {
+          setState(() => _showingRecord = false);
+          return;
+        }
+        final nestedNavigator = _navigatorKeys[_tab]!.currentState;
+        if (nestedNavigator != null && nestedNavigator.canPop()) {
+          nestedNavigator.pop();
+          _refreshCanPopActiveTab();
+          return;
+        }
+        // Nothing left to pop anywhere — this is what canPop: true would
+        // have done automatically.
+        SystemNavigator.pop();
       },
       child: Scaffold(
         body: Stack(
@@ -117,14 +167,43 @@ class _HomeShellState extends State<HomeShell> {
             Offstage(offstage: !_showingRecord, child: const RecordingScreen()),
           ],
         ),
-        bottomNavigationBar: _NocturneBottomBar(
-          activeTab: _tab,
-          onSelectTab: _selectTab,
-          onTapRecord: _onTapRecord,
-        ),
+        // Every pushed screen (Add vehicle, Trip detail, Friends, ...) was
+        // designed full-screen — hero maps sized to bleed to the true
+        // screen edge, headers with their own back arrow — on the
+        // assumption there's no persistent chrome underneath. The Record
+        // overlay is the one exception: its bar (with the raised control
+        // doubling as its start/stop button) is meant to stay put.
+        bottomNavigationBar: (_canPopActiveTab && !_showingRecord)
+            ? null
+            : _NocturneBottomBar(
+                activeTab: _tab,
+                onSelectTab: _selectTab,
+                onTapRecord: _onTapRecord,
+              ),
       ),
     );
   }
+}
+
+/// Notifies [HomeShell] whenever one tab's own Navigator pushes or pops a
+/// route — the only way it learns that a *descendant* screen (reached
+/// several pushes deep, not through [HomeShell]'s own [_selectTab]/
+/// [_onTapRecord]) changed the active tab's stack depth.
+class _TabPopObserver extends NavigatorObserver {
+  _TabPopObserver(this.onChange);
+  final VoidCallback onChange;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => onChange();
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) => onChange();
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) => onChange();
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) => onChange();
 }
 
 class _NocturneBottomBar extends StatelessWidget {

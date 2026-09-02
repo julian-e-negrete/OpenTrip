@@ -64,8 +64,19 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     if (CurrentUser.instance.isGuest) {
-      return const Scaffold(
-        body: Center(
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Ranks'),
+          actions: [
+            IconButton(
+              icon: const Icon(Ph.users),
+              tooltip: 'Friends',
+              onPressed: () =>
+                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FriendsScreen())),
+            ),
+          ],
+        ),
+        body: const Center(
           child: Padding(
             padding: EdgeInsets.all(24),
             child: Text(
