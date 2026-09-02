@@ -8,6 +8,7 @@ import '../data/data_events.dart';
 import '../friends/friend_models.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/dark_tile_layer.dart';
 import '../theme/ph_icons.dart';
 import 'territory.dart';
 import 'territory_map_cell.dart';
@@ -160,10 +161,7 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
                 )
               : const MapOptions(initialCenter: LatLng(20, 0), initialZoom: 2),
           children: [
-            TileLayer(
-              urlTemplate: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-              userAgentPackageName: 'co.opentrip.opentrip_mobile',
-            ),
+            const DarkTileLayer(),
             PolygonLayer(polygons: polygons),
           ],
         ),

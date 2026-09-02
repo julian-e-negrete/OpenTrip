@@ -18,6 +18,7 @@ import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../gamification/gamification_service.dart';
 import '../theme/app_theme.dart';
+import '../theme/dark_tile_layer.dart';
 import '../theme/layout_prefs.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
@@ -898,14 +899,7 @@ class _MapVariantState extends State<_MapVariant> {
                   mapController: _mapController,
                   options: MapOptions(initialCenter: current, initialZoom: 16),
                   children: [
-                    TileLayer(
-                      // Dark Matter, not OSM's colorful default street
-                      // style — matches territory_map_screen.dart and
-                      // trip_detail_screen.dart, the app's other two
-                      // street basemaps.
-                      urlTemplate: 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'co.opentrip.opentrip_mobile',
-                    ),
+                    const DarkTileLayer(),
                     if (pts.length >= 2)
                       PolylineLayer(
                         polylines: [

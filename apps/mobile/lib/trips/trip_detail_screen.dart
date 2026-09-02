@@ -8,6 +8,7 @@ import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../theme/app_theme.dart';
+import '../theme/dark_tile_layer.dart';
 import '../theme/date_fmt.dart';
 import '../theme/layout_prefs.dart';
 import '../theme/ph_icons.dart';
@@ -418,6 +419,17 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
 
     final routePoints = pts.map((p) => LatLng(p.latitude, p.longitude)).toList();
     final bounds = LatLngBounds.fromPoints(routePoints);
+    // A trip with no real movement (every point at ~the same spot — a
+    // very short recording, or a stationary test) gives CameraFit.bounds
+    // a zero-area box, which makes flutter_map's own zoom-to-fit math
+    // divide by zero internally and throw ("Unsupported operation:
+    // Infinity or NaN toInt") rather than just picking some zoom level.
+    // Center-and-zoom sidesteps that fit calculation entirely.
+    final isDegenerate =
+        (bounds.north - bounds.south).abs() < 1e-6 && (bounds.east - bounds.west).abs() < 1e-6;
+    final mapOptions = isDegenerate
+        ? MapOptions(initialCenter: routePoints.first, initialZoom: 16)
+        : MapOptions(initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)));
 
     return ColoredBox(
       color: Noct.canvas,
@@ -434,22 +446,23 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
             fit: StackFit.expand,
             children: [
               FlutterMap(
-                options: MapOptions(
-                  initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
-                ),
+                options: mapOptions,
                 children: [
-                  TileLayer(
-                    // Dark Matter, not OSM's colorful default street
-                    // style — matches territory_map_screen.dart, the only
-                    // other place this app tiles a street basemap.
-                    // Satellite imagery is exempt (a photograph can't be
-                    // made to match an app palette); only the street mode
-                    // needs to.
-                    urlTemplate: _satellite
-                        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                        : 'https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'co.opentrip.opentrip_mobile',
-                  ),
+                  // Satellite imagery is exempt from Nocturne's palette —
+                  // a photograph can't be made to match an app color
+                  // scheme — but the street mode uses the same darkened
+                  // OSM tiles as territory_map_screen.dart (see
+                  // theme/dark_tile_layer.dart for why it's not a real
+                  // dark-styled basemap: that needs a paid/key-gated
+                  // provider now).
+                  if (_satellite)
+                    TileLayer(
+                      urlTemplate:
+                          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                      userAgentPackageName: 'co.opentrip.opentrip_mobile',
+                    )
+                  else
+                    const DarkTileLayer(),
                   PolylineLayer(
                     polylines: [
                       Polyline(points: routePoints, strokeWidth: 12, color: Noct.accent.withValues(alpha: 0.18)),
