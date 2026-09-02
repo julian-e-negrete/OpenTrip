@@ -114,6 +114,12 @@ class CameraAlertService {
       client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
       final request = await client.postUrl(Uri.parse('https://overpass-api.de/api/interpreter'));
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded');
+      // Overpass rejects requests carrying Dart's default HttpClient User-Agent
+      // (a generic "Dart/<version> (dart:io)" string) with a flat HTTP 406 —
+      // confirmed live, this silently broke every camera query. A real
+      // identifier, same convention as the map tiles' userAgentPackageName,
+      // is what their fair-use policy actually asks for anyway.
+      request.headers.set(HttpHeaders.userAgentHeader, 'co.opentrip.opentrip_mobile');
       request.write('data=${Uri.encodeQueryComponent(query)}');
       final response = await request.close().timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
