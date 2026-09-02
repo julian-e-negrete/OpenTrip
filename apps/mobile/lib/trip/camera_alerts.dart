@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -51,6 +52,10 @@ class CameraAlert {
 class CameraAlertService {
   final _alertController = StreamController<CameraAlert>.broadcast();
   Stream<CameraAlert> get alerts => _alertController.stream;
+
+  /// The cameras loaded for the current stretch — so the map can plot
+  /// them ahead of time, not just react once you're within alert range.
+  final camerasNotifier = ValueNotifier<List<CameraPoint>>(const []);
 
   static const _alertRadiusMeters = 500.0;
   static const _requeryDistanceMeters = 15000.0;
@@ -145,6 +150,7 @@ class CameraAlertService {
           })
           .whereType<CameraPoint>()
           .toList();
+      camerasNotifier.value = _cameras;
       logBuffer.add('Camera: loaded ${_cameras.length} camera(s) for this stretch');
     } catch (e) {
       // Best-effort — no network, Overpass unavailable/rate-limiting, or a
@@ -178,6 +184,7 @@ class CameraAlertService {
   }
 
   Future<void> dispose() async {
+    camerasNotifier.dispose();
     await _alertController.close();
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -576,6 +577,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               track: _currentTrack,
               showMusic: Platform.isAndroid,
               currentLeanDeg: leanNowDeg,
+              cameras: _recorder.camerasNotifier,
             ),
             RecordVariant.numbers => _NumbersVariant(
               stats: _stats,
@@ -828,6 +830,7 @@ class _MapVariant extends StatefulWidget {
     required this.track,
     required this.showMusic,
     required this.currentLeanDeg,
+    required this.cameras,
   });
 
   final List<TripPoint> points;
@@ -835,6 +838,7 @@ class _MapVariant extends StatefulWidget {
   final SpotifyTrackEvent? track;
   final bool showMusic;
   final double? currentLeanDeg;
+  final ValueListenable<List<CameraPoint>> cameras;
 
   @override
   State<_MapVariant> createState() => _MapVariantState();
@@ -916,6 +920,31 @@ class _MapVariantState extends State<_MapVariant> {
                           ),
                         ],
                       ),
+                    ValueListenableBuilder<List<CameraPoint>>(
+                      valueListenable: widget.cameras,
+                      builder: (context, cameras, _) => MarkerLayer(
+                        markers: [
+                          for (final camera in cameras)
+                            Marker(
+                              point: LatLng(camera.latitude, camera.longitude),
+                              width: 22,
+                              height: 22,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.orange.shade800,
+                                  border: Border.all(color: Noct.canvas, width: 1.5),
+                                ),
+                                child: Icon(
+                                  camera.type == CameraAlertType.redLightCamera ? Ph.trafficSignal : Ph.securityCamera,
+                                  size: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                     MarkerLayer(
                       markers: [
                         Marker(

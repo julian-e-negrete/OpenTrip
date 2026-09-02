@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -145,6 +146,10 @@ class LocationRecorder {
   /// Built into the recorder itself rather than trip/recording_screen.dart
   /// wiring its own.
   Stream<CameraAlert> get cameraAlertStream => _cameraAlerts.alerts;
+
+  /// The cameras loaded for the current stretch, so the map can plot them
+  /// ahead of time — see trip/camera_alerts.dart.
+  ValueListenable<List<CameraPoint>> get camerasNotifier => _cameraAlerts.camerasNotifier;
 
   bool get isRecording => _positionSub != null;
 

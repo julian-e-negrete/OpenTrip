@@ -56,6 +56,8 @@ abstract final class Ph {
   static const IconData gauge = IconData(0xe628, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData compass = IconData(0xe1c8, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData mapTrifold = IconData(0xe31a, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData securityCamera = IconData(0xeca4, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData trafficSignal = IconData(0xe9aa, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
 
   /// Fill weight — used only for the now-playing music note and the
   /// replay play glyph, per the design handoff.
