@@ -71,14 +71,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   Future<void> _delete() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete vehicle?'),
         content: Text('"${_vehicle.name}" and its trips will be removed from this device.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -101,15 +101,15 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     final mileage = _currentMileage();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Log a service?'),
         content: Text(
           'Marks ${mileage.km.toStringAsFixed(0)} km as this vehicle\'s last service — '
           'the next one is due ${_vehicle.serviceIntervalKm?.toStringAsFixed(0)} km after that.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Log it')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Log it')),
         ],
       ),
     );
@@ -120,14 +120,14 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   Future<bool> _confirmDeleteTrip(Trip trip) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete trip?'),
         content: Text('This ${trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],

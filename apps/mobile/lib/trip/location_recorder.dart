@@ -108,6 +108,11 @@ class LocationRecorder {
   String? _tripId;
   DateTime? _startedAt;
   int _seq = 0;
+
+  /// Independent of GPS fixes arriving at all — see [_tick]'s doc
+  /// comment for why this has to exist.
+  Timer? _tickTimer;
+  double? _lastSpeedKph;
   double _distanceMeters = 0;
   double? _maxSpeedKph;
   TripPoint? _lastAcceptedPoint;
@@ -205,6 +210,31 @@ class LocationRecorder {
       onDone: () {
         logBuffer.add('GPS: position stream closed (accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount glitch-rejected=$_rejectedGlitchCount)');
       },
+    );
+    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  /// A [RecordingStats] update wasn't otherwise guaranteed at any
+  /// particular rate — [_onPosition] only fires when a new fix actually
+  /// arrives, which [_buildLocationSettings]'s `distanceFilter: 3` means
+  /// it doesn't while stopped (parked, waiting at a light, or just
+  /// hasn't pulled away yet). Elapsed time is wall-clock, not something
+  /// that should ever depend on movement, so the whole display —
+  /// including the clock — read as hung any time the rider wasn't
+  /// currently moving. This ticks once a second regardless, recomputing
+  /// elapsed live and re-emitting whatever distance/speed the last real
+  /// fix reported.
+  void _tick() {
+    final startedAt = _startedAt;
+    if (startedAt == null) return;
+    _statsController.add(
+      RecordingStats(
+        elapsed: DateTime.now().difference(startedAt),
+        distanceMeters: _distanceMeters,
+        currentSpeedKph: _lastSpeedKph,
+        maxSpeedKph: _maxSpeedKph,
+        pointCount: _seq,
+      ),
     );
   }
 
@@ -327,6 +357,7 @@ class LocationRecorder {
     if (speedKph != null && (_maxSpeedKph == null || speedKph > _maxSpeedKph!)) {
       _maxSpeedKph = speedKph;
     }
+    _lastSpeedKph = speedKph;
 
     if (_seq == 1 || _seq % 20 == 0) {
       logBuffer.add(
@@ -356,6 +387,8 @@ class LocationRecorder {
     );
     await _positionSub?.cancel();
     _positionSub = null;
+    _tickTimer?.cancel();
+    _tickTimer = null;
     final elapsed = _startedAt == null ? Duration.zero : DateTime.now().difference(_startedAt!);
     return RecordingStats(
       elapsed: elapsed,
@@ -368,6 +401,7 @@ class LocationRecorder {
 
   Future<void> dispose() async {
     await _positionSub?.cancel();
+    _tickTimer?.cancel();
     await _pointsController.close();
     await _statsController.close();
     await _cameraAlerts.dispose();

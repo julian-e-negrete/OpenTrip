@@ -112,7 +112,7 @@ class _AccountScreenState extends State<AccountScreen> {
     final controller = TextEditingController(text: _profile?.displayName ?? '');
     final newName = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Your name'),
         content: TextField(
           controller: controller,
@@ -120,8 +120,11 @@ class _AccountScreenState extends State<AccountScreen> {
           decoration: const InputDecoration(hintText: 'How other riders will see you'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
@@ -177,7 +180,7 @@ class _AccountScreenState extends State<AccountScreen> {
   Future<void> _deleteAccount() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete account?'),
         content: const Text(
           'This permanently deletes every vehicle, trip, and photo — on '
@@ -188,10 +191,10 @@ class _AccountScreenState extends State<AccountScreen> {
           'You\'ll be signed out.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
             child: const Text('Delete everything'),
           ),
         ],
@@ -217,11 +220,11 @@ class _AccountScreenState extends State<AccountScreen> {
   Future<void> _confirmSignOut() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Sign out?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sign out')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Sign out')),
         ],
       ),
     );

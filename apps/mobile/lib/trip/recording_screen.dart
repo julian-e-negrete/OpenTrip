@@ -417,14 +417,14 @@ class _RecordingScreenState extends State<RecordingScreen> {
       if (!mounted) return;
       await showDialog<void>(
         context: context,
-        builder: (_) => AlertDialog(
+        builder: (dialogContext) => AlertDialog(
           // Gold regardless of theme — see monthly_recap_screen.dart's
           // matching comment on its own trophy list.
           icon: Icon(trophy.icon, size: 40, color: Colors.amber),
           title: Text('Trophy earned: ${trophy.name}'),
           content: Text(trophy.description),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Nice')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Nice')),
           ],
         ),
       );
