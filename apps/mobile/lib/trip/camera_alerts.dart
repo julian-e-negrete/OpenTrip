@@ -73,6 +73,14 @@ class CameraAlertService {
   /// not to any one trip.
   void resetForNewTrip() => _alertedIds.clear();
 
+  /// Loads (or reuses the cached) camera list for [position] without
+  /// proximity-checking or alerting — for showing cameras on the map
+  /// before a recording starts, when there's nothing to alert about yet.
+  /// Recording itself still drives [onPosition] as the rider moves.
+  Future<void> loadNear(Position position) async {
+    if (_shouldRequery(position)) await _query(position);
+  }
+
   Future<void> onPosition(Position position) async {
     if (_shouldRequery(position)) {
       unawaited(_query(position));

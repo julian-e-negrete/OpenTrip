@@ -578,6 +578,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               showMusic: Platform.isAndroid,
               currentLeanDeg: leanNowDeg,
               cameras: _recorder.camerasNotifier,
+              onIdleLocation: _recorder.loadCamerasNear,
             ),
             RecordVariant.numbers => _NumbersVariant(
               stats: _stats,
@@ -831,6 +832,7 @@ class _MapVariant extends StatefulWidget {
     required this.showMusic,
     required this.currentLeanDeg,
     required this.cameras,
+    required this.onIdleLocation,
   });
 
   final List<TripPoint> points;
@@ -839,6 +841,10 @@ class _MapVariant extends StatefulWidget {
   final bool showMusic;
   final double? currentLeanDeg;
   final ValueListenable<List<CameraPoint>> cameras;
+
+  /// Called once an idle (pre-recording) GPS fix is available, so cameras
+  /// can be loaded and shown on the map before a trip actually starts.
+  final ValueChanged<Position> onIdleLocation;
 
   @override
   State<_MapVariant> createState() => _MapVariantState();
@@ -872,6 +878,7 @@ class _MapVariantState extends State<_MapVariant> {
       final last = await Geolocator.getLastKnownPosition();
       final pos = last ?? await Geolocator.getCurrentPosition();
       if (mounted) setState(() => _idleLocation = LatLng(pos.latitude, pos.longitude));
+      widget.onIdleLocation(pos);
     } catch (_) {
       // Location services off, or no fix yet — the map just stays blank
       // until a trip actually starts producing points.

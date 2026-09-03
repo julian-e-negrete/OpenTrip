@@ -151,6 +151,10 @@ class LocationRecorder {
   /// ahead of time — see trip/camera_alerts.dart.
   ValueListenable<List<CameraPoint>> get camerasNotifier => _cameraAlerts.camerasNotifier;
 
+  /// Loads cameras near [position] for the idle (not-yet-recording) map —
+  /// see CameraAlertService.loadNear.
+  Future<void> loadCamerasNear(Position position) => _cameraAlerts.loadNear(position);
+
   bool get isRecording => _positionSub != null;
 
   /// Checks location services + permission, requesting if needed. Throws a
