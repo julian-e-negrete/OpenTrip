@@ -287,15 +287,18 @@ class _VehicleRow extends StatelessWidget {
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n500),
                           )
-                        // Used to fall through to the same plain chevron a
-                        // never-tried vehicle shows — a failed attempt (no
-                        // bike in range, GATT error, timeout) read as an
-                        // unresponsive tap rather than a failure. This is
-                        // tappable too, straight back into _toggleConnection,
-                        // which retries the same way a first attempt does.
+                        // A bare chevron here used to be indistinguishable
+                        // from the plain "navigate" arrow non-BLE vehicles
+                        // show — nothing told you this one was a Bluetooth
+                        // connect control at all, which is exactly what
+                        // "there's no connect button" was actually about.
+                        // A labeled pill with a Bluetooth glyph is
+                        // unambiguous either way — first attempt or retry
+                        // after [failed], both go through the same
+                        // onTapConnection -> _toggleConnection call.
                         : failed
-                        ? Icon(Ph.warning, size: 14, color: Colors.orange.shade400)
-                        : const Icon(Ph.caretRight, size: 14, color: Noct.n600),
+                        ? _BlePill(icon: Ph.warning, label: 'Retry', color: Colors.orange.shade400)
+                        : const _BlePill(icon: Ph.bluetooth, label: 'Connect', color: Noct.n300),
                   ),
                 ),
             ],
@@ -366,6 +369,32 @@ class _ConnectionPill extends StatelessWidget {
           SizedBox(width: 6, height: 6, child: DecoratedBox(decoration: BoxDecoration(color: Noct.a400, shape: BoxShape.circle))),
           SizedBox(width: 6),
           Text('Connected', style: TextStyle(fontSize: 10.5, color: Noct.a200, fontWeight: FontWeight.w400)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The not-yet-connected/failed states — a labeled pill rather than a
+/// bare icon, so this reads unmistakably as "tap to connect over
+/// Bluetooth" rather than blending into a plain navigation chevron.
+class _BlePill extends StatelessWidget {
+  const _BlePill({required this.icon, required this.label, required this.color});
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(color: Noct.n800, borderRadius: BorderRadius.circular(6)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w400)),
         ],
       ),
     );
