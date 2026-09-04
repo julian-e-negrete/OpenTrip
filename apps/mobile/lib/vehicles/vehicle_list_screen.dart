@@ -51,7 +51,23 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
   }
 
   void _onBleStateChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    // Connecting/scanning are visible via the row's spinner, and success
+    // via its "Connected" pill — but failure (no bike in range, GATT
+    // error, timeout) used to just silently revert to the same idle
+    // chevron as if nothing had been tapped at all, with the actual
+    // reason (_ble.lastError) never shown anywhere. Surface it here so a
+    // failed attempt reads as "failed," not as an unresponsive tap.
+    if (_ble.state == BleConnectionState.failed && _connectingVehicleId != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_ble.lastError ?? 'Couldn\'t connect to the bike.'),
+          backgroundColor: Colors.orange.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -143,6 +159,9 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
                         connecting: vehicle.bleConnector == VehicleBleConnector.kawasakiRideology &&
                             _ble.isBusy &&
                             _connectingVehicleId == vehicle.id,
+                        failed: vehicle.bleConnector == VehicleBleConnector.kawasakiRideology &&
+                            _ble.state == BleConnectionState.failed &&
+                            _connectingVehicleId == vehicle.id,
                         mileageKm: _mileageFor(vehicle, _tripsByVehicle[vehicle.id] ?? const []),
                         tripCount: (_tripsByVehicle[vehicle.id] ?? const []).length,
                         onTap: () => Navigator.of(context)
@@ -163,6 +182,7 @@ class _VehicleRow extends StatelessWidget {
     required this.vehicle,
     required this.connected,
     required this.connecting,
+    required this.failed,
     required this.mileageKm,
     required this.tripCount,
     required this.onTap,
@@ -172,6 +192,7 @@ class _VehicleRow extends StatelessWidget {
   final Vehicle vehicle;
   final bool connected;
   final bool connecting;
+  final bool failed;
   final double mileageKm;
   final int tripCount;
   final VoidCallback onTap;
@@ -266,6 +287,14 @@ class _VehicleRow extends StatelessWidget {
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n500),
                           )
+                        // Used to fall through to the same plain chevron a
+                        // never-tried vehicle shows — a failed attempt (no
+                        // bike in range, GATT error, timeout) read as an
+                        // unresponsive tap rather than a failure. This is
+                        // tappable too, straight back into _toggleConnection,
+                        // which retries the same way a first attempt does.
+                        : failed
+                        ? Icon(Ph.warning, size: 14, color: Colors.orange.shade400)
                         : const Icon(Ph.caretRight, size: 14, color: Noct.n600),
                   ),
                 ),

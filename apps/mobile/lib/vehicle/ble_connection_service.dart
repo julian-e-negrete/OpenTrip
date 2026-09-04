@@ -64,7 +64,13 @@ class BleConnectionService {
       _telemetrySub = client.telemetry.listen((t) => telemetryNotifier.value = t);
       stateNotifier.value = BleConnectionState.connected;
     } catch (e) {
-      lastError = e.toString();
+      // StateError/Exception's toString() prefixes the message with
+      // "Bad state: "/"Exception: " — meant for a stack trace, not a
+      // banner a rider reads mid-ride. Strip it so only the actual
+      // reason shows.
+      lastError = e is StateError
+          ? e.message
+          : e.toString().replaceFirst(RegExp(r'^(Bad state|Exception): '), '');
       stateNotifier.value = BleConnectionState.failed;
     }
   }
