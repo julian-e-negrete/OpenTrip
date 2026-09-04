@@ -338,20 +338,25 @@ class _BikeRecords extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    double? maxBleSpeed;
+    double? maxSpeed;
     double? maxLean;
     double longestMeters = 0;
     for (final t in trips) {
-      if (t.bleMaxSpeedKph != null && (maxBleSpeed == null || t.bleMaxSpeedKph! > maxBleSpeed)) {
-        maxBleSpeed = t.bleMaxSpeedKph;
-      }
+      // Prefer the bike's own speedometer reading when a trip had BLE
+      // connected (more accurate, especially at low speed — see
+      // data/models/trip.dart), but fall back to the GPS-derived
+      // maxSpeedKph every trip already has — otherwise a rider's fastest
+      // trip would silently drop out of this record entirely just for
+      // not having connected the bike that time.
+      final speed = t.bleMaxSpeedKph ?? t.maxSpeedKph;
+      if (speed != null && (maxSpeed == null || speed > maxSpeed)) maxSpeed = speed;
       final leanDeg = t.bleMaxLeanDeg ?? t.phoneLeanMaxDeg;
       if (leanDeg != null && (maxLean == null || leanDeg > maxLean)) maxLean = leanDeg;
       if (t.distanceMeters > longestMeters) longestMeters = t.distanceMeters;
     }
 
     final rows = [
-      if (maxBleSpeed != null) ('Fastest recorded', '${maxBleSpeed.toStringAsFixed(0)} km/h'),
+      if (maxSpeed != null) ('Fastest recorded', '${maxSpeed.toStringAsFixed(0)} km/h'),
       if (maxLean != null) ('Deepest lean', '${maxLean.toStringAsFixed(0)}°'),
       if (longestMeters > 0) ('Longest trip', '${(longestMeters / 1000).toStringAsFixed(0)} km'),
     ];
