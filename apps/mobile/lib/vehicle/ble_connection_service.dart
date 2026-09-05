@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
 import '../logging/log_buffer.dart';
+import 'ble_keepalive_service.dart';
 import 'kawasaki_connector.dart';
 
 enum BleConnectionState { disconnected, scanning, connecting, connected, failed }
@@ -76,6 +77,7 @@ class BleConnectionService {
       _linkSub = client.connectionState.listen(_onLinkStateChanged);
       _reconnectAttempt = 0;
       stateNotifier.value = BleConnectionState.connected;
+      unawaited(BleKeepAliveService.instance.start());
     } catch (e) {
       // StateError/Exception's toString() prefixes the message with
       // "Bad state: "/"Exception: " — meant for a stack trace, not a
@@ -102,6 +104,7 @@ class BleConnectionService {
     telemetryNotifier.value = null;
     _reconnectAttempt = 0;
     stateNotifier.value = BleConnectionState.disconnected;
+    unawaited(BleKeepAliveService.instance.stop());
   }
 
   /// Fires on every link-state change once connected — only unexpected
@@ -137,12 +140,17 @@ class BleConnectionService {
       logBuffer.add('BLE: reconnected automatically');
       _reconnectAttempt = 0;
       stateNotifier.value = BleConnectionState.connected;
+      // Already running from the original connect() — restarting here
+      // would be a harmless no-op (start() is idempotent) if it somehow
+      // ever weren't.
+      unawaited(BleKeepAliveService.instance.start());
     } catch (e) {
       if (_reconnectAttempt >= _maxAutoReconnectAttempts) {
         logBuffer.add('BLE: auto-reconnect gave up after $_reconnectAttempt attempt(s) — $e');
         lastError = 'Connection to the bike was lost and couldn\'t be re-established.';
         _reconnectAttempt = 0;
         stateNotifier.value = BleConnectionState.failed;
+        unawaited(BleKeepAliveService.instance.stop());
         return;
       }
       // Give the bike a moment before trying again rather than hammering

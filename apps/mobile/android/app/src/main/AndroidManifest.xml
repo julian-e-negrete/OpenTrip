@@ -22,9 +22,12 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
-    <!-- Keeps GPS recording (and, since it's the same process, the BLE
-         connection) alive while the app is backgrounded — see
-         trip/location_recorder.dart's foregroundNotificationConfig.
+    <!-- Keeps the app's process alive while backgrounded, for both GPS
+         trip recording (trip/location_recorder.dart) and the Kawasaki BLE
+         connection (vehicle/ble_keepalive_service.dart) — the latter
+         reuses this same geolocator-based "location"-type foreground
+         service (its own throwaway position stream, data discarded) since
+         a GATT connection has no keep-alive mechanism of its own.
          FOREGROUND_SERVICE_LOCATION is required from API 34 for any
          foreground service declaring the "location" type. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
