@@ -54,6 +54,7 @@ class CameraAlertService {
   final _alertController = StreamController<CameraAlert>.broadcast();
   Stream<CameraAlert> get alerts => _alertController.stream;
   final _audioPlayer = AudioPlayer();
+  bool _audioContextConfigured = false;
 
   /// The cameras loaded for the current stretch — so the map can plot
   /// them ahead of time, not just react once you're within alert range.
@@ -220,6 +221,18 @@ class CameraAlertService {
 
   Future<void> _beep() async {
     try {
+      if (!_audioContextConfigured) {
+        // audioplayers defaults to AndroidAudioFocus.gain/no iOS mixing —
+        // "this app is now the sole source of audio," which pauses or
+        // stops whatever else is playing, including the rider's own music
+        // (spotify_now_playing.dart just logs what's playing, it doesn't
+        // own the audio session, so this alert was the one silencing it).
+        // duckOthers instead just lowers other audio while this plays on
+        // top, the same way a GPS voice prompt or alarm layers over music
+        // rather than cutting it off.
+        await _audioPlayer.setAudioContext(AudioContextConfig(focus: AudioContextConfigFocus.duckOthers).build());
+        _audioContextConfigured = true;
+      }
       // Same three-pulse cadence as _buzz — an audible cue reaches a
       // rider whose phone isn't in a pocket (mounted, or a helmet
       // intercom paired over Bluetooth) the way vibration alone can't.
