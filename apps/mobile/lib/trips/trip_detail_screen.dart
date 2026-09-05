@@ -389,15 +389,23 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     super.dispose();
   }
 
-  /// Real time the trip itself took, first point to last — playback runs
-  /// at this pace (or half of it at 2x) rather than a fixed length, so
-  /// watching a replay means watching the ride happen, not a time-lapse
-  /// of it. Floored at 1s so a near-instant trip (or one with a single
-  /// point) doesn't hand AnimationController a zero/negative duration.
+  /// Real time the trip itself took, first point to last, capped so a
+  /// real ride is still watchable. Literal 1:1 real time sounds right in
+  /// principle, but for anything longer than well under a minute it reads
+  /// as completely broken in practice — confirmed live: a 20-minute trip,
+  /// 15 real seconds after tapping Play, had visibly moved a few pixels
+  /// out of the whole track. The controller genuinely was animating; it
+  /// just wasn't watchable. Below the cap this still plays at literal
+  /// real time — only trips longer than that compress. Floored at 1s so
+  /// a near-instant trip (or one with a single point) doesn't hand
+  /// AnimationController a zero/negative duration.
+  static const _maxPlaybackDuration = Duration(seconds: 25);
+
   Duration _realDuration(List<TripPoint> pts) {
     if (pts.length < 2) return const Duration(seconds: 1);
     final ms = pts.last.timestamp.difference(pts.first.timestamp).inMilliseconds;
-    return Duration(milliseconds: ms < 1000 ? 1000 : ms);
+    final capped = ms > _maxPlaybackDuration.inMilliseconds ? _maxPlaybackDuration.inMilliseconds : ms;
+    return Duration(milliseconds: capped < 1000 ? 1000 : capped);
   }
 
   void _togglePlay() {
