@@ -82,10 +82,28 @@ class _RecordingScreenState extends State<RecordingScreen> {
   int? _bleMinWaterTemp;
   int? _bleMaxWaterTemp;
 
-  /// The bike's own odometer reading, last-write-wins (not a max/min —
-  /// see data/models/trip.dart's field comment) from whichever telemetry
-  /// frame most recently reported one.
+  // The rest of RidingTelemetry's fields, summarized the same min/max way
+  // — see data/models/trip.dart's matching fields for what each means.
+  double? _bleMaxThrottle;
+  double? _bleMaxAccelG;
+  int? _bleMaxTcsLevel;
+  double? _bleMinBattery12V;
+  double? _bleMaxBattery12V;
+  int? _bleMinFuelGauge;
+  int? _bleMaxFuelGauge;
+  int? _bleMinInletAirTemp;
+  int? _bleMaxInletAirTemp;
+  double? _bleMinTirePressureFr;
+  double? _bleMaxTirePressureFr;
+  double? _bleMinTirePressureRr;
+  double? _bleMaxTirePressureRr;
+
+  /// The bike's own odometer/trip-A/trip-B readings, last-write-wins (not
+  /// a max/min — see data/models/trip.dart's field comment) from
+  /// whichever telemetry frame most recently reported one.
   double? _bleOdometerKm;
+  double? _bleTripAKm;
+  double? _bleTripBKm;
 
   // Phone-accelerometer lean-angle tracking (trip/lean_angle_tracker.dart)
   // — opt-in (see the "Track lean angle" toggle below), since it only
@@ -231,6 +249,54 @@ class _RecordingScreenState extends State<RecordingScreen> {
       }
     }
     if (t.odometerTenthKm != null) _bleOdometerKm = t.odometerTenthKm! / 10.0;
+    if (t.tripAKm != null) _bleTripAKm = t.tripAKm;
+    if (t.tripBKm != null) _bleTripBKm = t.tripBKm;
+    if (t.throttlePercent != null && (_bleMaxThrottle == null || t.throttlePercent! > _bleMaxThrottle!)) {
+      _bleMaxThrottle = t.throttlePercent;
+    }
+    if (t.accelG != null) {
+      final absAccel = t.accelG!.abs();
+      if (_bleMaxAccelG == null || absAccel > _bleMaxAccelG!) _bleMaxAccelG = absAccel;
+    }
+    final tcsLevel = [t.tcsLevelHb, t.tcsLevelLb].whereType<int>().fold<int?>(
+      null,
+      (max, v) => max == null || v > max ? v : max,
+    );
+    if (tcsLevel != null && (_bleMaxTcsLevel == null || tcsLevel > _bleMaxTcsLevel!)) {
+      _bleMaxTcsLevel = tcsLevel;
+    }
+    if (t.ecuBattery12V != null) {
+      if (_bleMinBattery12V == null || t.ecuBattery12V! < _bleMinBattery12V!) _bleMinBattery12V = t.ecuBattery12V;
+      if (_bleMaxBattery12V == null || t.ecuBattery12V! > _bleMaxBattery12V!) _bleMaxBattery12V = t.ecuBattery12V;
+    }
+    if (t.fuelGauge != null) {
+      if (_bleMinFuelGauge == null || t.fuelGauge! < _bleMinFuelGauge!) _bleMinFuelGauge = t.fuelGauge;
+      if (_bleMaxFuelGauge == null || t.fuelGauge! > _bleMaxFuelGauge!) _bleMaxFuelGauge = t.fuelGauge;
+    }
+    if (t.inletAirTemperatureC != null) {
+      if (_bleMinInletAirTemp == null || t.inletAirTemperatureC! < _bleMinInletAirTemp!) {
+        _bleMinInletAirTemp = t.inletAirTemperatureC;
+      }
+      if (_bleMaxInletAirTemp == null || t.inletAirTemperatureC! > _bleMaxInletAirTemp!) {
+        _bleMaxInletAirTemp = t.inletAirTemperatureC;
+      }
+    }
+    if (t.tirePressureFrKpa != null) {
+      if (_bleMinTirePressureFr == null || t.tirePressureFrKpa! < _bleMinTirePressureFr!) {
+        _bleMinTirePressureFr = t.tirePressureFrKpa;
+      }
+      if (_bleMaxTirePressureFr == null || t.tirePressureFrKpa! > _bleMaxTirePressureFr!) {
+        _bleMaxTirePressureFr = t.tirePressureFrKpa;
+      }
+    }
+    if (t.tirePressureRrKpa != null) {
+      if (_bleMinTirePressureRr == null || t.tirePressureRrKpa! < _bleMinTirePressureRr!) {
+        _bleMinTirePressureRr = t.tirePressureRrKpa;
+      }
+      if (_bleMaxTirePressureRr == null || t.tirePressureRrKpa! > _bleMaxTirePressureRr!) {
+        _bleMaxTirePressureRr = t.tirePressureRrKpa;
+      }
+    }
   }
 
   Future<void> _start() async {
@@ -259,6 +325,18 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 bleThrottlePercent: telemetry.throttlePercent,
                 bleLeanDeg: telemetry.leanDeg,
                 bleWaterTemperatureC: telemetry.waterTemperatureC,
+                bleAccelG: telemetry.accelG,
+                bleFrontBrakePressureKpa: telemetry.frontBrakePressureKpa,
+                bleTcsLevelHb: telemetry.tcsLevelHb,
+                bleTcsLevelLb: telemetry.tcsLevelLb,
+                bleBattery12V: telemetry.ecuBattery12V,
+                bleOdometerKm: telemetry.odometerTenthKm == null ? null : telemetry.odometerTenthKm! / 10.0,
+                bleTripAKm: telemetry.tripAKm,
+                bleTripBKm: telemetry.tripBKm,
+                bleFuelGauge: telemetry.fuelGauge,
+                bleInletAirTemperatureC: telemetry.inletAirTemperatureC,
+                bleTirePressureFrKpa: telemetry.tirePressureFrKpa,
+                bleTirePressureRrKpa: telemetry.tirePressureRrKpa,
               );
         _pointBuffer.add(enriched);
         _liveRoutePoints.add(enriched);
@@ -368,6 +446,21 @@ class _RecordingScreenState extends State<RecordingScreen> {
       bleMaxBrakePressureKpa: _bleMaxBrakeKpa,
       bleMinWaterTemperatureC: _bleMinWaterTemp,
       bleMaxWaterTemperatureC: _bleMaxWaterTemp,
+      bleMaxThrottlePercent: _bleMaxThrottle,
+      bleMaxAccelG: _bleMaxAccelG,
+      bleMaxTcsLevel: _bleMaxTcsLevel,
+      bleMinBattery12V: _bleMinBattery12V,
+      bleMaxBattery12V: _bleMaxBattery12V,
+      bleMinFuelGauge: _bleMinFuelGauge,
+      bleMaxFuelGauge: _bleMaxFuelGauge,
+      bleMinInletAirTemperatureC: _bleMinInletAirTemp,
+      bleMaxInletAirTemperatureC: _bleMaxInletAirTemp,
+      bleMinTirePressureFrKpa: _bleMinTirePressureFr,
+      bleMaxTirePressureFrKpa: _bleMaxTirePressureFr,
+      bleMinTirePressureRrKpa: _bleMinTirePressureRr,
+      bleMaxTirePressureRrKpa: _bleMaxTirePressureRr,
+      bleTripAKm: _bleTripAKm,
+      bleTripBKm: _bleTripBKm,
       bleOdometerKm: _bleOdometerKm,
       behaviorMaxAccelG: _recorder.behaviorMaxAccelG,
       behaviorMaxBrakeG: _recorder.behaviorMaxBrakeG,
@@ -407,7 +500,22 @@ class _RecordingScreenState extends State<RecordingScreen> {
       _bleMaxBrakeKpa = null;
       _bleMinWaterTemp = null;
       _bleMaxWaterTemp = null;
+      _bleMaxThrottle = null;
+      _bleMaxAccelG = null;
+      _bleMaxTcsLevel = null;
+      _bleMinBattery12V = null;
+      _bleMaxBattery12V = null;
+      _bleMinFuelGauge = null;
+      _bleMaxFuelGauge = null;
+      _bleMinInletAirTemp = null;
+      _bleMaxInletAirTemp = null;
+      _bleMinTirePressureFr = null;
+      _bleMaxTirePressureFr = null;
+      _bleMinTirePressureRr = null;
+      _bleMaxTirePressureRr = null;
       _bleOdometerKm = null;
+      _bleTripAKm = null;
+      _bleTripBKm = null;
       _currentLeanDeg = null;
       _currentTrack = null;
     });

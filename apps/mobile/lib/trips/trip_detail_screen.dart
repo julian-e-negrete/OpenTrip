@@ -105,6 +105,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 _StatGrid(trip: trip)
               else
                 _StatReport(trip: trip),
+              _FullBikeTelemetry(trip: trip),
               if (_musicEvents != null && _musicEvents!.isNotEmpty)
                 _Soundtrack(events: _musicEvents!, tripStartedAt: trip.startedAt),
               const SizedBox(height: 12),
@@ -280,6 +281,48 @@ class _Group extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Every bike-reported stat the headline sections above don't already
+/// show (see _StatGrid/_StatReport's own "bike" rows) — max rpm/lean/
+/// water temp/odometer are the highlights; this is everything else
+/// RidingTelemetry can carry, summarized the same min/max way. Shown
+/// regardless of which layout variant is picked, and hidden entirely for
+/// a GPS-only trip (no BLE connector) rather than showing an empty
+/// "Full bike telemetry" heading over nothing.
+class _FullBikeTelemetry extends StatelessWidget {
+  const _FullBikeTelemetry({required this.trip});
+  final Trip trip;
+
+  static String? _range(num? min, num? max, String unit, {int decimals = 0}) {
+    if (min == null && max == null) return null;
+    String fmt(num v) => v.toStringAsFixed(decimals);
+    if (min == null) return '${fmt(max!)}$unit';
+    if (max == null) return '${fmt(min)}$unit';
+    if (min == max) return '${fmt(min)}$unit';
+    return '${fmt(min)}–${fmt(max)}$unit';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!trip.hasBleTelemetry) return const SizedBox.shrink();
+    final rows = [
+      ('Max throttle', trip.bleMaxThrottlePercent == null ? null : '${trip.bleMaxThrottlePercent!.toStringAsFixed(0)}%'),
+      ('Max G-force', trip.bleMaxAccelG == null ? null : '${trip.bleMaxAccelG!.toStringAsFixed(2)}g'),
+      ('Max TCS level', trip.bleMaxTcsLevel?.toString()),
+      ('12V battery', _range(trip.bleMinBattery12V, trip.bleMaxBattery12V, ' V', decimals: 1)),
+      ('Fuel gauge', _range(trip.bleMinFuelGauge, trip.bleMaxFuelGauge, ' /15')),
+      ('Inlet air temp', _range(trip.bleMinInletAirTemperatureC, trip.bleMaxInletAirTemperatureC, ' °C')),
+      ('Front tire pressure', _range(trip.bleMinTirePressureFrKpa, trip.bleMaxTirePressureFrKpa, ' kPa')),
+      ('Rear tire pressure', _range(trip.bleMinTirePressureRrKpa, trip.bleMaxTirePressureRrKpa, ' kPa')),
+      ('Trip A', trip.bleTripAKm == null ? null : '${trip.bleTripAKm!.toStringAsFixed(1)} km'),
+      ('Trip B', trip.bleTripBKm == null ? null : '${trip.bleTripBKm!.toStringAsFixed(1)} km'),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+      child: _Group('Full bike telemetry', rows),
     );
   }
 }
@@ -606,12 +649,20 @@ class _MapChip extends StatelessWidget {
   }
 }
 
-class _TelemetryCapsule extends StatelessWidget {
+class _TelemetryCapsule extends StatefulWidget {
   const _TelemetryCapsule({required this.point});
   final TripPoint point;
 
   @override
+  State<_TelemetryCapsule> createState() => _TelemetryCapsuleState();
+}
+
+class _TelemetryCapsuleState extends State<_TelemetryCapsule> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final point = widget.point;
     final speed = point.bleSpeedKph ?? point.speedKph;
     final columns = [
       ('km/h', speed?.toStringAsFixed(0), null),
@@ -619,38 +670,98 @@ class _TelemetryCapsule extends StatelessWidget {
       ('gear', point.bleGear?.toString(), null),
       ('lean', point.bleLeanDeg == null ? null : '${point.bleLeanDeg!.toStringAsFixed(0)}°', Noct.a300),
     ];
-    return Container(
-      decoration: BoxDecoration(
-        color: Noct.canvas.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(Noct.rMd),
-        border: Border.all(color: Noct.n800, width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < columns.length; i++) ...[
-            if (i > 0) const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    // Every other field this point carries — tapping the capsule reveals
+    // these too, so what changed during the ride (throttle, TCS
+    // intervention, tire pressure...) is visible while scrubbing through
+    // the replay, not just the four headline numbers above.
+    final more = <(String, String)>[
+      if (point.bleThrottlePercent != null) ('throttle', '${point.bleThrottlePercent!.toStringAsFixed(0)}%'),
+      if (point.bleAccelG != null) ('g-force', '${point.bleAccelG!.toStringAsFixed(2)}g'),
+      if (point.bleFrontBrakePressureKpa != null) ('fr brake', '${point.bleFrontBrakePressureKpa!.toStringAsFixed(0)} kPa'),
+      if (point.bleTcsLevelHb != null || point.bleTcsLevelLb != null)
+        ('tcs', '${point.bleTcsLevelHb ?? 0}/${point.bleTcsLevelLb ?? 0}'),
+      if (point.bleWaterTemperatureC != null) ('water', '${point.bleWaterTemperatureC}°'),
+      if (point.bleInletAirTemperatureC != null) ('inlet air', '${point.bleInletAirTemperatureC}°'),
+      if (point.bleTirePressureFrKpa != null) ('fr tire', '${point.bleTirePressureFrKpa!.toStringAsFixed(0)} kPa'),
+      if (point.bleTirePressureRrKpa != null) ('rr tire', '${point.bleTirePressureRrKpa!.toStringAsFixed(0)} kPa'),
+      if (point.bleBattery12V != null) ('battery', '${point.bleBattery12V!.toStringAsFixed(1)}V'),
+      if (point.bleFuelGauge != null) ('fuel', '${point.bleFuelGauge}/15'),
+      if (point.bleOdometerKm != null) ('odometer', '${point.bleOdometerKm!.toStringAsFixed(0)} km'),
+      if (point.bleTripAKm != null) ('trip a', '${point.bleTripAKm!.toStringAsFixed(1)} km'),
+      if (point.bleTripBKm != null) ('trip b', '${point.bleTripBKm!.toStringAsFixed(1)} km'),
+    ];
+    return GestureDetector(
+      onTap: more.isEmpty ? null : () => setState(() => _expanded = !_expanded),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 260),
+        decoration: BoxDecoration(
+          color: Noct.canvas.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(Noct.rMd),
+          border: Border.all(color: Noct.n800, width: 1),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  columns[i].$2 ?? '—',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: columns[i].$3 ?? Noct.text,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                for (var i = 0; i < columns.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        columns[i].$2 ?? '—',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: columns[i].$3 ?? Noct.text,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        columns[i].$1.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          letterSpacing: 0.9,
+                          color: Noct.n500,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                Text(
-                  columns[i].$1.toUpperCase(),
-                  style: const TextStyle(fontSize: 9, letterSpacing: 0.9, color: Noct.n500, fontWeight: FontWeight.w400),
-                ),
+                ],
+                if (more.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  Icon(_expanded ? Ph.caretUp : Ph.caretDown, size: 12, color: Noct.n500),
+                ],
               ],
             ),
+            if (_expanded && more.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Noct.n800),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                children: [
+                  for (final (label, value) in more)
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(fontSize: 11, fontFeatures: [FontFeature.tabularFigures()]),
+                        children: [
+                          TextSpan(text: '${label.toUpperCase()} ', style: const TextStyle(color: Noct.n500)),
+                          TextSpan(text: value, style: const TextStyle(color: Noct.text, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
