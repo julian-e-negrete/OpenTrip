@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
+import '../logging/log_buffer.dart';
 import 'kawasaki_connector.dart';
 
 enum BleConnectionState { disconnected, scanning, connecting, connected, failed }
@@ -36,6 +37,16 @@ class BleConnectionService {
 
   KawasakiClient? _client;
   StreamSubscription<RidingTelemetry>? _telemetrySub;
+  StreamSubscription<bool>? _linkSub;
+
+  // How many times connect() has retried an *unexpected* drop in a row —
+  // reset to 0 on every successful (re)connect. Nothing before this
+  // existed watched for the bike going silent mid-ride (out of range,
+  // its own firmware sleeping, Android tearing the link down) at all —
+  // the UI just kept reading "Connected" forever with telemetry quietly
+  // dead. See _onLinkStateChanged.
+  static const _maxAutoReconnectAttempts = 3;
+  int _reconnectAttempt = 0;
 
   BleConnectionState get state => stateNotifier.value;
   bool get isConnected => state == BleConnectionState.connected;
@@ -62,6 +73,8 @@ class BleConnectionService {
       final client = await KawasakiConnector.connect(result: result, onLog: onLog);
       _client = client;
       _telemetrySub = client.telemetry.listen((t) => telemetryNotifier.value = t);
+      _linkSub = client.connectionState.listen(_onLinkStateChanged);
+      _reconnectAttempt = 0;
       stateNotifier.value = BleConnectionState.connected;
     } catch (e) {
       // StateError/Exception's toString() prefixes the message with
@@ -76,11 +89,66 @@ class BleConnectionService {
   }
 
   Future<void> disconnect() async {
+    // Unsubscribe from the link-state stream first — otherwise the GATT
+    // disconnect this triggers would itself fire _onLinkStateChanged,
+    // which would read as an *unexpected* drop and kick off an auto-
+    // reconnect right after the user asked to disconnect.
+    await _linkSub?.cancel();
+    _linkSub = null;
     await _telemetrySub?.cancel();
     _telemetrySub = null;
     await _client?.dispose();
     _client = null;
     telemetryNotifier.value = null;
+    _reconnectAttempt = 0;
     stateNotifier.value = BleConnectionState.disconnected;
+  }
+
+  /// Fires on every link-state change once connected — only unexpected
+  /// drops reach here, since [disconnect] cancels this subscription
+  /// before tearing down the GATT connection itself.
+  void _onLinkStateChanged(bool connected) {
+    if (connected) return;
+    unawaited(_handleUnexpectedDisconnect());
+  }
+
+  Future<void> _handleUnexpectedDisconnect() async {
+    await _linkSub?.cancel();
+    _linkSub = null;
+    await _telemetrySub?.cancel();
+    _telemetrySub = null;
+    _client = null;
+    telemetryNotifier.value = null;
+
+    _reconnectAttempt++;
+    logBuffer.add('BLE: connection lost, reconnecting (attempt $_reconnectAttempt/$_maxAutoReconnectAttempts)');
+    stateNotifier.value = BleConnectionState.connecting;
+
+    try {
+      await KawasakiConnector.ensurePermissions();
+      final result = await KawasakiConnector.findBike();
+      if (result == null) {
+        throw StateError('Bike went out of range and couldn\'t be found again.');
+      }
+      final client = await KawasakiConnector.connect(result: result);
+      _client = client;
+      _telemetrySub = client.telemetry.listen((t) => telemetryNotifier.value = t);
+      _linkSub = client.connectionState.listen(_onLinkStateChanged);
+      logBuffer.add('BLE: reconnected automatically');
+      _reconnectAttempt = 0;
+      stateNotifier.value = BleConnectionState.connected;
+    } catch (e) {
+      if (_reconnectAttempt >= _maxAutoReconnectAttempts) {
+        logBuffer.add('BLE: auto-reconnect gave up after $_reconnectAttempt attempt(s) — $e');
+        lastError = 'Connection to the bike was lost and couldn\'t be re-established.';
+        _reconnectAttempt = 0;
+        stateNotifier.value = BleConnectionState.failed;
+        return;
+      }
+      // Give the bike a moment before trying again rather than hammering
+      // a scan the instant a connect attempt fails.
+      await Future<void>.delayed(const Duration(seconds: 3));
+      unawaited(_handleUnexpectedDisconnect());
+    }
   }
 }

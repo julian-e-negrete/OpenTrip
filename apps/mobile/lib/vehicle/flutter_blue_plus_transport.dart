@@ -25,6 +25,10 @@ class FlutterBluePlusTransport implements BleTransport {
   bool get isConnected => device.isConnected;
 
   @override
+  Stream<bool> get connectionState =>
+      device.connectionState.map((state) => state == BluetoothConnectionState.connected);
+
+  @override
   Future<void> connect() async {
     if (!device.isConnected) {
       await device.connect(timeout: const Duration(seconds: 12));
