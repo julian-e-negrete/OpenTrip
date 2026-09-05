@@ -254,6 +254,12 @@ class LocationRecorder {
       return AndroidSettings(
         accuracy: LocationAccuracy.best,
         distanceFilter: 3,
+        // geolocator_android defaults this to 5000ms when left unset —
+        // independent of distanceFilter, so even riding fast enough to
+        // clear 3m in well under a second still only got a fix every 5s,
+        // making live speed/position feel laggy rather than tracking in
+        // real time. 1s matches a real speedometer's update rate.
+        intervalDuration: const Duration(seconds: 1),
         foregroundNotificationConfig: showForegroundNotification
             ? const ForegroundNotificationConfig(
                 notificationTitle: 'OpenTrip is recording',
