@@ -368,8 +368,6 @@ class _HeroMap extends StatefulWidget {
 }
 
 class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin {
-  static const _baseDuration = Duration(seconds: 18);
-
   late final AnimationController _controller;
   bool _satellite = false;
   bool _doubleSpeed = false;
@@ -377,7 +375,12 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(vsync: this, duration: _baseDuration);
+    // A real duration (see _realDuration) that depends on widget.points
+    // isn't known yet at this point — points load in asynchronously
+    // after this screen mounts — so this placeholder just avoids leaving
+    // AnimationController's duration null; _togglePlay/_toggleSpeed
+    // always set the real one before any playback actually starts.
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1));
   }
 
   @override
@@ -386,10 +389,27 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     super.dispose();
   }
 
+  /// Real time the trip itself took, first point to last — playback runs
+  /// at this pace (or half of it at 2x) rather than a fixed length, so
+  /// watching a replay means watching the ride happen, not a time-lapse
+  /// of it. Floored at 1s so a near-instant trip (or one with a single
+  /// point) doesn't hand AnimationController a zero/negative duration.
+  Duration _realDuration(List<TripPoint> pts) {
+    if (pts.length < 2) return const Duration(seconds: 1);
+    final ms = pts.last.timestamp.difference(pts.first.timestamp).inMilliseconds;
+    return Duration(milliseconds: ms < 1000 ? 1000 : ms);
+  }
+
   void _togglePlay() {
     if (_controller.isAnimating) {
       _controller.stop();
     } else {
+      final pts = widget.points;
+      if (pts != null) {
+        _controller.duration = Duration(
+          milliseconds: _realDuration(pts).inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
+        );
+      }
       if (_controller.isCompleted) _controller.value = 0;
       _controller.forward();
     }
@@ -398,8 +418,10 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
 
   void _toggleSpeed() {
     setState(() => _doubleSpeed = !_doubleSpeed);
+    final pts = widget.points;
+    if (pts == null) return;
     _controller.duration = Duration(
-      milliseconds: _baseDuration.inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
+      milliseconds: _realDuration(pts).inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
     );
     if (_controller.isAnimating) _controller.forward();
   }
