@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:vibration/vibration.dart';
 
 import '../logging/log_buffer.dart';
 import 'geo_math.dart';
@@ -184,10 +184,28 @@ class CameraAlertService {
         _alertedIds.add(camera.id);
         logBuffer.add('Camera: ${camera.type.name} alert — ${distance.toStringAsFixed(0)}m away');
         // A physical cue works whether or not anyone's looking at a
-        // screen right now — the point of a driving alert.
-        unawaited(HapticFeedback.vibrate());
+        // screen right now — the point of a driving alert. This needs to
+        // be a real, sustained buzz a rider can feel over a moving
+        // motorcycle's own vibration and wind noise — flutter/services.dart's
+        // HapticFeedback is a brief UI-click tick meant for a button tap,
+        // not an alert; effectively imperceptible in that context, which
+        // is exactly what "alerts do not vibrate" turned out to mean.
+        unawaited(_buzz());
         _alertController.add(CameraAlert(camera, distance));
       }
+    }
+  }
+
+  Future<void> _buzz() async {
+    try {
+      if (!await Vibration.hasVibrator()) return;
+      // Three deliberate pulses, not one short tick — meant to be felt
+      // over engine vibration/wind noise, and distinct enough from any
+      // other haptic in the app that it reads as "look at the road", not
+      // just background phone noise.
+      await Vibration.vibrate(pattern: [0, 300, 150, 300, 150, 300]);
+    } catch (e) {
+      logBuffer.add('Camera: vibration failed — $e');
     }
   }
 

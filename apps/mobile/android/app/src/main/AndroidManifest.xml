@@ -42,6 +42,11 @@
          directly or the position stream throws WAKE_LOCK PlatformException
          as soon as it starts. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Camera/radar proximity alerts (trip/camera_alerts.dart) vibrate via
+         the `vibration` package, which needs this declared explicitly — a
+         missing VIBRATE permission doesn't crash the call, it just makes
+         every vibration a silent no-op. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />

@@ -30,6 +30,11 @@ dependencies:
   shared_preferences: ^2.5.5
   # GPS trip recording.
   geolocator: ^13.0.1
+  # A real, sustained vibration pattern for camera/radar alerts — see
+  # trip/camera_alerts.dart. flutter/services.dart's HapticFeedback is a
+  # brief UI-click tick meant for a button tap, not something a rider
+  # would feel over a moving motorcycle's own vibration/wind noise.
+  vibration: ^3.2.1
   # Trip route map. Pure-Dart tile renderer (no native map SDK, no
   # Mapbox/Google billing) — see trips/trip_detail_screen.dart.
   flutter_map: ^7.0.2
