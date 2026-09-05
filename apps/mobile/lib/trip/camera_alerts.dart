@@ -59,7 +59,13 @@ class CameraAlertService {
   /// them ahead of time, not just react once you're within alert range.
   final camerasNotifier = ValueNotifier<List<CameraPoint>>(const []);
 
-  static const _alertRadiusMeters = 500.0;
+  // Alerts within this radius, but at highway speed a GPS fix can land
+  // anywhere inside it (fixes arrive every few seconds, not continuously)
+  // — the actual trigger distance ranges from here down to 0m depending
+  // on where the next fix happens to fall, not a fixed lead time. 1km
+  // keeps that whole range comfortably ahead of the camera instead of
+  // sometimes as close as a couple hundred meters.
+  static const _alertRadiusMeters = 1000.0;
   static const _requeryDistanceMeters = 15000.0;
   static const _queryRadiusDegrees = 0.09; // ~10km at most latitudes
 
