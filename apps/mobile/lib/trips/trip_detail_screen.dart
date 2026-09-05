@@ -563,6 +563,7 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
                 bottom: 18,
                 child: _Scrubber(
                   controller: _controller,
+                  realDuration: _realDuration(pts),
                   doubleSpeed: _doubleSpeed,
                   satellite: _satellite,
                   onTogglePlay: _togglePlay,
@@ -658,6 +659,7 @@ class _TelemetryCapsule extends StatelessWidget {
 class _Scrubber extends StatelessWidget {
   const _Scrubber({
     required this.controller,
+    required this.realDuration,
     required this.doubleSpeed,
     required this.satellite,
     required this.onTogglePlay,
@@ -667,6 +669,12 @@ class _Scrubber extends StatelessWidget {
   });
 
   final AnimationController controller;
+  // The trip's actual real duration, independent of the 1x/2x playback
+  // multiplier — for a long trip played at real time, a few seconds of
+  // watching moves the slider by only a couple of pixels, easy to mistake
+  // for the replay being stuck rather than just genuinely slow. This
+  // clock is what actually proves it's progressing.
+  final Duration realDuration;
   final bool doubleSpeed;
   final bool satellite;
   final VoidCallback onTogglePlay;
@@ -674,52 +682,78 @@ class _Scrubber extends StatelessWidget {
   final VoidCallback onToggleLayer;
   final ValueChanged<double> onScrub;
 
+  static String _fmt(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final elapsed = realDuration * controller.value.clamp(0.0, 1.0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        GestureDetector(
-          onTap: onTogglePlay,
-          child: Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Noct.accent.withValues(alpha: 0.10),
-              border: Border.all(color: Noct.accent, width: 1.5),
-            ),
-            child: Icon(controller.isAnimating ? Ph.pauseFill : Ph.playFill, size: 14, color: Noct.a200),
-          ),
-        ),
-        Expanded(
-          child: SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3,
-              activeTrackColor: Noct.accent,
-              inactiveTrackColor: Noct.n800,
-              thumbColor: Noct.a200,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
-              overlayShape: SliderComponentShape.noOverlay,
-            ),
-            child: Slider(value: controller.value.clamp(0.0, 1.0), onChanged: onScrub),
-          ),
-        ),
-        GestureDetector(
-          onTap: onToggleSpeed,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            child: Text(
-              doubleSpeed ? '2×' : '1×',
-              style: const TextStyle(fontSize: 11, color: Noct.n400, fontWeight: FontWeight.w400),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4, right: 4),
+          child: Text(
+            '${_fmt(elapsed)} / ${_fmt(realDuration)}',
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: Noct.n400,
+              fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
         ),
-        GestureDetector(
-          onTap: onToggleLayer,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: Icon(Ph.globeHemisphereWest, size: 16, color: satellite ? Noct.accent : Noct.n400),
-          ),
+        Row(
+          children: [
+            GestureDetector(
+              onTap: onTogglePlay,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Noct.accent.withValues(alpha: 0.10),
+                  border: Border.all(color: Noct.accent, width: 1.5),
+                ),
+                child: Icon(controller.isAnimating ? Ph.pauseFill : Ph.playFill, size: 14, color: Noct.a200),
+              ),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  activeTrackColor: Noct.accent,
+                  inactiveTrackColor: Noct.n800,
+                  thumbColor: Noct.a200,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+                  overlayShape: SliderComponentShape.noOverlay,
+                ),
+                child: Slider(value: controller.value.clamp(0.0, 1.0), onChanged: onScrub),
+              ),
+            ),
+            GestureDetector(
+              onTap: onToggleSpeed,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  doubleSpeed ? '2×' : '1×',
+                  style: const TextStyle(fontSize: 11, color: Noct.n400, fontWeight: FontWeight.w400),
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: onToggleLayer,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(Ph.globeHemisphereWest, size: 16, color: satellite ? Noct.accent : Noct.n400),
+              ),
+            ),
+          ],
         ),
       ],
     );
