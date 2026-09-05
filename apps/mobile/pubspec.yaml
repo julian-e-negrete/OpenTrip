@@ -35,6 +35,9 @@ dependencies:
   # brief UI-click tick meant for a button tap, not something a rider
   # would feel over a moving motorcycle's own vibration/wind noise.
   vibration: ^3.2.1
+  # Plays the camera/radar alert tone (assets/sounds/camera_alert.wav) —
+  # see trip/camera_alerts.dart.
+  audioplayers: ^6.8.1
   # Trip route map. Pure-Dart tile renderer (no native map SDK, no
   # Mapbox/Google billing) — see trips/trip_detail_screen.dart.
   flutter_map: ^7.0.2
@@ -63,3 +66,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/sounds/

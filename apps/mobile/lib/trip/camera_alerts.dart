@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:vibration/vibration.dart';
@@ -52,6 +53,7 @@ class CameraAlert {
 class CameraAlertService {
   final _alertController = StreamController<CameraAlert>.broadcast();
   Stream<CameraAlert> get alerts => _alertController.stream;
+  final _audioPlayer = AudioPlayer();
 
   /// The cameras loaded for the current stretch — so the map can plot
   /// them ahead of time, not just react once you're within alert range.
@@ -191,6 +193,7 @@ class CameraAlertService {
         // not an alert; effectively imperceptible in that context, which
         // is exactly what "alerts do not vibrate" turned out to mean.
         unawaited(_buzz());
+        unawaited(_beep());
         _alertController.add(CameraAlert(camera, distance));
       }
     }
@@ -209,8 +212,20 @@ class CameraAlertService {
     }
   }
 
+  Future<void> _beep() async {
+    try {
+      // Same three-pulse cadence as _buzz — an audible cue reaches a
+      // rider whose phone isn't in a pocket (mounted, or a helmet
+      // intercom paired over Bluetooth) the way vibration alone can't.
+      await _audioPlayer.play(AssetSource('sounds/camera_alert.wav'));
+    } catch (e) {
+      logBuffer.add('Camera: alert sound failed — $e');
+    }
+  }
+
   Future<void> dispose() async {
     camerasNotifier.dispose();
+    await _audioPlayer.dispose();
     await _alertController.close();
   }
 }
