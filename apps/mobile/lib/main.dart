@@ -8,6 +8,7 @@ import 'auth/auth_service.dart';
 import 'auth/login_screen.dart';
 import 'config/app_config.dart';
 import 'home_shell.dart';
+import 'logging/error_reporter.dart';
 import 'logging/log_buffer.dart';
 import 'sync/sync_service.dart';
 import 'theme/app_theme.dart';
@@ -22,6 +23,16 @@ void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Flutter's own default for this (dump to console, keep going) stays
+      // in effect via presentError — this just additionally captures the
+      // same framework-level errors (failed builds, layout exceptions)
+      // that runZonedGuarded's handler below never sees, since Flutter
+      // catches those itself rather than letting them escape the zone.
+      FlutterError.onError = (details) {
+        FlutterError.presentError(details);
+        logBuffer.add('FLUTTER ERROR: ${details.exception}\n${details.stack}');
+        unawaited(ErrorReporter.report('Flutter framework error', details.exception, details.stack));
+      };
       FlutterBluePlus.setLogLevel(LogLevel.verbose, color: false);
 
       if (AppConfig.isSupabaseConfigured) {
@@ -34,7 +45,10 @@ void main() {
 
       runApp(const OpenTripApp());
     },
-    (error, stack) => logBuffer.add('UNCAUGHT ERROR: $error\n$stack'),
+    (error, stack) {
+      logBuffer.add('UNCAUGHT ERROR: $error\n$stack');
+      unawaited(ErrorReporter.report('Uncaught error', error, stack));
+    },
     zoneSpecification: ZoneSpecification(
       print: (self, parent, zone, line) {
         parent.print(zone, line);

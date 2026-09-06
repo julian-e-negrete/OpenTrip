@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:vibration/vibration.dart';
 
+import '../logging/error_reporter.dart';
 import '../logging/log_buffer.dart';
 import 'geo_math.dart';
 
@@ -169,11 +170,12 @@ class CameraAlertService {
           .toList();
       camerasNotifier.value = _cameras;
       logBuffer.add('Camera: loaded ${_cameras.length} camera(s) for this stretch');
-    } catch (e) {
+    } catch (e, st) {
       // Best-effort — no network, Overpass unavailable/rate-limiting, or a
       // malformed response just means no alerts for this stretch of the
       // trip, not a failed recording.
       logBuffer.add('Camera: query failed, no alerts for this stretch — $e');
+      unawaited(ErrorReporter.report('Camera: Overpass query', e, st));
     } finally {
       client?.close();
       _queryInFlight = false;
@@ -214,8 +216,9 @@ class CameraAlertService {
       // other haptic in the app that it reads as "look at the road", not
       // just background phone noise.
       await Vibration.vibrate(pattern: [0, 300, 150, 300, 150, 300]);
-    } catch (e) {
+    } catch (e, st) {
       logBuffer.add('Camera: vibration failed — $e');
+      unawaited(ErrorReporter.report('Camera: vibration', e, st));
     }
   }
 
@@ -237,8 +240,9 @@ class CameraAlertService {
       // rider whose phone isn't in a pocket (mounted, or a helmet
       // intercom paired over Bluetooth) the way vibration alone can't.
       await _audioPlayer.play(AssetSource('sounds/camera_alert.wav'));
-    } catch (e) {
+    } catch (e, st) {
       logBuffer.add('Camera: alert sound failed — $e');
+      unawaited(ErrorReporter.report('Camera: alert sound', e, st));
     }
   }
 

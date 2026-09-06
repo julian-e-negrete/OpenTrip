@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 
+import '../logging/error_reporter.dart';
 import '../logging/log_buffer.dart';
 import 'ble_keepalive_service.dart';
 import 'kawasaki_connector.dart';
@@ -144,9 +145,10 @@ class BleConnectionService {
       // would be a harmless no-op (start() is idempotent) if it somehow
       // ever weren't.
       unawaited(BleKeepAliveService.instance.start());
-    } catch (e) {
+    } catch (e, st) {
       if (_reconnectAttempt >= _maxAutoReconnectAttempts) {
         logBuffer.add('BLE: auto-reconnect gave up after $_reconnectAttempt attempt(s) — $e');
+        unawaited(ErrorReporter.report('BLE auto-reconnect gave up', e, st));
         lastError = 'Connection to the bike was lost and couldn\'t be re-established.';
         _reconnectAttempt = 0;
         stateNotifier.value = BleConnectionState.failed;

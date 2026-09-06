@@ -255,6 +255,33 @@ create policy "trip_music_events_delete_own" on public.trip_music_events
   );
 
 
+-- Client-reported error log: lets a developer (or an AI coding
+-- assistant working from this project's own data) see real on-device
+-- failures with their actual context and stack trace, instead of only
+-- reconstructing what might have happened from source code after the
+-- fact. Insert-only from the client's own auth session — no select/
+-- update/delete policy is granted, so a signed-in user can report
+-- errors but never read back anyone's (including their own) logged
+-- errors through the app; reading is a project-access operation, done
+-- directly against Postgres, not something the app itself does.
+create table if not exists public.error_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  occurred_at timestamptz not null default now(),
+  context text not null,
+  message text not null,
+  stack_trace text,
+  platform text
+);
+
+create index if not exists idx_error_logs_occurred_at on public.error_logs(occurred_at desc);
+
+alter table public.error_logs enable row level security;
+
+create policy "error_logs_insert_own" on public.error_logs
+  for insert with check (auth.uid() = user_id);
+
+
 -- Display name + country for now — avatar/vehicle photo sync needs
 -- Supabase Storage (a bucket + its own policies), not set up yet.
 -- country_code is a picked ISO 3166-1 alpha-2 code (see

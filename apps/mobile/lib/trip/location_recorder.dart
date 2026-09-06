@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../data/models/trip_point.dart';
+import '../logging/error_reporter.dart';
 import '../logging/log_buffer.dart';
 import 'camera_alerts.dart';
 import 'driving_math.dart';
@@ -215,6 +216,7 @@ class LocationRecorder {
       _onPosition,
       onError: (Object error, StackTrace stack) {
         logBuffer.add('GPS: position stream ERROR: $error');
+        unawaited(ErrorReporter.report('GPS: position stream', error, stack));
       },
       onDone: () {
         logBuffer.add('GPS: position stream closed (accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount glitch-rejected=$_rejectedGlitchCount)');
