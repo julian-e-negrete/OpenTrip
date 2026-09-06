@@ -468,6 +468,8 @@ class _RecordingScreenState extends State<RecordingScreen> {
       behaviorHardAccelCount: _recorder.behaviorHardAccelCount,
       behaviorHardBrakeCount: _recorder.behaviorHardBrakeCount,
       behaviorHardCorneringCount: _recorder.behaviorHardCorneringCount,
+      best0To60Seconds: _recorder.best0To60Seconds,
+      best100To180Seconds: _recorder.best100To180Seconds,
       phoneLeanMaxDeg: phoneLeanMaxDeg,
     );
     await TripRepository.instance.finishTrip(finished);

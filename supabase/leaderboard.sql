@@ -66,14 +66,27 @@ create policy "trophies_insert_own" on public.trophies
   for insert with check (auth.uid() = user_id);
 
 
-create or replace function public.get_leaderboard()
+-- Re-running this after best_0_60_seconds/best_100_180_seconds/
+-- top_speed_kph were added to the returned columns needs the drop first
+-- — Postgres won't let create-or-replace change an existing function's
+-- return-row shape (same reason get_territory_map() below already needs
+-- this).
+drop function if exists public.get_leaderboard();
+create function public.get_leaderboard()
 returns table (
   user_id uuid,
   display_name text,
   total_distance_meters double precision,
   longest_drive_meters double precision,
   territory_cells integer,
-  trophy_count integer
+  trophy_count integer,
+  -- Racing stats (apps/mobile/lib/trip/accel_run_tracker.dart) — best
+  -- (lowest) 0-60/100-180 km/h time across this rider's trips, and their
+  -- highest-ever recorded top speed (GPS or BLE, whichever was higher on
+  -- a given trip). Null until a trip actually crosses that bracket.
+  best_0_60_seconds double precision,
+  best_100_180_seconds double precision,
+  top_speed_kph double precision
 )
 language sql
 security definer
@@ -85,10 +98,19 @@ as $$
     coalesce(t.total_distance, 0) as total_distance_meters,
     coalesce(t.longest_drive, 0) as longest_drive_meters,
     coalesce(tc.cell_count, 0) as territory_cells,
-    coalesce(tr.trophy_count, 0) as trophy_count
+    coalesce(tr.trophy_count, 0) as trophy_count,
+    t.best_0_60_seconds,
+    t.best_100_180_seconds,
+    t.top_speed_kph
   from public.profiles p
   left join (
-    select user_id, sum(distance_meters) as total_distance, max(distance_meters) as longest_drive
+    select
+      user_id,
+      sum(distance_meters) as total_distance,
+      max(distance_meters) as longest_drive,
+      min(best_0_60_seconds) as best_0_60_seconds,
+      min(best_100_180_seconds) as best_100_180_seconds,
+      max(greatest(coalesce(max_speed_kph, 0), coalesce(ble_max_speed_kph, 0))) as top_speed_kph
     from public.trips
     group by user_id
   ) t on t.user_id = p.user_id

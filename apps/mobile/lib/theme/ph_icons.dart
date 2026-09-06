@@ -31,6 +31,7 @@ abstract final class Ph {
   static const IconData caretRight = IconData(0xe13a, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData caretUp = IconData(0xe13c, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData caretDown = IconData(0xe136, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData lightning = IconData(0xe2de, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData export_ = IconData(0xeaf0, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData trash = IconData(0xe4a6, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData pencilSimple = IconData(0xe3b4, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);

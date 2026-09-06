@@ -227,6 +227,13 @@ class _StatReport extends StatelessWidget {
         trip.behaviorMaxCorneringG == null ? null : '${trip.behaviorMaxCorneringG!.toStringAsFixed(2)}g',
       ),
     ];
+    final racing = [
+      ('0-60 km/h', trip.best0To60Seconds == null ? null : '${trip.best0To60Seconds!.toStringAsFixed(2)}s'),
+      (
+        '100-180 km/h',
+        trip.best100To180Seconds == null ? null : '${trip.best100To180Seconds!.toStringAsFixed(2)}s',
+      ),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
       child: Column(
@@ -235,6 +242,7 @@ class _StatReport extends StatelessWidget {
           _Group('From the ride', ride),
           _Group('From the bike', bike),
           _Group('Behaviour', behavior),
+          _Group('Racing', racing),
         ],
       ),
     );

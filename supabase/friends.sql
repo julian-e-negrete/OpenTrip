@@ -180,14 +180,22 @@ revoke execute on function public.get_pending_friend_requests() from anon, publi
 -- profiles.leaderboard_visible the same way get_leaderboard() does —
 -- opting out of rankings means out of every ranking view, friends
 -- included, not just the global one.
-create or replace function public.get_friends_leaderboard()
+-- Re-running this after best_0_60_seconds/best_100_180_seconds/
+-- top_speed_kph were added to the returned columns needs the drop first
+-- — same reason get_leaderboard() (leaderboard.sql) and
+-- get_friends_territory_map() below already need it.
+drop function if exists public.get_friends_leaderboard();
+create function public.get_friends_leaderboard()
 returns table (
   user_id uuid,
   display_name text,
   total_distance_meters double precision,
   longest_drive_meters double precision,
   territory_cells integer,
-  trophy_count integer
+  trophy_count integer,
+  best_0_60_seconds double precision,
+  best_100_180_seconds double precision,
+  top_speed_kph double precision
 )
 language sql
 security definer
@@ -206,11 +214,20 @@ as $$
     coalesce(t.total_distance, 0) as total_distance_meters,
     coalesce(t.longest_drive, 0) as longest_drive_meters,
     coalesce(tc.cell_count, 0) as territory_cells,
-    coalesce(tr.trophy_count, 0) as trophy_count
+    coalesce(tr.trophy_count, 0) as trophy_count,
+    t.best_0_60_seconds,
+    t.best_100_180_seconds,
+    t.top_speed_kph
   from public.profiles p
   join friend_ids f on f.friend_id = p.user_id
   left join (
-    select user_id, sum(distance_meters) as total_distance, max(distance_meters) as longest_drive
+    select
+      user_id,
+      sum(distance_meters) as total_distance,
+      max(distance_meters) as longest_drive,
+      min(best_0_60_seconds) as best_0_60_seconds,
+      min(best_100_180_seconds) as best_100_180_seconds,
+      max(greatest(coalesce(max_speed_kph, 0), coalesce(ble_max_speed_kph, 0))) as top_speed_kph
     from public.trips
     group by user_id
   ) t on t.user_id = p.user_id

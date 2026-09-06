@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'gamification/territory_map_screen.dart';
 import 'leaderboard/leaderboard_screen.dart';
+import 'racing/racing_screen.dart';
 import 'theme/app_theme.dart';
 import 'theme/ph_icons.dart';
 import 'trip/recording_controller.dart';
@@ -10,7 +11,7 @@ import 'trip/recording_screen.dart';
 import 'trips/trip_history_screen.dart';
 import 'vehicles/vehicle_list_screen.dart';
 
-enum _Tab { trips, ranks, map, garage }
+enum _Tab { trips, ranks, racing, map, garage }
 
 /// Post-login (or post-guest) shell.
 ///
@@ -60,6 +61,7 @@ class _HomeShellState extends State<HomeShell> {
   final _navigatorKeys = {
     _Tab.trips: GlobalKey<NavigatorState>(),
     _Tab.ranks: GlobalKey<NavigatorState>(),
+    _Tab.racing: GlobalKey<NavigatorState>(),
     _Tab.map: GlobalKey<NavigatorState>(),
     _Tab.garage: GlobalKey<NavigatorState>(),
   };
@@ -67,6 +69,7 @@ class _HomeShellState extends State<HomeShell> {
   static const _roots = {
     _Tab.trips: TripHistoryScreen(),
     _Tab.ranks: LeaderboardScreen(),
+    _Tab.racing: RacingScreen(),
     _Tab.map: TerritoryMapScreen(),
     _Tab.garage: VehicleListScreen(),
   };
@@ -220,6 +223,7 @@ class _NocturneBottomBar extends StatelessWidget {
   static const _destinations = {
     _Tab.trips: (icon: Ph.path, label: 'Trips'),
     _Tab.ranks: (icon: Ph.ranking, label: 'Ranks'),
+    _Tab.racing: (icon: Ph.flagCheckered, label: 'Racing'),
     _Tab.map: (icon: Ph.hexagon, label: 'Map'),
     _Tab.garage: (icon: Ph.motorcycle, label: 'Garage'),
   };
@@ -243,6 +247,7 @@ class _NocturneBottomBar extends StatelessWidget {
                 children: [
                   _destination(_Tab.trips),
                   _destination(_Tab.ranks),
+                  _destination(_Tab.racing),
                   const SizedBox(width: 60),
                   _destination(_Tab.map),
                   _destination(_Tab.garage),

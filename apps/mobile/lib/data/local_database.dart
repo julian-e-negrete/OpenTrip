@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 15,
+      version: 16,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -104,6 +104,8 @@ class LocalDatabase {
             ble_max_tire_pressure_rr_kpa REAL,
             ble_trip_a_km REAL,
             ble_trip_b_km REAL,
+            best_0_60_seconds REAL,
+            best_100_180_seconds REAL,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -396,6 +398,16 @@ class LocalDatabase {
             final name = column.split(' ').first;
             if (!pointExisting.contains(name)) {
               await db.execute('ALTER TABLE trip_points ADD COLUMN $column');
+            }
+          }
+        }
+        if (oldVersion < 16) {
+          final tripColumns = await db.rawQuery('PRAGMA table_info(trips)');
+          final tripExisting = tripColumns.map((c) => c['name']).toSet();
+          for (final column in ['best_0_60_seconds REAL', 'best_100_180_seconds REAL']) {
+            final name = column.split(' ').first;
+            if (!tripExisting.contains(name)) {
+              await db.execute('ALTER TABLE trips ADD COLUMN $column');
             }
           }
         }

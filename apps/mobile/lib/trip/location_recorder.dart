@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../data/models/trip_point.dart';
 import '../logging/error_reporter.dart';
 import '../logging/log_buffer.dart';
+import 'accel_run_tracker.dart';
 import 'camera_alerts.dart';
 import 'driving_math.dart';
 import 'geo_math.dart';
@@ -133,12 +134,22 @@ class LocationRecorder {
   int _hardBrakeCount = 0;
   int _hardCorneringCount = 0;
 
+  // Roll-race-style acceleration timers (trip/accel_run_tracker.dart) — GPS
+  // speed only, same as the behavior stats above, so every vehicle gets
+  // these for free, not just BLE-equipped bikes. Runs during every
+  // recording (not just a dedicated race attempt — see racing/racing_screen.dart),
+  // so a good pull nailed incidentally on an ordinary ride still counts.
+  final _zeroToSixty = AccelRunTracker(lowThresholdKph: 2, highThresholdKph: 60);
+  final _hundredToOneEighty = AccelRunTracker(lowThresholdKph: 100, highThresholdKph: 180);
+
   double? get behaviorMaxAccelG => _maxAccelMps2 == null ? null : mps2ToG(_maxAccelMps2!);
   double? get behaviorMaxBrakeG => _maxBrakeMps2 == null ? null : mps2ToG(_maxBrakeMps2!);
   double? get behaviorMaxCorneringG => _maxCorneringMps2 == null ? null : mps2ToG(_maxCorneringMps2!);
   int get behaviorHardAccelCount => _hardAccelCount;
   int get behaviorHardBrakeCount => _hardBrakeCount;
   int get behaviorHardCorneringCount => _hardCorneringCount;
+  double? get best0To60Seconds => _zeroToSixty.bestSeconds;
+  double? get best100To180Seconds => _hundredToOneEighty.bestSeconds;
 
   Stream<TripPoint> get pointStream => _pointsController.stream;
   Stream<RecordingStats> get statsStream => _statsController.stream;
@@ -210,6 +221,8 @@ class LocationRecorder {
     _hardAccelCount = 0;
     _hardBrakeCount = 0;
     _hardCorneringCount = 0;
+    _zeroToSixty.reset();
+    _hundredToOneEighty.reset();
 
     logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
     _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
@@ -375,6 +388,11 @@ class LocationRecorder {
       _maxSpeedKph = speedKph;
     }
     _lastSpeedKph = speedKph;
+
+    if (speedKph != null) {
+      _zeroToSixty.onFix(speedKph, now);
+      _hundredToOneEighty.onFix(speedKph, now);
+    }
 
     if (_seq == 1 || _seq % 20 == 0) {
       logBuffer.add(

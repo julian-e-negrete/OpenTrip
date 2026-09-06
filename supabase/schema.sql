@@ -86,6 +86,12 @@ create table if not exists public.trips (
   ble_max_tire_pressure_rr_kpa double precision,
   ble_trip_a_km double precision,
   ble_trip_b_km double precision,
+  -- Roll-race-style acceleration stats (apps/mobile/lib/trip/accel_run_tracker.dart)
+  -- — the best (lowest) time this trip crossed 0-60 km/h or 100-180 km/h.
+  -- GPS-derived, so available for every vehicle, not just BLE-equipped
+  -- bikes — same posture as the behavior stats below.
+  best_0_60_seconds double precision,
+  best_100_180_seconds double precision,
   -- GPS-derived driving-behavior stats (apps/mobile/lib/trip/driving_math.dart)
   -- — available for every trip, not just BLE-equipped vehicles.
   behavior_max_accel_g double precision,
@@ -131,6 +137,8 @@ alter table public.trips add column if not exists ble_min_tire_pressure_rr_kpa d
 alter table public.trips add column if not exists ble_max_tire_pressure_rr_kpa double precision;
 alter table public.trips add column if not exists ble_trip_a_km double precision;
 alter table public.trips add column if not exists ble_trip_b_km double precision;
+alter table public.trips add column if not exists best_0_60_seconds double precision;
+alter table public.trips add column if not exists best_100_180_seconds double precision;
 
 alter table public.trips enable row level security;
 

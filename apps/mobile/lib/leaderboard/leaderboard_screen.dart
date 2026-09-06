@@ -13,10 +13,15 @@ import 'leaderboard_entry.dart';
 enum _Scope { global, friends }
 
 /// Cross-user rankings across TripRank's four categories (distance,
-/// longest single drive, territory explored, trophies) — deliberately
-/// not speed-based, matching README.md's "why this exists". Pulled
-/// on-demand, not live — a leaderboard being a few minutes stale
-/// doesn't matter the way "did my own trip save" does.
+/// longest single drive, territory explored, trophies) — originally
+/// deliberately not speed-based, matching README.md's "why this exists"
+/// (TripRank-parity, not a racing app). Racing stats (best 0-60/100-180
+/// km/h, top speed) were added later as explicit secondary columns on
+/// every row — see [_RankRow] — rather than as a fifth primary category,
+/// since ranking riders by raw speed cuts against that original posture
+/// even though showing the numbers doesn't. Pulled on-demand, not live —
+/// a leaderboard being a few minutes stale doesn't matter the way "did
+/// my own trip save" does.
 ///
 /// Two scopes, matching TripRank's "global & friends leaderboards":
 /// every rider who hasn't opted out (Account's "Show me on
@@ -239,6 +244,20 @@ class _RankedContent extends StatelessWidget {
       ..sort((a, b) => _valueFor(b, category).compareTo(_valueFor(a, category)));
     final max = ranked.map((e) => _valueFor(e, category)).fold<double>(0, (m, v) => v > m ? v : m);
 
+    // "The one who got the fastest speed of all" — a single visual
+    // callout on whichever row (among those currently shown) actually
+    // holds the highest top speed, independent of the primary sort/
+    // category above.
+    String? fastestUserId;
+    double? fastestTopSpeed;
+    for (final e in ranked) {
+      final topSpeed = e.topSpeedKph;
+      if (topSpeed != null && (fastestTopSpeed == null || topSpeed > fastestTopSpeed)) {
+        fastestTopSpeed = topSpeed;
+        fastestUserId = e.userId;
+      }
+    }
+
     return Column(
       children: [
         if (LayoutPrefs.instance.ranks == RanksVariant.podium && ranked.length >= 3)
@@ -257,6 +276,7 @@ class _RankedContent extends StatelessWidget {
                   isMe: ranked[i].userId == myUserId,
                   fraction: max <= 0 ? 0 : _valueFor(ranked[i], category) / max,
                   valueLabel: _formatValue(ranked[i], category),
+                  isFastest: ranked[i].userId == fastestUserId,
                 ),
             ],
           ),
@@ -273,6 +293,7 @@ class _RankRow extends StatelessWidget {
     required this.isMe,
     required this.fraction,
     required this.valueLabel,
+    required this.isFastest,
   });
 
   final int rank;
@@ -280,6 +301,10 @@ class _RankRow extends StatelessWidget {
   final bool isMe;
   final double fraction;
   final String valueLabel;
+
+  /// Whether this rider holds the single highest top speed among
+  /// everyone currently shown — see _RankedContent's fastestUserId.
+  final bool isFastest;
 
   @override
   Widget build(BuildContext context) {
@@ -302,35 +327,103 @@ class _RankRow extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(
-                  width: 16,
-                  child: Text(
-                    rank.toString().padLeft(2, '0'),
-                    style: const TextStyle(fontSize: 11, color: Noct.n500, fontFeatures: [FontFeature.tabularFigures()]),
-                  ),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      child: Text(
+                        rank.toString().padLeft(2, '0'),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Noct.n500,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        isMe ? 'You' : entry.displayName,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: isMe ? Noct.a100 : Noct.text,
+                          fontWeight: FontWeight.w400,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      valueLabel,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w500,
+                        color: Noct.text,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    isMe ? 'You' : entry.displayName,
-                    style: TextStyle(fontSize: 13.5, color: isMe ? Noct.a100 : Noct.text, fontWeight: FontWeight.w400),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  valueLabel,
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: Noct.text, fontFeatures: [
-                    FontFeature.tabularFigures(),
-                  ]),
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.only(left: 26),
+                  child: _RacingStatsLine(entry: entry, isFastest: isFastest),
                 ),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The three secondary racing stats every row shows regardless of which
+/// primary category is active — best 0-60, best 100-180, top speed —
+/// plus a small highlight on whichever rider holds the single fastest
+/// top speed among everyone currently shown.
+class _RacingStatsLine extends StatelessWidget {
+  const _RacingStatsLine({required this.entry, required this.isFastest});
+
+  final LeaderboardEntry entry;
+  final bool isFastest;
+
+  static String _seconds(double? v) => v == null ? '—' : '${v.toStringAsFixed(2)}s';
+
+  @override
+  Widget build(BuildContext context) {
+    final topSpeedColor = isFastest ? Noct.a300 : Noct.n400;
+    final topSpeed = entry.topSpeedKph;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '0-60 ${_seconds(entry.best0To60Seconds)}',
+          style: const TextStyle(fontSize: 11, color: Noct.n500, fontFeatures: [FontFeature.tabularFigures()]),
+        ),
+        const Text('  ·  ', style: TextStyle(fontSize: 11, color: Noct.n700)),
+        Text(
+          '100-180 ${_seconds(entry.best100To180Seconds)}',
+          style: const TextStyle(fontSize: 11, color: Noct.n500, fontFeatures: [FontFeature.tabularFigures()]),
+        ),
+        const Text('  ·  ', style: TextStyle(fontSize: 11, color: Noct.n700)),
+        if (isFastest) ...[
+          Icon(Ph.lightning, size: 11, color: topSpeedColor),
+          const SizedBox(width: 2),
+        ],
+        Text(
+          topSpeed == null ? 'Top —' : 'Top ${topSpeed.toStringAsFixed(0)} km/h',
+          style: TextStyle(
+            fontSize: 11,
+            color: topSpeedColor,
+            fontWeight: isFastest ? FontWeight.w500 : FontWeight.w400,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
     );
   }
 }
