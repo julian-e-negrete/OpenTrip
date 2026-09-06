@@ -7,6 +7,7 @@ import '../data/models/trip.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../gamification/gamification_service.dart';
+import '../logging/log_buffer.dart';
 import '../theme/app_theme.dart';
 import '../theme/primitives.dart';
 import '../trip/location_recorder.dart';
@@ -52,6 +53,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   @override
   void initState() {
     super.initState();
+    logBuffer.add('Racing: countdown started — ${widget.bracket.label}, ${widget.vehicle.name}');
     _startCountdown();
   }
 
@@ -69,6 +71,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   Future<void> _beginRun() async {
     final userId = await CurrentUser.instance.id();
     final trip = await TripRepository.instance.startTrip(userId: userId, vehicleId: widget.vehicle.id);
+    logBuffer.add('Racing: GO — trip ${trip.id}, DNF in ${widget.bracket.dnfSeconds}s if not reached');
     await _recorder.start(trip.id);
     if (!mounted) return;
     setState(() {
@@ -95,7 +98,15 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
     await _statsSub?.cancel();
     final finalStats = await _recorder.stop();
     final trip = _trip;
-    if (trip == null) return;
+    if (trip == null) {
+      logBuffer.add('Racing: _finish called with no active trip — nothing to save (dnf=$dnf, seconds=$seconds)');
+      return;
+    }
+    logBuffer.add(
+      dnf
+          ? 'Racing: DNF — trip ${trip.id} never reached ${widget.bracket.label}'
+          : 'Racing: finished — trip ${trip.id}, ${seconds?.toStringAsFixed(2)}s for ${widget.bracket.label}',
+    );
 
     final finished = trip.finish(
       endedAt: DateTime.now(),
@@ -122,6 +133,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   }
 
   Future<void> _cancel() async {
+    logBuffer.add('Racing: cancelled during ${_step.name}${_trip == null ? '' : ' — discarding trip ${_trip!.id}'}');
     _countdownTimer?.cancel();
     _dnfTimer?.cancel();
     await _statsSub?.cancel();

@@ -390,8 +390,23 @@ class LocationRecorder {
     _lastSpeedKph = speedKph;
 
     if (speedKph != null) {
+      // Logged only on an actual completed run (rare), not per-fix — this
+      // fires during any recording, not just a dedicated racing/ attempt,
+      // so logging every armed/disarmed transition here would flood a
+      // plain ride's log for no reason.
+      final prevZeroToSixty = _zeroToSixty.bestSeconds;
       _zeroToSixty.onFix(speedKph, now);
+      final newZeroToSixty = _zeroToSixty.bestSeconds;
+      if (newZeroToSixty != null && newZeroToSixty != prevZeroToSixty) {
+        logBuffer.add('Racing: 0-60 km/h in ${newZeroToSixty.toStringAsFixed(2)}s');
+      }
+
+      final prevHundredToOneEighty = _hundredToOneEighty.bestSeconds;
       _hundredToOneEighty.onFix(speedKph, now);
+      final newHundredToOneEighty = _hundredToOneEighty.bestSeconds;
+      if (newHundredToOneEighty != null && newHundredToOneEighty != prevHundredToOneEighty) {
+        logBuffer.add('Racing: 100-180 km/h in ${newHundredToOneEighty.toStringAsFixed(2)}s');
+      }
     }
 
     if (_seq == 1 || _seq % 20 == 0) {
