@@ -244,13 +244,21 @@ class _NocturneBottomBar extends StatelessWidget {
             child: SizedBox(
               height: 62,
               child: Row(
+                // Three tabs sit left of the raised control's gap, two sit
+                // right — an odd total (5) can't split into equal-count
+                // halves the way the original four could. Uneven flex
+                // (2 per left tab, 3 per right tab: 6 either side) keeps
+                // the two *groups* equal-width instead, so the gap — and
+                // the raised control centered on it below — still lands
+                // in the bar's true middle rather than drifting toward
+                // the heavier side.
                 children: [
-                  _destination(_Tab.trips),
-                  _destination(_Tab.ranks),
-                  _destination(_Tab.racing),
+                  _destination(_Tab.trips, flex: 2),
+                  _destination(_Tab.ranks, flex: 2),
+                  _destination(_Tab.racing, flex: 2),
                   const SizedBox(width: 60),
-                  _destination(_Tab.map),
-                  _destination(_Tab.garage),
+                  _destination(_Tab.map, flex: 3),
+                  _destination(_Tab.garage, flex: 3),
                 ],
               ),
             ),
@@ -268,11 +276,12 @@ class _NocturneBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _destination(_Tab tab) {
+  Widget _destination(_Tab tab, {int flex = 1}) {
     final d = _destinations[tab]!;
     final active = tab == activeTab;
     final color = active ? Noct.accent : Noct.n500;
     return Expanded(
+      flex: flex,
       child: InkWell(
         onTap: () => onSelectTab(tab),
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
