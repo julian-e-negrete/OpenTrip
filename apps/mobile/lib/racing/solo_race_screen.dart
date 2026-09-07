@@ -57,6 +57,8 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   double? _resultZeroToSixty;
   double? _resultZeroToOneEighty;
   bool _finishing = false;
+  bool _cancelling = false;
+  bool _cancelled = false;
 
   @override
   void initState() {
@@ -120,10 +122,25 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
 
     final userId = await CurrentUser.instance.id();
     final trip = await TripRepository.instance.startTrip(userId: userId, vehicleId: widget.vehicle.id);
+    if (_cancelled) {
+      // Cancelled while this was still in flight (e.g. tapped away right
+      // at GO) — this trip was never shown to the rider and never
+      // started recording. Without this check it would sit forever as
+      // an orphaned, permanently "in progress" row: _cancel() itself
+      // could only clean up a trip it already knew about via [_trip],
+      // which isn't assigned until further down.
+      await TripRepository.instance.deleteTrip(trip.id);
+      return;
+    }
     logBuffer.add('Racing: GO — trip ${trip.id}, ends at 180 km/h or ${_maxRunSeconds}s');
     // The timer starts here, at GO, and runs continuously until the race
     // actually finishes — nothing below resets or restarts it.
     await _recorder.start(trip.id);
+    if (_cancelled) {
+      await _recorder.stop();
+      await TripRepository.instance.deleteTrip(trip.id);
+      return;
+    }
     if (!mounted) return;
     setState(() {
       _trip = trip;
@@ -142,7 +159,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   }
 
   Future<void> _finish() async {
-    if (_finishing) return;
+    if (_finishing || _cancelled) return;
     _finishing = true;
     _maxRunTimer?.cancel();
     await _statsSub?.cancel();
@@ -185,6 +202,16 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   }
 
   Future<void> _cancel() async {
+    // Idempotent and safe from any step: the explicit close button, the
+    // system back button/gesture (see PopScope in build()), and a
+    // once-only run each call this, and one of them getting there first
+    // must stop the others from repeating (or racing) the same cleanup.
+    if (_cancelling || _finishing || _step == _Step.result) {
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+    _cancelling = true;
+    _cancelled = true;
     logBuffer.add('Racing: cancelled during ${_step.name}${_trip == null ? '' : ' — discarding trip ${_trip!.id}'}');
     _countdownTimer?.cancel();
     _goFlashTimer?.cancel();
@@ -197,7 +224,11 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
       // rider's history — same posture as any recording that never
       // finishes cleanly, just handled explicitly here since cancelling
       // is a normal, expected action on this screen (unlike a crash).
+      // (If no trip exists yet — cancelled mid-countdown, or GO hasn't
+      // created one yet — _beginRun() itself checks _cancelled and
+      // cleans up whatever it creates after this point.)
       await TripRepository.instance.deleteTrip(trip.id);
+      _trip = null; // dispose() below must not also try to clean this up
     }
     if (mounted) Navigator.of(context).pop();
   }
@@ -208,36 +239,75 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
     _goFlashTimer?.cancel();
     _maxRunTimer?.cancel();
     _statsSub?.cancel();
-    unawaited(_recorder.dispose());
+    _cancelled = true;
+    // The real fix for orphaned "in progress" trips: home_shell.dart's
+    // outer PopScope owns the platform back button/gesture for the whole
+    // app and, on a nested route it can pop, calls Navigator.pop()
+    // directly rather than routing back through maybePop() — a direct
+    // pop() isn't gated by a route's own PopScope.canPop, so it fires
+    // and immediately succeeds (didPop: true) without ever reaching the
+    // PopScope above, and _cancel() never runs. dispose() is the one
+    // cleanup hook that always fires no matter which path removed this
+    // screen (the X button, that bypassed system back, or anything
+    // else), so it's the only place this can be handled reliably. Skip
+    // it if a real finish is already saving the trip properly (_finishing)
+    // or already has (_step == result) — this must never race a good save.
+    final trip = _trip;
+    final needsCleanup = trip != null && _step != _Step.result && !_finishing;
+    unawaited(() async {
+      await _recorder.stop();
+      await _recorder.dispose();
+      if (needsCleanup) {
+        logBuffer.add('Racing: screen closed mid-race — discarding trip ${trip.id}');
+        await TripRepository.instance.deleteTrip(trip.id);
+      }
+    }());
     unawaited(_audioPlayer.dispose());
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Noct.bg,
-      appBar: AppBar(
+    return PopScope(
+      // Belt-and-suspenders alongside dispose()'s cleanup below: catches
+      // the close ("X") button and any pop that does go through
+      // maybePop() cleanly, running _cancel()'s immediate, synchronous-
+      // feeling cleanup instead of waiting on the widget to actually get
+      // disposed. home_shell.dart's outer PopScope is what owns the
+      // platform back button/gesture for this app, though, and calls
+      // Navigator.pop() directly on the nested route rather than going
+      // through maybePop() — a direct pop() isn't gated by canPop here,
+      // so system back doesn't reliably reach this at all; dispose() is
+      // what actually guarantees the trip never gets orphaned.
+      canPop: _step == _Step.result,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        unawaited(_cancel());
+      },
+      child: Scaffold(
         backgroundColor: Noct.bg,
-        title: const Text('Roll race'),
-        leading: _step == _Step.result
-            ? null
-            : IconButton(icon: const Icon(Icons.close), onPressed: _cancel),
-      ),
-      body: SafeArea(
-        child: switch (_step) {
-          _Step.countdown => _CountdownView(count: _countdown, showGo: _showGo),
-          _Step.running => _RunningView(
-              stats: _stats,
-              zeroToSixty: _recorder.best0To60Seconds,
-              justStarted: _showGo,
-            ),
-          _Step.result => _ResultView(
-              zeroToSixty: _resultZeroToSixty,
-              zeroToOneEighty: _resultZeroToOneEighty,
-              onDone: () => Navigator.of(context).pop(),
-            ),
-        },
+        appBar: AppBar(
+          backgroundColor: Noct.bg,
+          title: const Text('Roll race'),
+          leading: _step == _Step.result
+              ? null
+              : IconButton(icon: const Icon(Icons.close), onPressed: _cancel),
+        ),
+        body: SafeArea(
+          child: switch (_step) {
+            _Step.countdown => _CountdownView(count: _countdown, showGo: _showGo),
+            _Step.running => _RunningView(
+                stats: _stats,
+                zeroToSixty: _recorder.best0To60Seconds,
+                justStarted: _showGo,
+              ),
+            _Step.result => _ResultView(
+                zeroToSixty: _resultZeroToSixty,
+                zeroToOneEighty: _resultZeroToOneEighty,
+                onDone: () => Navigator.of(context).pop(),
+              ),
+          },
+        ),
       ),
     );
   }
