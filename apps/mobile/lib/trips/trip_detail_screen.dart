@@ -478,16 +478,57 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     if (_controller.isAnimating) _controller.forward();
   }
 
+  /// Back/share/delete — the only way off this screen and the only way
+  /// to delete a trip from its own detail view. Previously only rendered
+  /// once real route points were loaded: a trip with no GPS points at
+  /// all (GPS never got a fix, or one of the recording-interruption bugs
+  /// elsewhere in this app) hit the early returns below and never got
+  /// this row at all, leaving no in-screen way back and no way to delete
+  /// it short of the system back gesture plus a swipe on the trip list.
+  Widget _chipRow(BuildContext context) {
+    return Positioned(
+      // The hero map is deliberately full-bleed under the status
+      // bar/notch, but these chips have to be real tap targets —
+      // without the safe-area inset they render (and hit-test)
+      // right under the system status bar, unreachable.
+      top: 12 + MediaQuery.paddingOf(context).top,
+      left: 10,
+      right: 10,
+      child: Row(
+        children: [
+          _MapChip(icon: Ph.arrowLeft, onTap: widget.onBack),
+          const Spacer(),
+          _MapChip(icon: Ph.export_, onTap: widget.onShare),
+          const SizedBox(width: 8),
+          _MapChip(icon: Ph.trash, onTap: widget.onDelete),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pts = widget.points;
     if (pts == null) {
-      return const ColoredBox(color: Noct.canvas, child: Center(child: CircularProgressIndicator()));
+      return ColoredBox(
+        color: Noct.canvas,
+        child: Stack(
+          children: [
+            const Center(child: CircularProgressIndicator()),
+            _chipRow(context),
+          ],
+        ),
+      );
     }
     if (pts.isEmpty) {
-      return const ColoredBox(
+      return ColoredBox(
         color: Noct.canvas,
-        child: Center(child: Text('No route recorded for this trip.', style: TextStyle(color: Noct.n500))),
+        child: Stack(
+          children: [
+            const Center(child: Text('No route recorded for this trip.', style: TextStyle(color: Noct.n500))),
+            _chipRow(context),
+          ],
+        ),
       );
     }
 
@@ -585,24 +626,7 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
                   ),
                 ),
               ),
-              Positioned(
-                // The hero map is deliberately full-bleed under the status
-                // bar/notch, but these chips have to be real tap targets —
-                // without the safe-area inset they render (and hit-test)
-                // right under the system status bar, unreachable.
-                top: 12 + MediaQuery.paddingOf(context).top,
-                left: 10,
-                right: 10,
-                child: Row(
-                  children: [
-                    _MapChip(icon: Ph.arrowLeft, onTap: widget.onBack),
-                    const Spacer(),
-                    _MapChip(icon: Ph.export_, onTap: widget.onShare),
-                    const SizedBox(width: 8),
-                    _MapChip(icon: Ph.trash, onTap: widget.onDelete),
-                  ],
-                ),
-              ),
+              _chipRow(context),
               Positioned(
                 left: 14,
                 bottom: 64,
