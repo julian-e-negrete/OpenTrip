@@ -134,13 +134,14 @@ class LocationRecorder {
   int _hardBrakeCount = 0;
   int _hardCorneringCount = 0;
 
-  // Roll-race-style acceleration timers (trip/accel_run_tracker.dart) — GPS
-  // speed only, same as the behavior stats above, so every vehicle gets
-  // these for free, not just BLE-equipped bikes. Runs during every
-  // recording (not just a dedicated race attempt — see racing/racing_screen.dart),
-  // so a good pull nailed incidentally on an ordinary ride still counts.
-  final _zeroToSixty = AccelRunTracker(lowThresholdKph: 2, highThresholdKph: 60);
-  final _hundredToOneEighty = AccelRunTracker(lowThresholdKph: 100, highThresholdKph: 180);
+  // Roll-race timer (trip/accel_run_tracker.dart) — one continuous run
+  // from a standing start, 0-60 km/h as an in-run checkpoint and 0-180
+  // km/h as the finish condition, both from the same launch. GPS speed
+  // only, same as the behavior stats above, so every vehicle gets this
+  // for free, not just BLE-equipped bikes. Runs during every recording
+  // (not just a dedicated racing/ attempt), so a good pull nailed
+  // incidentally on an ordinary ride still counts.
+  final _rollRace = RollRaceTracker();
 
   double? get behaviorMaxAccelG => _maxAccelMps2 == null ? null : mps2ToG(_maxAccelMps2!);
   double? get behaviorMaxBrakeG => _maxBrakeMps2 == null ? null : mps2ToG(_maxBrakeMps2!);
@@ -148,8 +149,8 @@ class LocationRecorder {
   int get behaviorHardAccelCount => _hardAccelCount;
   int get behaviorHardBrakeCount => _hardBrakeCount;
   int get behaviorHardCorneringCount => _hardCorneringCount;
-  double? get best0To60Seconds => _zeroToSixty.bestSeconds;
-  double? get best100To180Seconds => _hundredToOneEighty.bestSeconds;
+  double? get best0To60Seconds => _rollRace.bestZeroToSixtySeconds;
+  double? get best0To180Seconds => _rollRace.bestZeroToOneEightySeconds;
 
   Stream<TripPoint> get pointStream => _pointsController.stream;
   Stream<RecordingStats> get statsStream => _statsController.stream;
@@ -221,8 +222,7 @@ class LocationRecorder {
     _hardAccelCount = 0;
     _hardBrakeCount = 0;
     _hardCorneringCount = 0;
-    _zeroToSixty.reset();
-    _hundredToOneEighty.reset();
+    _rollRace.reset();
 
     logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
     _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
@@ -390,22 +390,20 @@ class LocationRecorder {
     _lastSpeedKph = speedKph;
 
     if (speedKph != null) {
-      // Logged only on an actual completed run (rare), not per-fix — this
-      // fires during any recording, not just a dedicated racing/ attempt,
-      // so logging every armed/disarmed transition here would flood a
-      // plain ride's log for no reason.
-      final prevZeroToSixty = _zeroToSixty.bestSeconds;
-      _zeroToSixty.onFix(speedKph, now);
-      final newZeroToSixty = _zeroToSixty.bestSeconds;
+      // Logged only on an actual completed checkpoint (rare), not per-fix
+      // — this fires during any recording, not just a dedicated racing/
+      // attempt, so logging every launch/re-arm transition here would
+      // flood a plain ride's log for no reason.
+      final prevZeroToSixty = _rollRace.bestZeroToSixtySeconds;
+      final prevZeroToOneEighty = _rollRace.bestZeroToOneEightySeconds;
+      _rollRace.onFix(speedKph, now);
+      final newZeroToSixty = _rollRace.bestZeroToSixtySeconds;
+      final newZeroToOneEighty = _rollRace.bestZeroToOneEightySeconds;
       if (newZeroToSixty != null && newZeroToSixty != prevZeroToSixty) {
         logBuffer.add('Racing: 0-60 km/h in ${newZeroToSixty.toStringAsFixed(2)}s');
       }
-
-      final prevHundredToOneEighty = _hundredToOneEighty.bestSeconds;
-      _hundredToOneEighty.onFix(speedKph, now);
-      final newHundredToOneEighty = _hundredToOneEighty.bestSeconds;
-      if (newHundredToOneEighty != null && newHundredToOneEighty != prevHundredToOneEighty) {
-        logBuffer.add('Racing: 100-180 km/h in ${newHundredToOneEighty.toStringAsFixed(2)}s');
+      if (newZeroToOneEighty != null && newZeroToOneEighty != prevZeroToOneEighty) {
+        logBuffer.add('Racing: 0-180 km/h in ${newZeroToOneEighty.toStringAsFixed(2)}s');
       }
     }
 

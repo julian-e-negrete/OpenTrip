@@ -10,10 +10,11 @@ class LeaderboardEntry {
   final int trophyCount;
 
   /// Racing stats (trip/accel_run_tracker.dart) — best (lowest) 0-60/
-  /// 100-180 km/h time across this rider's trips, and their highest-ever
-  /// recorded top speed. Null until a trip actually crosses that bracket.
+  /// 0-180 km/h time across this rider's trips (both checkpoints of the
+  /// same standing-start roll race), and their highest-ever recorded top
+  /// speed. Null until a trip actually reaches that checkpoint.
   final double? best0To60Seconds;
-  final double? best100To180Seconds;
+  final double? best0To180Seconds;
   final double? topSpeedKph;
 
   const LeaderboardEntry({
@@ -24,7 +25,7 @@ class LeaderboardEntry {
     required this.territoryCells,
     required this.trophyCount,
     this.best0To60Seconds,
-    this.best100To180Seconds,
+    this.best0To180Seconds,
     this.topSpeedKph,
   });
 
@@ -36,7 +37,7 @@ class LeaderboardEntry {
     territoryCells: row['territory_cells'] as int,
     trophyCount: row['trophy_count'] as int,
     best0To60Seconds: (row['best_0_60_seconds'] as num?)?.toDouble(),
-    best100To180Seconds: (row['best_100_180_seconds'] as num?)?.toDouble(),
+    best0To180Seconds: (row['best_0_180_seconds'] as num?)?.toDouble(),
     topSpeedKph: (row['top_speed_kph'] as num?)?.toDouble(),
   );
 }

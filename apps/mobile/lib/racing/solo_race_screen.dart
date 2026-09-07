@@ -11,49 +11,54 @@ import '../logging/log_buffer.dart';
 import '../theme/app_theme.dart';
 import '../theme/primitives.dart';
 import '../trip/location_recorder.dart';
-import 'accel_bracket.dart';
 
 enum _Step { countdown, running, result }
 
-/// A deliberate, timed acceleration attempt — countdown, then a normal
-/// trip/location_recorder.dart recording (so it's a real, replayable trip
-/// in the rider's history, same as one started from the Record tab) that
-/// auto-finishes the moment the selected bracket's timer
-/// (trip/accel_run_tracker.dart, surfaced via LocationRecorder) reports a
-/// result, or after [AccelBracket.dnfSeconds] with no result (DNF).
+/// One continuous roll race — a real drag-strip-style countdown (light
+/// sequence, 3-2-1-GO), then a single uninterrupted run: 0-60 km/h is a
+/// checkpoint that appears mid-run without stopping anything, 0-180 km/h
+/// (or a 30-second cap, whichever comes first) is what actually ends it.
+/// Deliberately not two separate timed tests — the timer starts once, at
+/// GO, and never resets until the run finishes.
 ///
-/// Deliberately skips the ordinary Record flow's camera alerts display,
-/// lean-angle opt-in, and Spotify logging — none of those matter for a
-/// short, straight acceleration run, and keeping this screen narrowly
-/// scoped to "how fast did I get from A to B" keeps its own state machine
-/// simple. Territory/trophy processing still runs, same as any trip.
+/// Under the hood this is a normal trip/location_recorder.dart recording
+/// (so it's a real, replayable trip in the rider's history, same as one
+/// started from the Record tab) — trip/accel_run_tracker.dart's
+/// RollRaceTracker is what actually measures both checkpoints from the
+/// same launch.
 class SoloRaceScreen extends StatefulWidget {
-  const SoloRaceScreen({super.key, required this.vehicle, required this.bracket});
+  const SoloRaceScreen({super.key, required this.vehicle});
 
   final Vehicle vehicle;
-  final AccelBracket bracket;
 
   @override
   State<SoloRaceScreen> createState() => _SoloRaceScreenState();
 }
 
+/// Run ends 30s after GO if 180 km/h is never reached — a checkpoint
+/// already captured (0-60) still stands; only the unreached one shows as
+/// not hit.
+const _maxRunSeconds = 30;
+
 class _SoloRaceScreenState extends State<SoloRaceScreen> {
   final _recorder = LocationRecorder();
   _Step _step = _Step.countdown;
   int _countdown = 3;
+  bool _showGo = false;
   Timer? _countdownTimer;
-  Timer? _dnfTimer;
+  Timer? _goFlashTimer;
+  Timer? _maxRunTimer;
   StreamSubscription<RecordingStats>? _statsSub;
   Trip? _trip;
   RecordingStats? _stats;
-  double? _resultSeconds;
-  bool _dnf = false;
+  double? _resultZeroToSixty;
+  double? _resultZeroToOneEighty;
   bool _finishing = false;
 
   @override
   void initState() {
     super.initState();
-    logBuffer.add('Racing: countdown started — ${widget.bracket.label}, ${widget.vehicle.name}');
+    logBuffer.add('Racing: countdown started — ${widget.vehicle.name}');
     _startCountdown();
   }
 
@@ -69,9 +74,16 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   }
 
   Future<void> _beginRun() async {
+    setState(() => _showGo = true);
+    _goFlashTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _showGo = false);
+    });
+
     final userId = await CurrentUser.instance.id();
     final trip = await TripRepository.instance.startTrip(userId: userId, vehicleId: widget.vehicle.id);
-    logBuffer.add('Racing: GO — trip ${trip.id}, DNF in ${widget.bracket.dnfSeconds}s if not reached');
+    logBuffer.add('Racing: GO — trip ${trip.id}, ends at 180 km/h or ${_maxRunSeconds}s');
+    // The timer starts here, at GO, and runs continuously until the race
+    // actually finishes — nothing below resets or restarts it.
     await _recorder.start(trip.id);
     if (!mounted) return;
     setState(() {
@@ -79,33 +91,34 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
       _step = _Step.running;
     });
     _statsSub = _recorder.statsStream.listen(_onStats);
-    _dnfTimer = Timer(Duration(seconds: widget.bracket.dnfSeconds), () => unawaited(_finish(dnf: true)));
+    _maxRunTimer = Timer(const Duration(seconds: _maxRunSeconds), () => unawaited(_finish()));
   }
 
   void _onStats(RecordingStats stats) {
     if (!mounted) return;
     setState(() => _stats = stats);
-    final achieved = widget.bracket == AccelBracket.zeroToSixty
-        ? _recorder.best0To60Seconds
-        : _recorder.best100To180Seconds;
-    if (achieved != null) unawaited(_finish(dnf: false, seconds: achieved));
+    // 0-60 is just a checkpoint — capturing it doesn't touch _step, the
+    // timer, or the recording. Only reaching 180 ends the race early.
+    if (_recorder.best0To180Seconds != null) unawaited(_finish());
   }
 
-  Future<void> _finish({required bool dnf, double? seconds}) async {
+  Future<void> _finish() async {
     if (_finishing) return;
     _finishing = true;
-    _dnfTimer?.cancel();
+    _maxRunTimer?.cancel();
     await _statsSub?.cancel();
     final finalStats = await _recorder.stop();
     final trip = _trip;
     if (trip == null) {
-      logBuffer.add('Racing: _finish called with no active trip — nothing to save (dnf=$dnf, seconds=$seconds)');
+      logBuffer.add('Racing: _finish called with no active trip — nothing to save');
       return;
     }
+
+    final zeroToSixty = _recorder.best0To60Seconds;
+    final zeroToOneEighty = _recorder.best0To180Seconds;
     logBuffer.add(
-      dnf
-          ? 'Racing: DNF — trip ${trip.id} never reached ${widget.bracket.label}'
-          : 'Racing: finished — trip ${trip.id}, ${seconds?.toStringAsFixed(2)}s for ${widget.bracket.label}',
+      'Racing: finished — trip ${trip.id}, 0-60=${zeroToSixty?.toStringAsFixed(2) ?? "not reached"}s, '
+      '0-180=${zeroToOneEighty?.toStringAsFixed(2) ?? "not reached"}s',
     );
 
     final finished = trip.finish(
@@ -115,8 +128,8 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
       avgSpeedKph: finalStats.avgSpeedKph,
       maxSpeedKph: finalStats.maxSpeedKph,
       pointCount: finalStats.pointCount,
-      best0To60Seconds: _recorder.best0To60Seconds,
-      best100To180Seconds: _recorder.best100To180Seconds,
+      best0To60Seconds: zeroToSixty,
+      best0To180Seconds: zeroToOneEighty,
     );
     await TripRepository.instance.finishTrip(finished);
 
@@ -126,8 +139,8 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
 
     if (!mounted) return;
     setState(() {
-      _dnf = dnf;
-      _resultSeconds = seconds;
+      _resultZeroToSixty = zeroToSixty;
+      _resultZeroToOneEighty = zeroToOneEighty;
       _step = _Step.result;
     });
   }
@@ -135,7 +148,8 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   Future<void> _cancel() async {
     logBuffer.add('Racing: cancelled during ${_step.name}${_trip == null ? '' : ' — discarding trip ${_trip!.id}'}');
     _countdownTimer?.cancel();
-    _dnfTimer?.cancel();
+    _goFlashTimer?.cancel();
+    _maxRunTimer?.cancel();
     await _statsSub?.cancel();
     final trip = _trip;
     if (trip != null) {
@@ -152,7 +166,8 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
-    _dnfTimer?.cancel();
+    _goFlashTimer?.cancel();
+    _maxRunTimer?.cancel();
     _statsSub?.cancel();
     unawaited(_recorder.dispose());
     super.dispose();
@@ -164,19 +179,22 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
       backgroundColor: Noct.bg,
       appBar: AppBar(
         backgroundColor: Noct.bg,
-        title: Text(widget.bracket.label),
+        title: const Text('Roll race'),
         leading: _step == _Step.result
             ? null
             : IconButton(icon: const Icon(Icons.close), onPressed: _cancel),
       ),
       body: SafeArea(
         child: switch (_step) {
-          _Step.countdown => _CountdownView(count: _countdown),
-          _Step.running => _RunningView(stats: _stats, bracket: widget.bracket),
+          _Step.countdown => _CountdownView(count: _countdown, showGo: _showGo),
+          _Step.running => _RunningView(
+              stats: _stats,
+              zeroToSixty: _recorder.best0To60Seconds,
+              justStarted: _showGo,
+            ),
           _Step.result => _ResultView(
-              dnf: _dnf,
-              seconds: _resultSeconds,
-              bracket: widget.bracket,
+              zeroToSixty: _resultZeroToSixty,
+              zeroToOneEighty: _resultZeroToOneEighty,
               onDone: () => Navigator.of(context).pop(),
             ),
         },
@@ -185,9 +203,46 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   }
 }
 
-class _CountdownView extends StatelessWidget {
-  const _CountdownView({required this.count});
+/// A real drag-strip "Christmas tree" feel: three lights climb amber as
+/// the count falls, then flash green together at GO — a countdown a
+/// rider can read at a glance without parsing a number under load.
+class _StartingLight extends StatelessWidget {
+  const _StartingLight({required this.count, required this.go});
   final int count;
+  final bool go;
+
+  @override
+  Widget build(BuildContext context) {
+    // count 3 -> 1 light, 2 -> 2 lights, 1 -> 3 lights, all amber; GO -> 3 green.
+    final litCount = go ? 3 : (4 - count).clamp(0, 3);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 3; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i < litCount ? (go ? Colors.green : Colors.amber) : Noct.n800,
+                boxShadow: i < litCount
+                    ? [BoxShadow(color: (go ? Colors.green : Colors.amber).withValues(alpha: 0.6), blurRadius: 12)]
+                    : null,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CountdownView extends StatelessWidget {
+  const _CountdownView({required this.count, required this.showGo});
+  final int count;
+  final bool showGo;
 
   @override
   Widget build(BuildContext context) {
@@ -195,9 +250,11 @@ class _CountdownView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$count', style: Noct.stat(96)),
+          _StartingLight(count: count, go: showGo),
+          const SizedBox(height: 28),
+          Text(showGo ? 'GO' : '$count', style: Noct.stat(96, color: showGo ? Colors.green : null)),
           const SizedBox(height: 12),
-          const Text('Get ready...', style: TextStyle(fontSize: 14, color: Noct.n500)),
+          if (!showGo) const Text('Get ready...', style: TextStyle(fontSize: 14, color: Noct.n500)),
         ],
       ),
     );
@@ -205,22 +262,73 @@ class _CountdownView extends StatelessWidget {
 }
 
 class _RunningView extends StatelessWidget {
-  const _RunningView({required this.stats, required this.bracket});
+  const _RunningView({required this.stats, required this.zeroToSixty, required this.justStarted});
   final RecordingStats? stats;
-  final AccelBracket bracket;
+  final double? zeroToSixty;
+  final bool justStarted;
 
   @override
   Widget build(BuildContext context) {
     final speed = stats?.currentSpeedKph;
+    final elapsed = stats?.elapsed;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          AnimatedOpacity(
+            opacity: justStarted ? 1 : 0,
+            duration: const Duration(milliseconds: 400),
+            child: const Text('GO', style: TextStyle(fontSize: 20, color: Colors.green, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(height: 8),
           Text(speed == null ? '—' : speed.toStringAsFixed(0), style: Noct.stat(72)),
           const SizedBox(height: 4),
           const Text('KM/H', style: Noct.statLabel),
+          const SizedBox(height: 18),
+          Text(
+            elapsed == null ? '0.0s' : '${(elapsed.inMilliseconds / 1000.0).toStringAsFixed(1)}s',
+            style: const TextStyle(fontSize: 15, color: Noct.n400, fontFeatures: [FontFeature.tabularFigures()]),
+          ),
           const SizedBox(height: 28),
-          Text('Reach ${bracket.label} to finish', style: const TextStyle(fontSize: 14, color: Noct.n500)),
+          _CheckpointBadge(label: '0-60 km/h', seconds: zeroToSixty),
+          const SizedBox(height: 10),
+          const Text('Reach 180 km/h to finish', style: TextStyle(fontSize: 13, color: Noct.n500)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CheckpointBadge extends StatelessWidget {
+  const _CheckpointBadge({required this.label, required this.seconds});
+  final String label;
+  final double? seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final hit = seconds != null;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      decoration: BoxDecoration(
+        color: hit ? Noct.a900 : Noct.surface,
+        borderRadius: BorderRadius.circular(Noct.rMd),
+        border: Border.all(color: hit ? Noct.a700 : Noct.n800),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 13, color: hit ? Noct.a100 : Noct.n500)),
+          const SizedBox(width: 8),
+          Text(
+            hit ? '${seconds!.toStringAsFixed(2)}s ✓' : '—',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: hit ? Noct.a100 : Noct.n500,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
         ],
       ),
     );
@@ -228,10 +336,9 @@ class _RunningView extends StatelessWidget {
 }
 
 class _ResultView extends StatelessWidget {
-  const _ResultView({required this.dnf, required this.seconds, required this.bracket, required this.onDone});
-  final bool dnf;
-  final double? seconds;
-  final AccelBracket bracket;
+  const _ResultView({required this.zeroToSixty, required this.zeroToOneEighty, required this.onDone});
+  final double? zeroToSixty;
+  final double? zeroToOneEighty;
   final VoidCallback onDone;
 
   @override
@@ -242,23 +349,35 @@ class _ResultView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              dnf ? 'DNF' : '${seconds!.toStringAsFixed(2)}s',
-              style: Noct.stat(64, color: dnf ? Noct.n500 : null),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              dnf
-                  ? 'Didn\'t reach ${bracket.label} within ${bracket.dnfSeconds}s'
-                  : bracket.label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Noct.n500),
-            ),
+            _ResultRow(label: '0-60 km/h', seconds: zeroToSixty),
+            const SizedBox(height: 18),
+            _ResultRow(label: '0-180 km/h', seconds: zeroToOneEighty, emphasize: true),
             const SizedBox(height: 32),
             NoctOutlinedButton(label: 'Done', onPressed: onDone),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({required this.label, required this.seconds, this.emphasize = false});
+  final String label;
+  final double? seconds;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(label.toUpperCase(), style: Noct.statLabel),
+        const SizedBox(height: 6),
+        Text(
+          seconds == null ? 'DNF' : '${seconds!.toStringAsFixed(2)}s',
+          style: Noct.stat(emphasize ? 56 : 36, color: seconds == null ? Noct.n500 : null),
+        ),
+      ],
     );
   }
 }

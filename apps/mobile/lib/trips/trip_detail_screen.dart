@@ -230,8 +230,8 @@ class _StatReport extends StatelessWidget {
     final racing = [
       ('0-60 km/h', trip.best0To60Seconds == null ? null : '${trip.best0To60Seconds!.toStringAsFixed(2)}s'),
       (
-        '100-180 km/h',
-        trip.best100To180Seconds == null ? null : '${trip.best100To180Seconds!.toStringAsFixed(2)}s',
+        '0-180 km/h',
+        trip.best0To180Seconds == null ? null : '${trip.best0To180Seconds!.toStringAsFixed(2)}s',
       ),
     ];
     return Padding(

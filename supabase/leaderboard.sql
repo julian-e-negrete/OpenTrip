@@ -66,7 +66,7 @@ create policy "trophies_insert_own" on public.trophies
   for insert with check (auth.uid() = user_id);
 
 
--- Re-running this after best_0_60_seconds/best_100_180_seconds/
+-- Re-running this after best_0_60_seconds/best_0_180_seconds/
 -- top_speed_kph were added to the returned columns needs the drop first
 -- — Postgres won't let create-or-replace change an existing function's
 -- return-row shape (same reason get_territory_map() below already needs
@@ -81,11 +81,12 @@ returns table (
   territory_cells integer,
   trophy_count integer,
   -- Racing stats (apps/mobile/lib/trip/accel_run_tracker.dart) — best
-  -- (lowest) 0-60/100-180 km/h time across this rider's trips, and their
+  -- (lowest) 0-60/0-180 km/h time across this rider's trips (both
+  -- checkpoints of the same standing-start roll race), and their
   -- highest-ever recorded top speed (GPS or BLE, whichever was higher on
-  -- a given trip). Null until a trip actually crosses that bracket.
+  -- a given trip). Null until a trip actually reaches that checkpoint.
   best_0_60_seconds double precision,
-  best_100_180_seconds double precision,
+  best_0_180_seconds double precision,
   top_speed_kph double precision
 )
 language sql
@@ -100,7 +101,7 @@ as $$
     coalesce(tc.cell_count, 0) as territory_cells,
     coalesce(tr.trophy_count, 0) as trophy_count,
     t.best_0_60_seconds,
-    t.best_100_180_seconds,
+    t.best_0_180_seconds,
     t.top_speed_kph
   from public.profiles p
   left join (
@@ -109,7 +110,7 @@ as $$
       sum(distance_meters) as total_distance,
       max(distance_meters) as longest_drive,
       min(best_0_60_seconds) as best_0_60_seconds,
-      min(best_100_180_seconds) as best_100_180_seconds,
+      min(best_0_180_seconds) as best_0_180_seconds,
       max(greatest(coalesce(max_speed_kph, 0), coalesce(ble_max_speed_kph, 0))) as top_speed_kph
     from public.trips
     group by user_id

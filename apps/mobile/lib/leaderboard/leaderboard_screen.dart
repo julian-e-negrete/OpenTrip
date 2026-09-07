@@ -15,7 +15,7 @@ enum _Scope { global, friends }
 /// Cross-user rankings across TripRank's four categories (distance,
 /// longest single drive, territory explored, trophies) — originally
 /// deliberately not speed-based, matching README.md's "why this exists"
-/// (TripRank-parity, not a racing app). Racing stats (best 0-60/100-180
+/// (TripRank-parity, not a racing app). Racing stats (best 0-60/0-180
 /// km/h, top speed) were added later as explicit secondary columns on
 /// every row — see [_RankRow] — rather than as a fifth primary category,
 /// since ranking riders by raw speed cuts against that original posture
@@ -382,7 +382,7 @@ class _RankRow extends StatelessWidget {
 }
 
 /// The three secondary racing stats every row shows regardless of which
-/// primary category is active — best 0-60, best 100-180, top speed —
+/// primary category is active — best 0-60, best 0-180, top speed —
 /// plus a small highlight on whichever rider holds the single fastest
 /// top speed among everyone currently shown.
 class _RacingStatsLine extends StatelessWidget {
@@ -406,7 +406,7 @@ class _RacingStatsLine extends StatelessWidget {
         ),
         const Text('  ·  ', style: TextStyle(fontSize: 11, color: Noct.n700)),
         Text(
-          '100-180 ${_seconds(entry.best100To180Seconds)}',
+          '0-180 ${_seconds(entry.best0To180Seconds)}',
           style: const TextStyle(fontSize: 11, color: Noct.n500, fontFeatures: [FontFeature.tabularFigures()]),
         ),
         const Text('  ·  ', style: TextStyle(fontSize: 11, color: Noct.n700)),

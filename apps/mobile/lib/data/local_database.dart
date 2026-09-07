@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 16,
+      version: 17,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -105,7 +105,14 @@ class LocalDatabase {
             ble_trip_a_km REAL,
             ble_trip_b_km REAL,
             best_0_60_seconds REAL,
+            -- Superseded by best_0_180_seconds below — the roll-race
+            -- redesign measures 0-180 km/h from the same standing start
+            -- as the 0-60 checkpoint, not a separate 100-180 rolling
+            -- time. No longer written by the app; column stays for
+            -- anyone upgrading from a build that had it, rather than a
+            -- destructive migration for a harmless, always-null leftover.
             best_100_180_seconds REAL,
+            best_0_180_seconds REAL,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -409,6 +416,13 @@ class LocalDatabase {
             if (!tripExisting.contains(name)) {
               await db.execute('ALTER TABLE trips ADD COLUMN $column');
             }
+          }
+        }
+        if (oldVersion < 17) {
+          final columns = await db.rawQuery('PRAGMA table_info(trips)');
+          final hasZeroToOneEighty = columns.any((c) => c['name'] == 'best_0_180_seconds');
+          if (!hasZeroToOneEighty) {
+            await db.execute('ALTER TABLE trips ADD COLUMN best_0_180_seconds REAL');
           }
         }
       },

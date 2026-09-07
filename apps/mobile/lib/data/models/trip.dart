@@ -77,13 +77,14 @@ class Trip {
   final int? behaviorHardBrakeCount;
   final int? behaviorHardCorneringCount;
 
-  /// Roll-race-style acceleration times (trip/accel_run_tracker.dart),
-  /// GPS-derived like the behavior stats above — the best (lowest) time
-  /// this trip crossed 0→60 km/h or 100→180 km/h, whether from a dedicated
-  /// racing/ attempt or nailed incidentally on an ordinary ride. Null if
-  /// the trip never crossed that bracket.
+  /// Roll-race checkpoint times (trip/accel_run_tracker.dart) — one
+  /// continuous run from a standing start, GPS-derived like the behavior
+  /// stats above: 0-60 km/h as an in-run checkpoint, 0-180 km/h as the
+  /// finish condition, both timed from the same launch. Whether from a
+  /// dedicated racing/ attempt or nailed incidentally on an ordinary
+  /// ride. Null if the trip never reached that checkpoint.
   final double? best0To60Seconds;
-  final double? best100To180Seconds;
+  final double? best0To180Seconds;
 
   /// Phone-accelerometer-derived max lean angle (trip/lean_angle_tracker.dart)
   /// — opt-in per recording (the "Track lean angle" toggle on
@@ -138,7 +139,7 @@ class Trip {
     this.behaviorHardBrakeCount,
     this.behaviorHardCorneringCount,
     this.best0To60Seconds,
-    this.best100To180Seconds,
+    this.best0To180Seconds,
     this.phoneLeanMaxDeg,
     this.synced = false,
   });
@@ -151,7 +152,7 @@ class Trip {
       behaviorMaxCorneringG != null ||
       phoneLeanMaxDeg != null;
 
-  bool get hasAccelStats => best0To60Seconds != null || best100To180Seconds != null;
+  bool get hasAccelStats => best0To60Seconds != null || best0To180Seconds != null;
 
   bool get isFinished => endedAt != null;
 
@@ -193,7 +194,7 @@ class Trip {
     int? behaviorHardBrakeCount,
     int? behaviorHardCorneringCount,
     double? best0To60Seconds,
-    double? best100To180Seconds,
+    double? best0To180Seconds,
     double? phoneLeanMaxDeg,
   }) {
     return Trip(
@@ -236,7 +237,7 @@ class Trip {
       behaviorHardBrakeCount: behaviorHardBrakeCount,
       behaviorHardCorneringCount: behaviorHardCorneringCount,
       best0To60Seconds: best0To60Seconds,
-      best100To180Seconds: best100To180Seconds,
+      best0To180Seconds: best0To180Seconds,
       phoneLeanMaxDeg: phoneLeanMaxDeg,
     );
   }
@@ -281,7 +282,7 @@ class Trip {
     'behavior_hard_brake_count': behaviorHardBrakeCount,
     'behavior_hard_cornering_count': behaviorHardCorneringCount,
     'best_0_60_seconds': best0To60Seconds,
-    'best_100_180_seconds': best100To180Seconds,
+    'best_0_180_seconds': best0To180Seconds,
     'phone_lean_max_deg': phoneLeanMaxDeg,
     'synced': synced ? 1 : 0,
   };
@@ -326,7 +327,7 @@ class Trip {
     behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
     behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
     best0To60Seconds: row['best_0_60_seconds'] as double?,
-    best100To180Seconds: row['best_100_180_seconds'] as double?,
+    best0To180Seconds: row['best_0_180_seconds'] as double?,
     phoneLeanMaxDeg: row['phone_lean_max_deg'] as double?,
     synced: (row['synced'] as int? ?? 0) != 0,
   );
@@ -372,7 +373,7 @@ class Trip {
     'behavior_hard_brake_count': behaviorHardBrakeCount,
     'behavior_hard_cornering_count': behaviorHardCorneringCount,
     'best_0_60_seconds': best0To60Seconds,
-    'best_100_180_seconds': best100To180Seconds,
+    'best_0_180_seconds': best0To180Seconds,
     'phone_lean_max_deg': phoneLeanMaxDeg,
   };
 
@@ -417,7 +418,7 @@ class Trip {
     behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
     behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
     best0To60Seconds: (row['best_0_60_seconds'] as num?)?.toDouble(),
-    best100To180Seconds: (row['best_100_180_seconds'] as num?)?.toDouble(),
+    best0To180Seconds: (row['best_0_180_seconds'] as num?)?.toDouble(),
     phoneLeanMaxDeg: (row['phone_lean_max_deg'] as num?)?.toDouble(),
     synced: true,
   );

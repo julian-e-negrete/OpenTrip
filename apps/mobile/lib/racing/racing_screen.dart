@@ -11,15 +11,16 @@ import '../data/repositories/vehicle_repository.dart';
 import '../theme/app_theme.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
-import 'accel_bracket.dart';
 import 'solo_race_screen.dart';
 
-/// Racing tab root: pick a vehicle and a bracket, see personal bests so
-/// far for that vehicle, and start a solo timed attempt
-/// (racing/solo_race_screen.dart). "Race a friend" is a visible, clearly
-/// labeled placeholder — the live two-phone linked race (a Supabase
-/// Realtime room with a synchronized countdown) is a separate follow-up
-/// phase, not built yet, so this doesn't pretend to work.
+/// Racing tab root: pick a vehicle, see personal bests so far for it, and
+/// start a solo roll race (racing/solo_race_screen.dart) — one
+/// continuous run measuring both 0-60 km/h (an in-run checkpoint) and
+/// 0-180 km/h (the finish line) from the same standing start. "Race a
+/// friend" is a visible, clearly labeled placeholder — the live
+/// two-phone linked race (a Supabase Realtime room with a synchronized
+/// countdown) is a separate follow-up phase, not built yet, so this
+/// doesn't pretend to work.
 class RacingScreen extends StatefulWidget {
   const RacingScreen({super.key});
 
@@ -30,7 +31,6 @@ class RacingScreen extends StatefulWidget {
 class _RacingScreenState extends State<RacingScreen> {
   List<Vehicle> _vehicles = [];
   Vehicle? _selectedVehicle;
-  AccelBracket _bracket = AccelBracket.zeroToSixty;
   List<Trip> _vehicleTrips = [];
   bool _loading = true;
 
@@ -68,10 +68,8 @@ class _RacingScreenState extends State<RacingScreen> {
     setState(() => _vehicleTrips = trips);
   }
 
-  double? get _personalBest {
-    final values = _vehicleTrips
-        .map((t) => _bracket == AccelBracket.zeroToSixty ? t.best0To60Seconds : t.best100To180Seconds)
-        .whereType<double>();
+  double? _bestOf(double? Function(Trip) selector) {
+    final values = _vehicleTrips.map(selector).whereType<double>();
     if (values.isEmpty) return null;
     return values.reduce((a, b) => a < b ? a : b);
   }
@@ -79,9 +77,7 @@ class _RacingScreenState extends State<RacingScreen> {
   Future<void> _start() async {
     final vehicle = _selectedVehicle;
     if (vehicle == null) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => SoloRaceScreen(vehicle: vehicle, bracket: _bracket)),
-    );
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => SoloRaceScreen(vehicle: vehicle)));
     await _load();
   }
 
@@ -93,6 +89,8 @@ class _RacingScreenState extends State<RacingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bestZeroToSixty = _bestOf((t) => t.best0To60Seconds);
+    final bestZeroToOneEighty = _bestOf((t) => t.best0To180Seconds);
     return Scaffold(
       appBar: AppBar(title: const Text('Racing')),
       body: _loading
@@ -122,24 +120,35 @@ class _RacingScreenState extends State<RacingScreen> {
                       },
                     ),
                     const SizedBox(height: 22),
-                    const Text('BRACKET', style: Noct.statLabel),
+                    const Text('PERSONAL BEST', style: Noct.statLabel),
                     const SizedBox(height: 9),
-                    NoctSegmentedControl<AccelBracket>(
-                      options: [for (final b in AccelBracket.values) (b, b.label)],
-                      value: _bracket,
-                      onChanged: (b) => setState(() => _bracket = b),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: NoctPanel(
+                            child: NoctStat(
+                              value: bestZeroToSixty == null ? '—' : bestZeroToSixty.toStringAsFixed(2),
+                              suffix: bestZeroToSixty == null ? null : 's',
+                              label: '0-60 km/h',
+                              valueSize: 28,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: NoctPanel(
+                            child: NoctStat(
+                              value: bestZeroToOneEighty == null ? '—' : bestZeroToOneEighty.toStringAsFixed(2),
+                              suffix: bestZeroToOneEighty == null ? null : 's',
+                              label: '0-180 km/h',
+                              valueSize: 28,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 22),
-                    NoctPanel(
-                      child: NoctStat(
-                        value: _personalBest == null ? '—' : _personalBest!.toStringAsFixed(2),
-                        suffix: _personalBest == null ? null : 's',
-                        label: 'Personal best · ${_bracket.label}',
-                        valueSize: 32,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    NoctOutlinedButton(label: 'Start solo run', icon: Ph.flagCheckered, onPressed: _start),
+                    NoctOutlinedButton(label: 'Start roll race', icon: Ph.flagCheckered, onPressed: _start),
                     const SizedBox(height: 10),
                     NoctOutlinedButton(label: 'Race a friend (coming soon)', onPressed: _raceAFriend),
                   ],
