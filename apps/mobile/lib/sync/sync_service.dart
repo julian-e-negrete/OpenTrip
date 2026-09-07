@@ -16,6 +16,7 @@ import '../data/repositories/trip_repository.dart';
 import '../friends/friend_models.dart';
 import '../gamification/territory_map_cell.dart';
 import '../leaderboard/leaderboard_entry.dart';
+import '../logging/error_reporter.dart';
 
 /// Mirrors local vehicles/trips/trip_points/profile (display name only)
 /// to Supabase Postgres — see /supabase/schema.sql for the tables this
@@ -91,6 +92,11 @@ class SyncService {
       if (state.event == AuthChangeEvent.signedIn || state.event == AuthChangeEvent.initialSession) {
         if (AuthService.instance.isSignedIn) {
           unawaited(pullAll().then((_) => _startRealtimeSync()));
+          // A cold app start with a signal is the most likely moment
+          // connectivity actually came back after a ride with none —
+          // catch up on anything error_reporter.dart couldn't send at
+          // the time (see that file's queue).
+          unawaited(ErrorReporter.flushPending());
         }
       } else if (state.event == AuthChangeEvent.signedOut) {
         unawaited(_stopRealtimeSync());

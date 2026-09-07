@@ -23,6 +23,11 @@ void main() {
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+      // Loads whatever logBuffer.dart persisted from a previous run
+      // before anything else can start adding to it — see that file's
+      // doc comment for why this exists (a crash or restart on the
+      // street, no signal, otherwise loses the in-memory log for good).
+      await logBuffer.init();
       // Flutter's own default for this (dump to console, keep going) stays
       // in effect via presentError — this just additionally captures the
       // same framework-level errors (failed builds, layout exceptions)

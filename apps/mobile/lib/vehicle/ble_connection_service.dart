@@ -121,6 +121,17 @@ class BleConnectionService {
     _linkSub = null;
     await _telemetrySub?.cancel();
     _telemetrySub = null;
+    // The old client (and its transport's live characteristic-notification
+    // subscriptions — see flutter_blue_plus_transport.dart's _notifySubs)
+    // was previously just dropped here, not disposed: disconnect() is the
+    // only other place that ever called _client.dispose(), and this path
+    // isn't that. dispose() -> transport.disconnect() is safe to call on
+    // an already-dropped link (guarded by isConnected there), so this is
+    // a pure cleanup, not a behavior change to the reconnect flow itself.
+    // On a bike that drops in and out of range repeatedly, never cleaning
+    // this up meant every dropped connection left its old notification
+    // listener alive and leaking for the rest of the ride.
+    unawaited(_client?.dispose());
     _client = null;
     telemetryNotifier.value = null;
 
