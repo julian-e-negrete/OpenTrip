@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
@@ -42,6 +43,8 @@ const _maxRunSeconds = 30;
 
 class _SoloRaceScreenState extends State<SoloRaceScreen> {
   final _recorder = LocationRecorder();
+  final _audioPlayer = AudioPlayer();
+  bool _audioContextConfigured = false;
   _Step _step = _Step.countdown;
   int _countdown = 3;
   bool _showGo = false;
@@ -63,6 +66,12 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   }
 
   void _startCountdown() {
+    // A rider is watching the road, not the screen — the countdown needs
+    // to be audible, not just visible (this is the whole reason it has a
+    // sound at all: you react to a beep in your ear faster than to a
+    // light you have to be looking at). Beeps for 3/2/1, a distinct
+    // rising chirp for GO so the two are never confused by ear alone.
+    unawaited(_playBeep());
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_countdown <= 1) {
         timer.cancel();
@@ -70,10 +79,40 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
         return;
       }
       setState(() => _countdown--);
+      unawaited(_playBeep());
     });
   }
 
+  Future<void> _configureAudioContextIfNeeded() async {
+    if (_audioContextConfigured) return;
+    // Same posture as trip/camera_alerts.dart's alert beep: the default
+    // audio focus grabs exclusive control and pauses whatever else is
+    // playing (a rider's own music) — duckOthers just lowers it instead,
+    // so the countdown plays on top rather than cutting the music off.
+    await _audioPlayer.setAudioContext(AudioContextConfig(focus: AudioContextConfigFocus.duckOthers).build());
+    _audioContextConfigured = true;
+  }
+
+  Future<void> _playBeep() async {
+    try {
+      await _configureAudioContextIfNeeded();
+      await _audioPlayer.play(AssetSource('sounds/race_countdown_beep.wav'));
+    } catch (e) {
+      logBuffer.add('Racing: countdown beep failed — $e');
+    }
+  }
+
+  Future<void> _playGo() async {
+    try {
+      await _configureAudioContextIfNeeded();
+      await _audioPlayer.play(AssetSource('sounds/race_countdown_go.wav'));
+    } catch (e) {
+      logBuffer.add('Racing: GO sound failed — $e');
+    }
+  }
+
   Future<void> _beginRun() async {
+    unawaited(_playGo());
     setState(() => _showGo = true);
     _goFlashTimer = Timer(const Duration(milliseconds: 700), () {
       if (mounted) setState(() => _showGo = false);
@@ -170,6 +209,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
     _maxRunTimer?.cancel();
     _statsSub?.cancel();
     unawaited(_recorder.dispose());
+    unawaited(_audioPlayer.dispose());
     super.dispose();
   }
 
