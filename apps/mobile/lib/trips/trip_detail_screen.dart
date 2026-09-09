@@ -51,6 +51,26 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   }
 
   Future<void> _confirmDelete() async {
+    if (!widget.trip.isFinished) {
+      // See trips/trip_history_screen.dart's matching guard — deleting
+      // the row here wouldn't stop the actual recording (owned by
+      // trip/recording_screen.dart's live LocationRecorder), leaving a
+      // dead trip that finishTrip() can never save into and losing the
+      // whole ride.
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Still recording'),
+          content: const Text(
+            'This trip is still being recorded. Stop it from the Record tab before deleting it.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK')),
+          ],
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

@@ -41,7 +41,19 @@ class TripRepository {
 
   Future<Trip> finishTrip(Trip finished) async {
     final db = await LocalDatabase.instance.database;
-    await db.update('trips', finished.toRow(), where: 'id = ?', whereArgs: [finished.id]);
+    // update() on a row that no longer exists — its trip was deleted
+    // while still recording, a real bug now guarded against at every
+    // delete entry point (trips/trip_history_screen.dart,
+    // trips/trip_detail_screen.dart, vehicles/vehicle_detail_screen.dart)
+    // — used to match 0 rows and silently drop the finished trip on the
+    // floor: the ride's GPS points were already saved, but the trip row
+    // itself, and everything derived from it, was just gone. Falling
+    // back to insert() here means finishing a trip can never lose it,
+    // regardless of what happened to its row in the meantime.
+    final affected = await db.update('trips', finished.toRow(), where: 'id = ?', whereArgs: [finished.id]);
+    if (affected == 0) {
+      await db.insert('trips', finished.toRow());
+    }
     DataEvents.instance.notifyChanged();
     return finished;
   }
