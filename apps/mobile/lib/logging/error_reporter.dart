@@ -51,6 +51,13 @@ abstract final class ErrorReporter {
     if (userId == null) return;
     final row = {
       'user_id': userId,
+      // Explicit rather than relying on the column's own now() default —
+      // a row queued here can sit in [_enqueue]'s local file for a long
+      // time before [flushPending] actually gets it to Supabase (no
+      // signal until well after the ride that caused it), and the
+      // default would otherwise stamp every queued row with the flush
+      // time instead of when it actually happened.
+      'occurred_at': DateTime.now().toUtc().toIso8601String(),
       'context': context,
       'message': error.toString(),
       'stack_trace': stack?.toString(),
