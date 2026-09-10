@@ -37,6 +37,16 @@
          foreground-service one above. Requested in
          trip/location_recorder.dart's ensureReady(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the app ask the OS (a standard system dialog, not a
+         settings deep-link) to stop battery-optimizing it — a real gap
+         found from actual synced ride data: some OEM battery managers
+         throttle GPS fixes down to one every 30s-plus even with the
+         foreground service above correctly running. Legitimate use here
+         (Play Store policy-compliant) since continuous background GPS
+         recording is this app's core purpose, not incidental. Requested
+         at most once ever, see trip/location_recorder.dart's
+         _requestBatteryOptimizationExemptionOnce(). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- geolocator's background position stream (used for the same
          foreground GPS recording above) needs a wake lock to keep the CPU
          running while the screen is off. Previously came in transitively

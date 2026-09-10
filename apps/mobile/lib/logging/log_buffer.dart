@@ -34,6 +34,21 @@ class LogBuffer extends ChangeNotifier {
   File? _file;
   int _appendsSinceRewrite = 0;
 
+  // Every call to add() fires its own unawaited disk write — with
+  // nothing serializing them, a fast burst of log lines (very real:
+  // permission checks, GPS fix acceptance, and BLE frame logs can all
+  // land within the same event-loop turn) could run their
+  // File.writeAsString calls concurrently, and a periodic full-file
+  // rewrite (see _rewriteEvery below) racing against a still-in-flight
+  // append truncated/interleaved lines — confirmed live: a "GPS: battery
+  // optimization exemption after request: PermissionStatus.granted"
+  // line came back on disk as just "r request: PermissionStatus.granted",
+  // missing everything before it. Chaining every write onto this future
+  // instead of firing them independently guarantees one write fully
+  // finishes before the next starts, so lines can no longer land out of
+  // order or torn.
+  Future<void> _writeQueue = Future.value();
+
   List<String> get lines => List.unmodifiable(_lines);
 
   bool get isEmpty => _lines.isEmpty;
@@ -68,7 +83,17 @@ class LogBuffer extends ChangeNotifier {
       _lines.removeRange(0, _lines.length - _maxLines);
     }
     notifyListeners();
-    unawaited(_persist(line));
+    _enqueue(() => _persist(line));
+  }
+
+  /// Chains [op] onto the write queue so it only ever runs once every
+  /// earlier queued write has actually finished — see _writeQueue's doc
+  /// comment. Swallows errors from the queue itself so one failed write
+  /// (a full disk, a transient IO error) can't wedge every write after
+  /// it — [_persist]/[_clearFile] already catch their own errors, this
+  /// is just insurance for the chain itself.
+  void _enqueue(Future<void> Function() op) {
+    _writeQueue = _writeQueue.then((_) => op()).catchError((_) {});
   }
 
   Future<void> _persist(String line) async {
@@ -91,7 +116,7 @@ class LogBuffer extends ChangeNotifier {
     _lines.clear();
     notifyListeners();
     final file = _file;
-    if (file != null) unawaited(_clearFile(file));
+    if (file != null) _enqueue(() => _clearFile(file));
   }
 
   Future<void> _clearFile(File file) async {

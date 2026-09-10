@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models/trip_point.dart';
 import '../logging/error_reporter.dart';
@@ -199,6 +200,49 @@ class LocationRecorder {
         final result = await Permission.notification.request();
         logBuffer.add('GPS: notification permission after request: $result');
       }
+    }
+
+    await _requestBatteryOptimizationExemptionOnce();
+  }
+
+  static const _batteryOptimizationAskedKey = 'battery_optimization_exemption_asked';
+
+  /// A foreground service + WAKE_LOCK is what Android's own docs say is
+  /// needed to keep location updates flowing in the background — and it
+  /// usually is. In the field, though, a real ride can still see GPS
+  /// fixes land 30s-plus apart instead of the ~1s this app actually
+  /// configures (see location_recorder.dart's own _buildLocationSettings)
+  /// — confirmed directly from a real user's synced trip data, several
+  /// real rides in a row, all with the screen off/locked the whole time.
+  /// That's the signature of an OEM battery manager throttling the
+  /// process underneath the foreground service's own protection, not a
+  /// bug in this app's request itself. REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+  /// is the standard, Play-Store-compliant escape hatch for exactly this
+  /// — legitimate here since continuous background GPS recording is this
+  /// app's core purpose, not an incidental background task (the same
+  /// justification turn-by-turn nav and fitness-tracking apps use for
+  /// the same permission). Asked at most once ever, not on every
+  /// recording start — the system dialog has no "don't ask again" of its
+  /// own, and re-prompting every ride would just be naggy for a rider
+  /// who already said no.
+  static Future<void> _requestBatteryOptimizationExemptionOnce() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      logBuffer.add('GPS: battery optimization exemption is $status');
+      if (status.isGranted) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_batteryOptimizationAskedKey) ?? false) return;
+      await prefs.setBool(_batteryOptimizationAskedKey, true);
+
+      final result = await Permission.ignoreBatteryOptimizations.request();
+      logBuffer.add('GPS: battery optimization exemption after request: $result');
+    } catch (e, st) {
+      // Best-effort — a rider should still be able to start a recording
+      // even if this particular OS-level ask fails or isn't supported.
+      logBuffer.add('GPS: battery optimization exemption request failed — $e');
+      unawaited(ErrorReporter.report('GPS: battery optimization exemption', e, st));
     }
   }
 
