@@ -10,6 +10,7 @@ import '../theme/date_fmt.dart';
 import '../theme/num_fmt.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/recording_controller.dart';
 import '../trips/trip_detail_screen.dart';
 import 'add_vehicle_screen.dart';
 
@@ -118,9 +119,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   Future<bool> _confirmDeleteTrip(Trip trip) async {
-    if (!trip.isFinished) {
-      // See trips/trip_history_screen.dart's matching guard — deleting
-      // the row here wouldn't stop the actual recording (owned by
+    // See trips/trip_history_screen.dart's matching guard: only block
+    // deletion when a recording is genuinely live in this app session
+    // right now, not every unfinished trip — an unfinished trip with no
+    // live recording behind it is an orphan (the app died before Stop &
+    // Save ever ran) and must stay deletable, or it's stuck forever.
+    if (!trip.isFinished && RecordingController.instance.isRecording.value) {
+      // Deleting the row here wouldn't stop the actual recording (owned by
       // trip/recording_screen.dart's live LocationRecorder), leaving a
       // dead trip that finishTrip() can never save into and losing the
       // whole ride.

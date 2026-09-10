@@ -77,7 +77,15 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   }
 
   Future<bool> _confirmDelete(Trip trip) async {
-    if (!trip.isFinished) {
+    // Only block deletion of a trip that's genuinely recording *in this
+    // app session right now* (RecordingController.instance.isRecording —
+    // there's only ever one active recording app-wide) — not every
+    // unfinished trip. An unfinished trip with no live recording behind
+    // it is an orphan: the app died (crash, OS kill, phone restart)
+    // before Stop & Save ever ran, and blocking its deletion too would
+    // trap the rider with a permanently undeletable ghost trip forever,
+    // exactly the kind of real report that caught this.
+    if (!trip.isFinished && RecordingController.instance.isRecording.value) {
       // Deleting the row here doesn't stop the actual recording — that's
       // owned by trip/recording_screen.dart's live LocationRecorder, not
       // this list screen — so the ride kept running with nowhere to
@@ -405,7 +413,8 @@ class _RouteCardRow extends StatelessWidget {
                     runSpacing: 6,
                     children: [
                       NoctTagChip(fmtDuration(trip.durationSeconds)),
-                      if (trip.avgSpeedKph != null) NoctTagChip('ø ${trip.avgSpeedKph!.toStringAsFixed(0)} km/h'),
+                      if (trip.displayAvgSpeedKph != null)
+                        NoctTagChip('ø ${trip.displayAvgSpeedKph!.toStringAsFixed(0)} km/h'),
                       if (leanDeg != null) NoctTagChip('${leanDeg.toStringAsFixed(0)}° lean', accent: true),
                       if (!trip.isFinished) const NoctTagChip('In progress', accent: true),
                     ],

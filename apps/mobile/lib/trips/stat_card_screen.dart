@@ -214,7 +214,7 @@ class _StatCard extends StatelessWidget {
             children: [
               _CardStat('Time', fmtDuration(trip.durationSeconds)),
               const SizedBox(width: 22),
-              _CardStat('Avg km/h', trip.avgSpeedKph == null ? '—' : trip.avgSpeedKph!.toStringAsFixed(0)),
+              _CardStat('Avg km/h', trip.displayAvgSpeedKph == null ? '—' : trip.displayAvgSpeedKph!.toStringAsFixed(0)),
               const SizedBox(width: 22),
               _CardStat('Max km/h', trip.maxSpeedKph == null ? '—' : trip.maxSpeedKph!.toStringAsFixed(0)),
             ],

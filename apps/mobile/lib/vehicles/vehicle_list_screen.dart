@@ -240,7 +240,15 @@ class _VehicleRow extends StatelessWidget {
                                 child: Image.file(File(vehicle.photoPath!), width: 44, height: 44, fit: BoxFit.cover),
                               )
                             : Icon(
-                                supportsBle ? Ph.motorcycle : Ph.car,
+                                // The vehicle's actual type, not BLE
+                                // support — this used to pick the glyph
+                                // by supportsBle, so every non-BLE
+                                // motorcycle (i.e. every model besides
+                                // the ~4 in data/catalog/vehicle_catalog.dart
+                                // that support Kawasaki Rideology) showed
+                                // a car icon. Matches the convention
+                                // trip/recording_screen.dart already uses.
+                                vehicle.type == VehicleType.car ? Ph.car : Ph.motorcycle,
                                 size: 22,
                                 color: supportsBle ? Noct.a200 : Noct.n400,
                               ),

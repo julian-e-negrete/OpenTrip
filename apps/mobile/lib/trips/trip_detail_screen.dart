@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../auth/current_user.dart';
 import '../data/models/trip.dart';
 import '../data/models/trip_music_event.dart';
 import '../data/models/trip_point.dart';
@@ -13,6 +14,8 @@ import '../theme/date_fmt.dart';
 import '../theme/layout_prefs.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/orphan_recovery.dart';
+import '../trip/recording_controller.dart';
 import '../trip/route_replay.dart';
 import 'stat_card_screen.dart';
 
@@ -29,10 +32,13 @@ class TripDetailScreen extends StatefulWidget {
 class _TripDetailScreenState extends State<TripDetailScreen> {
   List<TripPoint>? _points;
   List<TripMusicEvent>? _musicEvents;
+  late Trip _trip;
+  bool _recovering = false;
 
   @override
   void initState() {
     super.initState();
+    _trip = widget.trip;
     _loadPoints();
     _loadMusicEvents();
   }
@@ -41,19 +47,51 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     // TripRepository.pointsForTrip falls back to a remote pull if this
     // trip has no local points yet (e.g. it arrived via cloud sync from
     // another device) — see sync/sync_service.dart.
-    final points = await TripRepository.instance.pointsForTrip(widget.trip.id);
+    final points = await TripRepository.instance.pointsForTrip(_trip.id);
     if (mounted) setState(() => _points = points);
   }
 
   Future<void> _loadMusicEvents() async {
-    final events = await TripRepository.instance.musicEventsForTrip(widget.trip.id);
+    final events = await TripRepository.instance.musicEventsForTrip(_trip.id);
     if (mounted) setState(() => _musicEvents = events);
   }
 
+  /// True for a trip whose recording session died before Stop & Save
+  /// ever ran — unfinished, but with no live recording behind it in
+  /// this app session (RecordingController.instance.isRecording is
+  /// process-wide, and there's only ever one active recording at a
+  /// time). Its GPS points were already saved as they came in, so
+  /// there's real data to offer recovering it from — see
+  /// trip/orphan_recovery.dart.
+  bool get _orphaned => !_trip.isFinished && !RecordingController.instance.isRecording.value;
+
+  Future<void> _recover() async {
+    setState(() => _recovering = true);
+    try {
+      final userId = await CurrentUser.instance.id();
+      final recovered = await OrphanRecovery.recover(userId: userId, trip: _trip);
+      if (!mounted) return;
+      setState(() => _trip = recovered);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Trip recovered: ${recovered.distanceKm.toStringAsFixed(2)} km')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Couldn\'t recover this trip: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _recovering = false);
+    }
+  }
+
   Future<void> _confirmDelete() async {
-    if (!widget.trip.isFinished) {
-      // See trips/trip_history_screen.dart's matching guard — deleting
-      // the row here wouldn't stop the actual recording (owned by
+    // See trips/trip_history_screen.dart's matching guard: only block
+    // deletion when a recording is genuinely live in this app session
+    // right now, not every unfinished trip — an unfinished trip with no
+    // live recording behind it is an orphan (the app died before Stop &
+    // Save ever ran) and must stay deletable, or it's stuck forever.
+    if (!_trip.isFinished && RecordingController.instance.isRecording.value) {
+      // Deleting the row here wouldn't stop the actual recording (owned by
       // trip/recording_screen.dart's live LocationRecorder), leaving a
       // dead trip that finishTrip() can never save into and losing the
       // whole ride.
@@ -75,7 +113,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete trip?'),
-        content: Text('This ${widget.trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
+        content: Text('This ${_trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
@@ -87,20 +125,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       ),
     );
     if (confirmed == true) {
-      await TripRepository.instance.deleteTrip(widget.trip.id);
+      await TripRepository.instance.deleteTrip(_trip.id);
       if (mounted) Navigator.of(context).pop();
     }
   }
 
   void _share() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => StatCardScreen(trip: widget.trip, vehicle: widget.vehicle)),
+      MaterialPageRoute(builder: (_) => StatCardScreen(trip: _trip, vehicle: widget.vehicle)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final trip = widget.trip;
+    final trip = _trip;
     return ListenableBuilder(
       listenable: LayoutPrefs.instance,
       builder: (context, _) {
@@ -117,6 +155,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   onDelete: _confirmDelete,
                 ),
               ),
+              if (_orphaned)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                  child: _OrphanBanner(recovering: _recovering, onRecover: _recover),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
                 child: _Headline(trip: trip, vehicle: widget.vehicle),
@@ -133,6 +176,63 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Shown on a trip whose recording session died before Stop & Save ever
+/// ran (see _TripDetailScreenState._orphaned) — its GPS points/telemetry
+/// are already saved, they just never got folded into a finished trip.
+/// Offers to do that now via trip/orphan_recovery.dart instead of
+/// leaving the rider looking at an empty "0.0 km in 0m" trip with no
+/// explanation and no way to get real numbers out of it.
+class _OrphanBanner extends StatelessWidget {
+  const _OrphanBanner({required this.recovering, required this.onRecover});
+  final bool recovering;
+  final VoidCallback onRecover;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Noct.surface,
+        borderRadius: BorderRadius.circular(Noct.rMd),
+        border: Border.all(color: Noct.divider),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Ph.warning, size: 18, color: Noct.n400),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This trip never finished recording',
+                  style: TextStyle(fontSize: 13, color: Noct.text, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'The route and telemetry were saved, but the app closed before it could be stopped and saved properly.',
+                  style: TextStyle(fontSize: 11.5, color: Noct.n500),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: recovering ? null : onRecover,
+                    child: recovering
+                        ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Recover this trip'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -189,7 +289,7 @@ class _StatGrid extends StatelessWidget {
         ? '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC}°'
         : null;
     final cells = [
-      ('Avg km/h', trip.avgSpeedKph?.toStringAsFixed(0), null),
+      ('Avg km/h', trip.displayAvgSpeedKph?.toStringAsFixed(0), null),
       ('Max km/h', trip.maxSpeedKph?.toStringAsFixed(0), null),
       ('Max lean', leanDeg == null ? null : '${leanDeg.toStringAsFixed(0)}°', Noct.a300),
       ('Max rpm', trip.bleMaxRpm?.toString(), null),
@@ -222,7 +322,7 @@ class _StatReport extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ride = [
-      ('Average speed', trip.avgSpeedKph == null ? null : '${trip.avgSpeedKph!.toStringAsFixed(0)} km/h'),
+      ('Average speed', trip.displayAvgSpeedKph == null ? null : '${trip.displayAvgSpeedKph!.toStringAsFixed(0)} km/h'),
       ('Max speed', trip.maxSpeedKph == null ? null : '${trip.maxSpeedKph!.toStringAsFixed(0)} km/h'),
       ('GPS points', '${trip.pointCount}'),
     ];
