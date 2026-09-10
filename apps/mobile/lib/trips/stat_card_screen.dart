@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -12,15 +14,11 @@ import '../theme/app_theme.dart';
 import '../theme/date_fmt.dart';
 import '../theme/ph_icons.dart';
 
-/// Renders a trip's key numbers as a shareable image — tap Share (or the
-/// download glyph) to capture the card below (via [RepaintBoundary]) and
-/// hand it to the OS share sheet, which on both Android and iOS offers a
-/// "save image" option of its own — this app has no separate photo-
-/// library-writing dependency, so both actions go through the same
-/// capture-and-share flow rather than one silently doing less than its
-/// icon implies. Purely client-side: no backend involved, nothing
-/// generated or stored server-side, just a PNG written to a temp file
-/// for the share sheet to read.
+/// Renders a trip's key numbers as a shareable image — tap Share to hand
+/// the card below (captured via [RepaintBoundary]) to the OS share sheet,
+/// or the download glyph to save it straight to the device's gallery
+/// (via the `gal` package). Purely client-side: no backend involved,
+/// nothing generated or stored server-side.
 class StatCardScreen extends StatefulWidget {
   const StatCardScreen({super.key, required this.trip, required this.vehicle});
 
@@ -34,6 +32,7 @@ class StatCardScreen extends StatefulWidget {
 class _StatCardScreenState extends State<StatCardScreen> {
   final _cardKey = GlobalKey();
   bool _sharing = false;
+  bool _saving = false;
 
   String _fmtDuration(int seconds) {
     final d = Duration(seconds: seconds);
@@ -41,22 +40,29 @@ class _StatCardScreenState extends State<StatCardScreen> {
     return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
   }
 
+  /// Captures the card below (via [RepaintBoundary]) as PNG bytes —
+  /// shared by [_share] (writes to a temp file for the share sheet) and
+  /// [_download] (writes straight to the gallery, no temp file needed).
+  Future<Uint8List> _captureCard() async {
+    // The card is already laid out by the time either button is
+    // tappable, but wait for a settled frame anyway — capturing mid-
+    // build/layout is the classic way this kind of thing comes back
+    // blank or partial.
+    await WidgetsBinding.instance.endOfFrame;
+    final boundary = _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 3.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    if (byteData == null) throw StateError('Could not encode the card image.');
+    return byteData.buffer.asUint8List();
+  }
+
   Future<void> _share() async {
     setState(() => _sharing = true);
     try {
-      // The card is already laid out by the time this button is
-      // tappable, but wait for a settled frame anyway — capturing mid-
-      // build/layout is the classic way this kind of thing comes back
-      // blank or partial.
-      await WidgetsBinding.instance.endOfFrame;
-      final boundary = _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      if (byteData == null) throw StateError('Could not encode the card image.');
-
+      final bytes = await _captureCard();
       final tempDir = await getTemporaryDirectory();
       final file = File('${tempDir.path}/opentrip-trip-${widget.trip.id}.png');
-      await file.writeAsBytes(byteData.buffer.asUint8List(), flush: true);
+      await file.writeAsBytes(bytes, flush: true);
 
       await SharePlus.instance.share(
         ShareParams(
@@ -70,6 +76,34 @@ class _StatCardScreenState extends State<StatCardScreen> {
       }
     } finally {
       if (mounted) setState(() => _sharing = false);
+    }
+  }
+
+  Future<void> _download() async {
+    setState(() => _saving = true);
+    try {
+      if (!await Gal.hasAccess()) {
+        final granted = await Gal.requestAccess();
+        if (!granted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Photo library access denied — enable it in system settings to save.')),
+            );
+          }
+          return;
+        }
+      }
+      final bytes = await _captureCard();
+      await Gal.putImageBytes(bytes, name: 'opentrip-trip-${widget.trip.id}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved to your gallery')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Couldn\'t save: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -116,12 +150,14 @@ class _StatCardScreenState extends State<StatCardScreen> {
                     width: 46,
                     height: 46,
                     child: OutlinedButton(
-                      onPressed: _sharing ? null : _share,
+                      onPressed: _saving ? null : _download,
                       style: OutlinedButton.styleFrom(
                         padding: EdgeInsets.zero,
                         side: const BorderSide(color: Noct.divider),
                       ),
-                      child: const Icon(Ph.downloadSimple, size: 16, color: Noct.n300),
+                      child: _saving
+                          ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Ph.downloadSimple, size: 16, color: Noct.n300),
                     ),
                   ),
                 ],

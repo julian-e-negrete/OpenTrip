@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../auth/current_user.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/ph_icons.dart';
@@ -115,6 +116,28 @@ class _FriendsScreenState extends State<FriendsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (CurrentUser.instance.isGuest) {
+      // See this class's own doc comment — friends are a sign-in-only
+      // concept. The search box/friend list below used to render
+      // anyway, silently returning nothing for every guest search with
+      // no explanation at all (searchRiders()/fetchFriends() etc. in
+      // sync/sync_service.dart all just no-op when signed out).
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Friends', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, letterSpacing: -0.44)),
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Sign in to find riders and add friends.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Noct.n500, fontSize: 13),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: const Text('Friends', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, letterSpacing: -0.44)),

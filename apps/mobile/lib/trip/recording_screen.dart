@@ -596,20 +596,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Noct.text),
               ),
               const SizedBox(height: 8),
-              StatefulBuilder(
-                builder: (context, setSheetState) => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Track lean angle', style: TextStyle(color: Noct.text, fontSize: 13.5)),
-                  subtitle: const Text(
-                    'Needs the phone mounted rigidly to the bike — not handheld or in a pocket.',
-                    style: TextStyle(color: Noct.n500, fontSize: 11),
+              if (_vehicleIsMotorcycle)
+                StatefulBuilder(
+                  builder: (context, setSheetState) => SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Track lean angle', style: TextStyle(color: Noct.text, fontSize: 13.5)),
+                    subtitle: const Text(
+                      'Needs the phone mounted rigidly to the bike — not handheld or in a pocket.',
+                      style: TextStyle(color: Noct.n500, fontSize: 11),
+                    ),
+                    value: _trackLean,
+                    onChanged: _activeTrip != null
+                        ? null
+                        : (v) => setSheetState(() => setState(() => _trackLean = v)),
                   ),
-                  value: _trackLean,
-                  onChanged: _activeTrip != null
-                      ? null
-                      : (v) => setSheetState(() => setState(() => _trackLean = v)),
+                )
+              else
+                const Text(
+                  'No motorcycle-only settings for this vehicle.',
+                  style: TextStyle(color: Noct.n500, fontSize: 12.5),
                 ),
-              ),
             ],
           ),
         ),
@@ -677,6 +683,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
             child: Text(
               _error!,
               style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
+            ),
+          ),
+        // Cluster was picked (Account > Appearance), but falls back to
+        // Numbers with no bike telemetry to actually drive its dial —
+        // account_screen.dart's own footnote explains this once you've
+        // already selected it there, but that's a settings screen a
+        // rider isn't looking at right now; without this, the fallback
+        // itself looks unexplained/broken in the moment.
+        if (LayoutPrefs.instance.record == RecordVariant.cluster && variant != RecordVariant.cluster)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'Cluster needs a connected bike — showing Numbers until one connects.',
+              style: TextStyle(color: Noct.n500, fontSize: 12),
             ),
           ),
         Expanded(

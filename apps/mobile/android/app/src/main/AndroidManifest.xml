@@ -54,10 +54,18 @@
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Saving a shared trip card to the device's gallery (trips/
+         stat_card_screen.dart, via the `gal` package) — only needed on
+         API 29 and below; from API 30 scoped storage means the platform
+         handles this without a declared permission at all. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+
     <application
         android:label="opentrip_mobile"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -419,13 +419,24 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                     _PreferenceRow(
                       title: 'Sync now',
-                      subtitle: _syncing ? 'Syncing…' : _syncStatusText(),
-                      trailing: GestureDetector(
-                        onTap: _syncing ? null : _syncNow,
-                        child: _syncing
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n400))
-                            : const Icon(Ph.cloudArrowUp, size: 18, color: Noct.n400),
-                      ),
+                      // Guest data never leaves this device (see
+                      // sync/sync_service.dart's _canSync) — tapping used
+                      // to flash "Syncing…" and then silently revert to
+                      // "Not synced yet" with no explanation, reading as
+                      // a failed sync rather than an unavailable one.
+                      subtitle: guest
+                          ? 'Sign in to sync across devices'
+                          : (_syncing ? 'Syncing…' : _syncStatusText()),
+                      trailing: _syncing
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n400))
+                          : const Icon(Ph.cloudArrowUp, size: 18, color: Noct.n400),
+                      onTap: _syncing
+                          ? null
+                          : guest
+                              ? () => ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Sign in to sync your trips and vehicles across devices.')),
+                                )
+                              : _syncNow,
                     ),
                     // Debug-only affordance, not in the design handoff's
                     // Account spec — kept reachable now that the old
@@ -434,10 +445,8 @@ class _AccountScreenState extends State<AccountScreen> {
                     _PreferenceRow(
                       title: 'Debug logs',
                       subtitle: 'Low-level BLE connection activity',
-                      trailing: GestureDetector(
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogScreen())),
-                        child: const Icon(Icons.article_outlined, size: 18, color: Noct.n400),
-                      ),
+                      trailing: const Icon(Icons.article_outlined, size: 18, color: Noct.n400),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogScreen())),
                     ),
                   ],
                 ),
@@ -546,14 +555,20 @@ class _AppearanceBlock<T> extends StatelessWidget {
 }
 
 class _PreferenceRow extends StatelessWidget {
-  const _PreferenceRow({required this.title, required this.subtitle, required this.trailing});
+  const _PreferenceRow({required this.title, required this.subtitle, required this.trailing, this.onTap});
   final String title;
   final String subtitle;
   final Widget trailing;
 
+  /// Makes the whole row tappable, not just [trailing] — a row with a
+  /// title/subtitle and a small trailing icon reads as fully tappable
+  /// (this is a standard settings-row layout), but without this every
+  /// tap that missed the icon itself silently did nothing.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final row = Container(
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Noct.n900, width: 1))),
       padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
@@ -573,5 +588,8 @@ class _PreferenceRow extends StatelessWidget {
         ],
       ),
     );
+    final onTap = this.onTap;
+    if (onTap == null) return row;
+    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: row);
   }
 }
