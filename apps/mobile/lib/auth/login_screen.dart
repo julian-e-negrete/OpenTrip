@@ -140,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
           SizedBox(height: 8),
           Text(
             'Google/email sign-in isn\'t configured for this build yet — '
-            'see docs/AUTH_SETUP.md. Everything else works without it:',
+            'see docs/AUTH_SETUP.md. Everything else works without it.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Noct.n400, fontSize: 11.5, height: 1.5),
           ),

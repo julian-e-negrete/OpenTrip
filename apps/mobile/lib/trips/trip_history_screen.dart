@@ -203,7 +203,10 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                   ),
                                   Expanded(
                                     child: _SummaryColumn(
-                                      child: NoctStat(value: '${tripsThisMonth.length}', label: 'Rides'),
+                                      child: NoctStat(
+                                        value: '${tripsThisMonth.length}',
+                                        label: tripsThisMonth.length == 1 ? 'Ride' : 'Rides',
+                                      ),
                                     ),
                                   ),
                                   Expanded(
@@ -412,7 +415,14 @@ class _RouteCardRow extends StatelessWidget {
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      NoctTagChip(fmtDuration(trip.durationSeconds)),
+                      // durationSeconds stays 0 in local storage until
+                      // finishTrip() runs at Stop & Save — showing it as
+                      // a real "00:00:00" chip next to "In progress"
+                      // reads as three separate broken-looking zeroes
+                      // rather than one clearly-still-recording trip
+                      // (the Dense log variant sidesteps this the same
+                      // way, swapping its own duration text for "live").
+                      if (trip.isFinished) NoctTagChip(fmtDuration(trip.durationSeconds)),
                       if (trip.displayAvgSpeedKph != null)
                         NoctTagChip('ø ${trip.displayAvgSpeedKph!.toStringAsFixed(0)} km/h'),
                       if (leanDeg != null) NoctTagChip('${leanDeg.toStringAsFixed(0)}° lean', accent: true),

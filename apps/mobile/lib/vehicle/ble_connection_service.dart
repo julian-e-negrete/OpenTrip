@@ -88,7 +88,7 @@ class BleConnectionService {
       await KawasakiConnector.ensurePermissions();
       final result = await KawasakiConnector.findBike(onLog: onLog);
       if (result == null) {
-        throw StateError('No Kawasaki-* bike found nearby. Make sure it\'s on and in range.');
+        throw StateError('No Kawasaki bike found nearby. Make sure it\'s on and in range.');
       }
       stateNotifier.value = BleConnectionState.connecting;
       final client = await KawasakiConnector.connect(result: result, onLog: onLog);

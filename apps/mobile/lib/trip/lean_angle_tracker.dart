@@ -48,10 +48,16 @@ class LeanAngleTracker {
   double? _smoothedX;
   double? _smoothedY;
   double? _smoothedZ;
-  double _maxAngleDeg = 0;
+  // Nullable, not defaulted to 0 — a recording stopped before the
+  // calibration window elapses, or one where the accelerometer stream
+  // never delivers an event at all, previously reported a real-looking
+  // "0°" indistinguishable from an actual max lean of zero, which then
+  // got saved and displayed as a genuine (if boring) measurement rather
+  // than "never actually measured."
+  double? _maxAngleDeg;
   DateTime? _startedAt;
 
-  double get maxAngleDeg => _maxAngleDeg;
+  double? get maxAngleDeg => _maxAngleDeg;
 
   bool get isTracking => _sub != null;
 
@@ -61,7 +67,7 @@ class LeanAngleTracker {
     _smoothedX = null;
     _smoothedY = null;
     _smoothedZ = null;
-    _maxAngleDeg = 0;
+    _maxAngleDeg = null;
     _startedAt = DateTime.now();
     _sub = accelerometerEventStream(samplingPeriod: SensorInterval.gameInterval).listen(_onEvent);
   }
@@ -100,7 +106,8 @@ class LeanAngleTracker {
       y2: refY,
       z2: refZ,
     );
-    if (angle > _maxAngleDeg) _maxAngleDeg = angle;
+    final maxAngleDeg = _maxAngleDeg;
+    if (maxAngleDeg == null || angle > maxAngleDeg) _maxAngleDeg = angle;
     _controller.add(angle);
   }
 

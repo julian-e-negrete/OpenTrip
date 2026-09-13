@@ -173,8 +173,9 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
     final zeroToSixty = _recorder.best0To60Seconds;
     final zeroToOneEighty = _recorder.best0To180Seconds;
     logBuffer.add(
-      'Racing: finished — trip ${trip.id}, 0-60=${zeroToSixty?.toStringAsFixed(2) ?? "not reached"}s, '
-      '0-180=${zeroToOneEighty?.toStringAsFixed(2) ?? "not reached"}s',
+      'Racing: finished — trip ${trip.id}, '
+      '0-60=${zeroToSixty == null ? "not reached" : "${zeroToSixty.toStringAsFixed(2)}s"}, '
+      '0-180=${zeroToOneEighty == null ? "not reached" : "${zeroToOneEighty.toStringAsFixed(2)}s"}',
     );
 
     final finished = trip.finish(

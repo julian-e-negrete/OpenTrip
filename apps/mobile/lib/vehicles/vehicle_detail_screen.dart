@@ -90,12 +90,18 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  ({double km, bool fromBike}) _currentMileage() {
+  ({double km, MileageSource source}) _currentMileage() {
     for (final t in _trips) {
-      if (t.bleOdometerKm != null) return (km: t.bleOdometerKm!, fromBike: true);
+      if (t.bleOdometerKm != null) return (km: t.bleOdometerKm!, source: MileageSource.bike);
     }
     final totalDistanceKm = _trips.fold<double>(0, (sum, t) => sum + t.distanceMeters) / 1000.0;
-    return (km: (_vehicle.startingOdometerKm ?? 0) + totalDistanceKm, fromBike: false);
+    // Previously always labeled "estimated from recorded trips" once
+    // there was no bike-reported odometer — but with zero trips
+    // recorded, that number is just whatever was typed into "Starting
+    // odometer" when the vehicle was added, not an estimate derived
+    // from anything this app has actually measured.
+    final source = totalDistanceKm > 0 ? MileageSource.trips : MileageSource.entered;
+    return (km: (_vehicle.startingOdometerKm ?? 0) + totalDistanceKm, source: source);
   }
 
   Future<void> _logService() async {
@@ -105,8 +111,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Log a service?'),
         content: Text(
-          'Marks ${mileage.km.toStringAsFixed(0)} km as this vehicle\'s last service — '
-          'the next one is due ${_vehicle.serviceIntervalKm?.toStringAsFixed(0)} km after that.',
+          'Marks ${fmtThousands(mileage.km.round())} km as this vehicle\'s last service — '
+          'the next one is due ${_vehicle.serviceIntervalKm == null ? '?' : fmtThousands(_vehicle.serviceIntervalKm!.round())} km after that.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
@@ -236,10 +242,12 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 }
 
+enum MileageSource { bike, trips, entered }
+
 class _OdometerPanel extends StatelessWidget {
   const _OdometerPanel({required this.vehicle, required this.mileage, required this.onLogService});
   final Vehicle vehicle;
-  final ({double km, bool fromBike}) mileage;
+  final ({double km, MileageSource source}) mileage;
   final VoidCallback onLogService;
 
   @override
@@ -265,7 +273,11 @@ class _OdometerPanel extends StatelessWidget {
               children: [
                 TextSpan(text: fmtThousands(mileage.km.round()), style: Noct.stat(34)),
                 TextSpan(
-                  text: mileage.fromBike ? " km · from the bike's odometer" : ' km · estimated from recorded trips',
+                  text: switch (mileage.source) {
+                    MileageSource.bike => " km · from the bike's odometer",
+                    MileageSource.trips => ' km · estimated from recorded trips',
+                    MileageSource.entered => ' km · as entered',
+                  },
                   style: const TextStyle(fontSize: 12, color: Noct.n400, fontWeight: FontWeight.w400),
                 ),
               ],
