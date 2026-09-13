@@ -12,6 +12,7 @@ import '../data/repositories/vehicle_repository.dart';
 import '../theme/app_theme.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/recording_controller.dart';
 import 'solo_race_screen.dart';
 
 /// How long the drag-strip countdown runs before GO — a rider's own
@@ -103,6 +104,16 @@ class _RacingScreenState extends State<RacingScreen> {
   Future<void> _start() async {
     final vehicle = _selectedVehicle;
     if (vehicle == null) return;
+    if (RecordingController.instance.isRecording.value) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Finish or stop your current ride first — a race needs its own GPS lock.',
+          ),
+        ),
+      );
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SoloRaceScreen(vehicle: vehicle, countdownSeconds: _countdownSeconds)),
     );
