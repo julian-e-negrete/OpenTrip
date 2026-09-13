@@ -1,14 +1,24 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../logging/log_buffer.dart';
 
 /// Shows everything captured in [logBuffer]: BLE scan/connect lifecycle
 /// and protocol frames, GPS recording (fix accept/reject reasons,
 /// permission checks), camera-proximity alerts, driving-behavior
-/// detection, and uncaught errors. The "Copy all" button puts the full
-/// log on the clipboard so it can be pasted straight into a chat/issue
-/// from the phone — no computer or adb needed for the common case.
+/// detection, and uncaught errors. The "Share" button writes the full
+/// log to a temp file and hands it to the OS share sheet — no computer
+/// or adb needed for the common case.
+///
+/// This used to be a "Copy all" button putting the text straight on the
+/// clipboard, but Android's clipboard IPC has a hard transaction size
+/// limit (~1MB) — a real rider hit this directly: several thousand
+/// lines of verbose BLE frame/GPS output blew past it, `Clipboard.setData`
+/// threw, and with nothing catching it the button just silently did
+/// nothing. Sharing a file has no such limit.
 class LogScreen extends StatefulWidget {
   const LogScreen({super.key});
 
@@ -42,12 +52,17 @@ class _LogScreenState extends State<LogScreen> {
     });
   }
 
-  Future<void> _copyAll() async {
-    await Clipboard.setData(ClipboardData(text: logBuffer.asText));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Logs copied to clipboard')),
-    );
+  Future<void> _shareAll() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/opentrip-debug-log.txt');
+      await file.writeAsString(logBuffer.asText, flush: true);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Couldn\'t share: $e')));
+      }
+    }
   }
 
   @override
@@ -57,9 +72,9 @@ class _LogScreenState extends State<LogScreen> {
         title: const Text('Logs'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.copy_all_outlined),
-            tooltip: 'Copy all logs',
-            onPressed: logBuffer.isEmpty ? null : _copyAll,
+            icon: const Icon(Icons.ios_share_outlined),
+            tooltip: 'Share all logs',
+            onPressed: logBuffer.isEmpty ? null : _shareAll,
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -91,9 +106,9 @@ class _LogScreenState extends State<LogScreen> {
       floatingActionButton: logBuffer.isEmpty
           ? null
           : FloatingActionButton.extended(
-              onPressed: _copyAll,
-              icon: const Icon(Icons.copy_all_outlined),
-              label: const Text('Copy all'),
+              onPressed: _shareAll,
+              icon: const Icon(Icons.ios_share_outlined),
+              label: const Text('Share log'),
             ),
     );
   }
