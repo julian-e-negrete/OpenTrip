@@ -56,6 +56,20 @@ class LogSyncService {
     // lifetime, same as SyncService's own realtime subscription.
     Timer.periodic(_flushInterval, (_) => unawaited(_flush()));
 
+    // AuthService's own doc comment: every method on it assumes
+    // Supabase.initialize() already ran, which main.dart only does when
+    // AppConfig.isSupabaseConfigured — a debug build with no
+    // --dart-define Supabase config never calls it at all. Touching
+    // AuthService.instance.onAuthStateChange unconditionally here threw
+    // synchronously inside main() before runApp() ever ran, which
+    // silently wedged the app on its native splash screen forever (the
+    // thrown error went to the zone's uncaught-error handler, but
+    // nothing after the throw point in main() — including runApp()
+    // itself — ever executed). Confirmed live: reproduced the exact
+    // hang, fixed by adding this guard, matching the same early-return
+    // sync_service.dart's own startListening() already uses.
+    if (!AppConfig.isSupabaseConfigured) return;
+
     // Sign-out drops whatever hadn't been sent yet, matching "guest data
     // stays local-only" — those lines were logged under a session that,
     // from this point on, isn't the one that would own them.
