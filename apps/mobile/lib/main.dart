@@ -10,6 +10,7 @@ import 'config/app_config.dart';
 import 'home_shell.dart';
 import 'logging/error_reporter.dart';
 import 'logging/log_buffer.dart';
+import 'logging/log_sync_service.dart';
 import 'sync/sync_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/layout_prefs.dart';
@@ -44,6 +45,10 @@ void main() {
         await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
       }
       SyncService.instance.startListening();
+      // After logBuffer.init() above, so nothing already-queued this
+      // session races the subscription setup — see that service's own
+      // doc comment for why this exists.
+      LogSyncService.instance.startListening();
       // Loaded before the first frame so no screen flashes a default
       // layout variant and then jumps once this resolves.
       await LayoutPrefs.instance.load();
