@@ -28,9 +28,18 @@ enum _Step { countdown, running, result }
 /// RollRaceTracker is what actually measures both checkpoints from the
 /// same launch.
 class SoloRaceScreen extends StatefulWidget {
-  const SoloRaceScreen({super.key, required this.vehicle});
+  const SoloRaceScreen({super.key, required this.vehicle, this.countdownSeconds = 3});
 
   final Vehicle vehicle;
+
+  /// How many seconds the drag-strip countdown runs before GO — a
+  /// rider's own prep-time preference (racing/racing_screen.dart's
+  /// COUNTDOWN picker, 3/10/20s), not fixed. The visual starting-light
+  /// sequence and its beeps only ever animate/sound for the final three
+  /// seconds regardless of this value (see _StartingLight and
+  /// _startCountdown) — a real drag strip's "tree" is always a 3-2-1,
+  /// this just controls how much silent/numeric lead-in comes before it.
+  final int countdownSeconds;
 
   @override
   State<SoloRaceScreen> createState() => _SoloRaceScreenState();
@@ -46,7 +55,11 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   final _audioPlayer = AudioPlayer();
   bool _audioContextConfigured = false;
   _Step _step = _Step.countdown;
-  int _countdown = 3;
+  // Set from widget.countdownSeconds in initState(), not a field
+  // initializer — `widget` isn't attached yet when field initializers
+  // run (State objects are constructed via createState() before the
+  // framework assigns their widget).
+  late int _countdown;
   bool _showGo = false;
   Timer? _countdownTimer;
   Timer? _goFlashTimer;
@@ -63,9 +76,19 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
   @override
   void initState() {
     super.initState();
-    logBuffer.add('Racing: countdown started — ${widget.vehicle.name}');
+    _countdown = widget.countdownSeconds;
+    logBuffer.add(
+      'Racing: countdown started — ${widget.vehicle.name}, ${widget.countdownSeconds}s',
+    );
     _startCountdown();
   }
+
+  /// Only the final three seconds get the audible drag-strip beep/light
+  /// sequence, regardless of how long the total countdown is — a longer
+  /// prep window (racing/racing_screen.dart's 10s/20s options) is meant
+  /// to give a rider time to get positioned, not beep in their ear once
+  /// a second for 20 seconds straight.
+  static const _audibleCountdownSeconds = 3;
 
   void _startCountdown() {
     // A rider is watching the road, not the screen — the countdown needs
@@ -73,7 +96,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
     // sound at all: you react to a beep in your ear faster than to a
     // light you have to be looking at). Beeps for 3/2/1, a distinct
     // rising chirp for GO so the two are never confused by ear alone.
-    unawaited(_playBeep());
+    if (_countdown <= _audibleCountdownSeconds) unawaited(_playBeep());
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_countdown <= 1) {
         timer.cancel();
@@ -81,7 +104,7 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
         return;
       }
       setState(() => _countdown--);
-      unawaited(_playBeep());
+      if (_countdown <= _audibleCountdownSeconds) unawaited(_playBeep());
     });
   }
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/current_user.dart';
 import '../data/data_events.dart';
@@ -12,6 +13,27 @@ import '../theme/app_theme.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
 import 'solo_race_screen.dart';
+
+/// How long the drag-strip countdown runs before GO — a rider's own
+/// prep-time preference (getting the bike positioned, gloves on, etc.),
+/// not something that needs to be picked fresh every race. Persisted the
+/// same way theme/layout_prefs.dart persists its own per-screen choices,
+/// just as a single value rather than a whole ChangeNotifier — nothing
+/// outside the Racing tab and the race screen it starts ever needs to
+/// react to this changing live.
+const _kCountdownSecondsPref = 'racing.countdownSeconds';
+const _countdownOptions = [3, 10, 20];
+const _defaultCountdownSeconds = 3;
+
+Future<int> _loadCountdownSeconds() async {
+  final prefs = await SharedPreferences.getInstance();
+  final saved = prefs.getInt(_kCountdownSecondsPref);
+  return _countdownOptions.contains(saved) ? saved! : _defaultCountdownSeconds;
+}
+
+Future<void> _saveCountdownSeconds(int seconds) async {
+  (await SharedPreferences.getInstance()).setInt(_kCountdownSecondsPref, seconds);
+}
 
 /// Racing tab root: pick a vehicle, see personal bests so far for it, and
 /// start a solo roll race (racing/solo_race_screen.dart) — one
@@ -33,11 +55,15 @@ class _RacingScreenState extends State<RacingScreen> {
   Vehicle? _selectedVehicle;
   List<Trip> _vehicleTrips = [];
   bool _loading = true;
+  int _countdownSeconds = _defaultCountdownSeconds;
 
   @override
   void initState() {
     super.initState();
     _load();
+    unawaited(_loadCountdownSeconds().then((v) {
+      if (mounted) setState(() => _countdownSeconds = v);
+    }));
     DataEvents.instance.listenable.addListener(_load);
   }
 
@@ -77,8 +103,15 @@ class _RacingScreenState extends State<RacingScreen> {
   Future<void> _start() async {
     final vehicle = _selectedVehicle;
     if (vehicle == null) return;
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => SoloRaceScreen(vehicle: vehicle)));
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => SoloRaceScreen(vehicle: vehicle, countdownSeconds: _countdownSeconds)),
+    );
     await _load();
+  }
+
+  void _onCountdownChanged(int seconds) {
+    setState(() => _countdownSeconds = seconds);
+    unawaited(_saveCountdownSeconds(seconds));
   }
 
   void _raceAFriend() {
@@ -146,6 +179,14 @@ class _RacingScreenState extends State<RacingScreen> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 22),
+                    const Text('COUNTDOWN', style: Noct.statLabel),
+                    const SizedBox(height: 9),
+                    NoctSegmentedControl<int>(
+                      options: [for (final s in _countdownOptions) (s, '${s}s')],
+                      value: _countdownSeconds,
+                      onChanged: _onCountdownChanged,
                     ),
                     const SizedBox(height: 22),
                     NoctOutlinedButton(label: 'Start roll race', icon: Ph.flagCheckered, onPressed: _start),
