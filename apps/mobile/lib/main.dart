@@ -17,10 +17,9 @@ import 'theme/layout_prefs.dart';
 
 void main() {
   // Capture every print() in the app — including flutter_blue_plus's own
-  // verbose BLE-stack logging below — into logBuffer, in addition to the
-  // normal console output. This is what makes the in-app Logs screen (on
-  // the BLE tab) show low-level connection/GATT activity, not just our
-  // own log lines.
+  // BLE-stack logging below — into logBuffer, in addition to the normal
+  // console output. This is what makes the in-app Logs screen show
+  // low-level connection activity, not just our own log lines.
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +38,20 @@ void main() {
         logBuffer.add('FLUTTER ERROR: ${details.exception}\n${details.stack}');
         unawaited(ErrorReporter.report('Flutter framework error', details.exception, details.stack));
       };
-      FlutterBluePlus.setLogLevel(LogLevel.verbose, color: false);
+      // `.verbose` was logging every single GATT characteristic-received
+      // frame (the bike's ECU sends telemetry over BLE multiple times a
+      // second) straight into logBuffer's persisted, size-capped ring
+      // buffer. On a real BLE-connected ride this flooded out everything
+      // else within under an hour — a rider's own debug log came back
+      // 87% raw BLE frame dumps with only 2 surviving GPS lines out of a
+      // full 4000-line buffer, destroying the log's usefulness for
+      // diagnosing exactly the class of problem (GPS/recording) it's
+      // meant to help with. `.warning` keeps real BLE-stack failures
+      // visible without the per-frame noise; this app's own connection
+      // lifecycle messages (see ble_connection_service.dart's "BLE:
+      // connection lost/reconnected/..." lines) are separate explicit
+      // logBuffer.add() calls, unaffected by this setting either way.
+      FlutterBluePlus.setLogLevel(LogLevel.warning, color: false);
 
       if (AppConfig.isSupabaseConfigured) {
         await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
