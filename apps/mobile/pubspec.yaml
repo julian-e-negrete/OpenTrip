@@ -30,6 +30,12 @@ dependencies:
   shared_preferences: ^2.5.5
   # GPS trip recording.
   geolocator: ^13.0.1
+  # Detects Android's global power-save mode — see location_recorder.dart's
+  # ensureReady(): unlike the per-app battery-optimization exemption this
+  # app already requests, power-save mode throttles background location
+  # updates for every app regardless of that exemption, and isn't visible
+  # any other way.
+  battery_plus: ^6.2.1
   # A real, sustained vibration pattern for camera/radar alerts — see
   # trip/camera_alerts.dart. flutter/services.dart's HapticFeedback is a
   # brief UI-click tick meant for a button tap, not something a rider

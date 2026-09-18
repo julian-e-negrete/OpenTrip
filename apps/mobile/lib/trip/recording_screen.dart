@@ -307,6 +307,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
     try {
       final trip = await TripRepository.instance.startTrip(userId: _userId, vehicleId: vehicle.id);
       await _recorder.start(trip.id);
+      if (_recorder.powerSaveModeOn && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Battery Saver is on — GPS updates may land far apart during this ride.'),
+            backgroundColor: Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
 
       _pointSub = _recorder.pointStream.listen((point) {
         // Stamp whatever the bike's latest telemetry frame was onto this

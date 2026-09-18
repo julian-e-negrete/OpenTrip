@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -104,6 +105,22 @@ class LocationRecorder {
 
   LocationRecorder({this.showForegroundNotification = true});
 
+  /// Set by [ensureReady] right before this recording starts — whether
+  /// Android's *global* power-save mode was on at that moment. Unlike
+  /// the per-app battery-optimization exemption this class already
+  /// requests (see [_requestBatteryOptimizationExemptionOnce]), power-
+  /// save mode throttles background location updates for every app
+  /// regardless of that exemption, and wasn't visible anywhere in this
+  /// app until now — a real rider's BLE-connected ride landed GPS fixes
+  /// 30-70s apart despite the exemption being granted, while a non-BLE
+  /// ride the same day on the same phone got a clean ~1s the whole way
+  /// through; the extra background BLE radio use plausibly pushed
+  /// battery drain into whatever threshold triggers this. Surfaced so
+  /// trip/recording_screen.dart can warn the rider instead of silently
+  /// recording a sparser trip.
+  bool _powerSaveModeOn = false;
+  bool get powerSaveModeOn => _powerSaveModeOn;
+
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
   final _cameraAlerts = CameraAlertService();
@@ -173,7 +190,9 @@ class LocationRecorder {
 
   /// Checks location services + permission, requesting if needed. Throws a
   /// descriptive [StateError] instead of surfacing a raw plugin exception.
-  static Future<void> ensureReady() async {
+  /// Returns whether Android's global power-save mode is currently on —
+  /// see [powerSaveModeOn]'s doc comment for why this matters.
+  static Future<bool> ensureReady() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       logBuffer.add('GPS: location services are OFF');
       throw StateError('Location services are off — enable them in system settings.');
@@ -203,6 +222,26 @@ class LocationRecorder {
     }
 
     await _requestBatteryOptimizationExemptionOnce();
+    return _checkPowerSaveMode();
+  }
+
+  /// No exemption/permission exists for this the way there is for
+  /// battery-optimization — power-save mode is a rider-controlled global
+  /// toggle (manual, or an OEM's own auto-enable-below-X% rule), so the
+  /// most this app can do is surface it. Best-effort: `battery_plus`
+  /// only implements this on Android/iOS/macOS/Windows, and a rider
+  /// should still be able to start a recording even if the check itself
+  /// fails on some device.
+  static Future<bool> _checkPowerSaveMode() async {
+    try {
+      final onBatterySave = await Battery().isInBatterySaveMode;
+      final level = await Battery().batteryLevel;
+      logBuffer.add('GPS: power save mode is ${onBatterySave ? "ON" : "off"} (battery $level%)');
+      return onBatterySave;
+    } catch (e) {
+      logBuffer.add('GPS: power save mode check failed — $e');
+      return false;
+    }
   }
 
   static const _batteryOptimizationAskedKey = 'battery_optimization_exemption_asked';
@@ -248,7 +287,7 @@ class LocationRecorder {
 
   Future<void> start(String tripId) async {
     if (isRecording) return;
-    await ensureReady();
+    _powerSaveModeOn = await ensureReady();
 
     _tripId = tripId;
     _startedAt = DateTime.now();
