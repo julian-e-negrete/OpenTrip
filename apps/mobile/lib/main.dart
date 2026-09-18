@@ -68,6 +68,23 @@ void main() {
       runApp(const OpenTripApp());
     },
     (error, stack) {
+      // supabase_flutter's own background session-refresh timer retries
+      // on a short interval with no backoff, and every failed attempt
+      // while offline throws here — completely expected on a ride with
+      // no signal (exactly the "no internet on the street" case this
+      // app is built around), not a real bug. Logging it the same way
+      // as a genuine crash — full stack trace to logBuffer, a row to
+      // error_logs — turned one 17-minute dead zone into 166 near-
+      // identical rows: over 2800 of a 4000-line local log buffer, and
+      // (since ErrorReporter.report itself can't reach Supabase either
+      // while offline) 166 duplicate entries queued to flush into
+      // error_logs the moment connectivity returned. A single compact
+      // line is enough to show it happened without drowning out
+      // whatever else was going on during that stretch.
+      if (error is AuthRetryableFetchException) {
+        logBuffer.add('Auth: session refresh failed while offline — ${error.message}');
+        return;
+      }
       logBuffer.add('UNCAUGHT ERROR: $error\n$stack');
       unawaited(ErrorReporter.report('Uncaught error', error, stack));
     },
