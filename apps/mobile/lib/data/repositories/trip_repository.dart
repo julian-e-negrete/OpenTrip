@@ -109,8 +109,17 @@ class TripRepository {
     // device via SyncService.pullAll, which doesn't eagerly fetch every
     // trip's points. Try fetching them now; a harmless no-op if there
     // genuinely are none (e.g. a trip stopped with zero GPS fixes) or
-    // sync isn't available.
-    return SyncService.instance.pullTripPoints(tripId);
+    // sync isn't available. Best-effort only: with no signal (the normal
+    // case for a rider on the street) this fetch throws, and callers like
+    // trip/recording_screen.dart's _stop() call this right before flipping
+    // the recording state off — an uncaught SocketException here left a
+    // zero-point trip's Stop & save stuck on screen (repeated "GPS:
+    // stopping" lines in a real log, one per frustrated tap).
+    try {
+      return await SyncService.instance.pullTripPoints(tripId);
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Appends music events in one batch — mirrors [appendPoints]. Called
