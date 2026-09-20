@@ -140,6 +140,13 @@ class LocationRecorder {
   int _rejectedAccuracyCount = 0;
   int _rejectedGlitchCount = 0;
 
+  // Diagnostics for telling real GNSS fixes from network-derived ones: a
+  // network location carries no speed, so geolocator reports speed 0 and
+  // speedAccuracy 0 — exactly what sparse pocket-carried rides showed.
+  DateTime? _lastRawFixAt;
+  int _fixesWithSpeedAccuracy = 0;
+  int _fixesWithoutSpeedAccuracy = 0;
+
   // Driving-behavior stats (trip/driving_math.dart) — GPS-derived, so
   // available for every vehicle, not just BLE-equipped bikes. _lastHeadingDeg
   // is tracked separately from _lastAcceptedPoint since TripPoint itself
@@ -297,6 +304,9 @@ class LocationRecorder {
     _lastAcceptedPoint = null;
     _rejectedAccuracyCount = 0;
     _rejectedGlitchCount = 0;
+    _lastRawFixAt = null;
+    _fixesWithSpeedAccuracy = 0;
+    _fixesWithoutSpeedAccuracy = 0;
     _cameraAlerts.resetForNewTrip();
     _lastHeadingDeg = null;
     _maxAccelMps2 = null;
@@ -391,6 +401,20 @@ class LocationRecorder {
     // (trip/camera_alerts.dart) doesn't need the same precision as
     // distance accumulation does.
     unawaited(_cameraAlerts.onPosition(position));
+
+    final rawNow = DateTime.now();
+    final sinceLast = rawNow.difference(_lastRawFixAt ?? _startedAt ?? rawNow);
+    _lastRawFixAt = rawNow;
+    final hasSpeedAccuracy = position.speedAccuracy > 0;
+    hasSpeedAccuracy ? _fixesWithSpeedAccuracy++ : _fixesWithoutSpeedAccuracy++;
+    // Only slow arrivals get their own line, so a healthy ~1s ride adds
+    // nothing while a sparse one shows every gap.
+    if (sinceLast.inSeconds >= 10) {
+      logBuffer.add(
+        'GPS: fix after ${sinceLast.inSeconds}s — speed ${(position.speed * 3.6).toStringAsFixed(0)}km/h, '
+        'speedAccuracy ${position.speedAccuracy.toStringAsFixed(1)}, accuracy ${position.accuracy.toStringAsFixed(0)}m',
+      );
+    }
 
     if (position.accuracy > _maxAcceptableAccuracyMeters) {
       _rejectedAccuracyCount++;
@@ -514,7 +538,8 @@ class LocationRecorder {
   Future<RecordingStats> stop() async {
     logBuffer.add(
       'GPS: stopping — accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount '
-      'glitch-rejected=$_rejectedGlitchCount distance=${(_distanceMeters / 1000).toStringAsFixed(2)}km',
+      'glitch-rejected=$_rejectedGlitchCount distance=${(_distanceMeters / 1000).toStringAsFixed(2)}km '
+      'fixes-with-speedAccuracy=$_fixesWithSpeedAccuracy without=$_fixesWithoutSpeedAccuracy',
     );
     await _positionSub?.cancel();
     _positionSub = null;
