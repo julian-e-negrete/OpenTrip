@@ -3,8 +3,8 @@
 -- navigate to one another. Run this once in the SQL Editor, after
 -- schema.sql and friends.sql. See docs/CLOUD_SYNC_SETUP.md.
 --
--- Same posture as friends.sql: the tables only get SELECT policies (or
--- none at all, for live_positions), and every write that needs a
+-- Same posture as friends.sql: crews/crew_members only get SELECT
+-- policies, and every write that needs a
 -- check-then-act decision ("is this person actually your friend?", "are
 -- you the owner?", "was that the last member?") goes through a
 -- `security definer` function. Every function pairs its `grant ... to
@@ -17,9 +17,10 @@
 -- - Sharing is per crew, per member: share_location / share_speed /
 --   share_lean on *your own* crew_members row decide what *that crew*
 --   sees of you. Location off means you're invisible to that crew.
--- - live_positions has no SELECT policy at all: the only way to read
---   anyone's position is get_crew_live_positions(), which applies the
---   sharing flags above and drops anything older than 2 minutes.
+-- - live_positions is only directly readable for your own row (PostgREST
+--   needs that for upserts): the only way to read anyone else's position
+--   is get_crew_live_positions(), which applies the sharing flags above
+--   and drops anything older than 2 minutes.
 -- - The app deletes your live_positions row when a ride ends.
 
 create table if not exists public.crews (
@@ -56,6 +57,7 @@ create table if not exists public.live_positions (
 create or replace function public.touch_live_position()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   new.updated_at := now();
