@@ -316,9 +316,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
         // this is the one place recording a trip and reading the shared
         // BLE connection actually meet.
         final telemetry = _ble.isConnected ? _ble.telemetryNotifier.value : null;
+        final withLean = _leanTracker == null ? point : point.copyWith(phoneLeanDeg: _currentLeanDeg);
         final enriched = telemetry == null
-            ? point
-            : point.copyWith(
+            ? withLean
+            : withLean.copyWith(
                 bleSpeedKph: telemetry.speedKph?.toDouble(),
                 bleRpm: telemetry.rpm,
                 bleGear: telemetry.gear,
