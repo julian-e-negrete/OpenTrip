@@ -10,6 +10,10 @@ import 'package:kawasaki_rideology_ble/kawasaki_rideology_ble.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../auth/current_user.dart';
+import '../crew/crew_map_screen.dart';
+import '../crew/crew_models.dart';
+import '../crew/crew_navigation_screen.dart' show CrewMarker;
+import '../crew/crew_service.dart';
 import '../data/data_events.dart';
 import '../data/models/trip.dart';
 import '../data/models/trip_music_event.dart';
@@ -163,6 +167,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     _ble.stateNotifier.removeListener(_onBleStateChanged);
     _ble.telemetryNotifier.removeListener(_onBleTelemetryNotifierChanged);
     _pointSub?.cancel();
+    if (_activeTrip != null) CrewService.instance.stopRide();
     _statsSub?.cancel();
     _cameraAlertSub?.cancel();
     _bleTelemetrySub?.cancel();
@@ -341,6 +346,12 @@ class _RecordingScreenState extends State<RecordingScreen> {
               );
         _pointBuffer.add(enriched);
         _liveRoutePoints.add(enriched);
+        CrewService.instance.publishPosition(
+          latitude: enriched.latitude,
+          longitude: enriched.longitude,
+          speedKph: enriched.bleSpeedKph ?? enriched.speedKph,
+          leanDeg: enriched.bleLeanDeg?.abs() ?? enriched.phoneLeanDeg,
+        );
         if (_pointBuffer.length >= _flushEvery) _flushPoints();
       });
       _statsSub = _recorder.statsStream.listen((stats) {
@@ -389,6 +400,11 @@ class _RecordingScreenState extends State<RecordingScreen> {
         });
       }
 
+      // Group rides (crew/crew_service.dart): show crewmates on the map
+      // and, if sharing is on, publish this rider's position. Never
+      // blocks or fails the recording — it's all best-effort network.
+      unawaited(CrewService.instance.startRide());
+
       setState(() => _activeTrip = trip);
       RecordingController.instance.isRecording.value = true;
     } catch (e) {
@@ -408,6 +424,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
     if (trip == null) return;
 
     final finalStats = await _recorder.stop();
+    unawaited(CrewService.instance.stopRide());
     await _pointSub?.cancel();
     await _statsSub?.cancel();
     await _bleTelemetrySub?.cancel();
@@ -1057,6 +1074,28 @@ class _MapVariantState extends State<_MapVariant> {
                                   camera.type == CameraAlertType.redLightCamera ? Ph.trafficSignal : Ph.securityCamera,
                                   size: 12,
                                   color: Colors.white,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    ValueListenableBuilder<List<CrewLivePosition>>(
+                      valueListenable: CrewService.instance.liveCrew,
+                      builder: (context, crew, _) => MarkerLayer(
+                        markers: [
+                          for (final rider in crew)
+                            Marker(
+                              point: LatLng(rider.latitude, rider.longitude),
+                              width: 130,
+                              height: 54,
+                              child: GestureDetector(
+                                onTap: () => showCrewRiderSheet(context, rider),
+                                child: CrewMarker(
+                                  name: rider.displayName,
+                                  speedKph: rider.speedKph,
+                                  leanDeg: rider.leanDeg,
+                                  stale: DateTime.now().difference(rider.updatedAt) > const Duration(seconds: 45),
                                 ),
                               ),
                             ),

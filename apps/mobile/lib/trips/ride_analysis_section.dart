@@ -61,7 +61,8 @@ class _RideAnalysisSectionState extends State<RideAnalysisSection> {
 
   String _unit(RideMetric m) => m == RideMetric.speed ? 'km/h' : '°';
 
-  String _fmt(double? v, RideMetric m) => v == null ? '—' : '${v.toStringAsFixed(0)}${m == RideMetric.speed ? ' km/h' : '°'}';
+  String _fmt(double? v, RideMetric m) =>
+      v == null ? '—' : '${v.toStringAsFixed(0)}${m == RideMetric.speed ? ' km/h' : '°'}';
 
   @override
   Widget build(BuildContext context) {
@@ -108,9 +109,8 @@ class _RideAnalysisSectionState extends State<RideAnalysisSection> {
                     options: MapOptions(
                       initialCenter: degenerate ? latLngs.first : bounds.center,
                       initialZoom: 16,
-                      initialCameraFit: degenerate
-                          ? null
-                          : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24)),
+                      initialCameraFit:
+                          degenerate ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24)),
                       interactionOptions: const InteractionOptions(
                         flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                       ),
@@ -220,7 +220,9 @@ class _RideAnalysisSectionState extends State<RideAnalysisSection> {
 
 String _fmtElapsed(Duration d) {
   String two(int n) => n.toString().padLeft(2, '0');
-  return d.inHours > 0 ? '${d.inHours}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}' : '${d.inMinutes}:${two(d.inSeconds % 60)}';
+  return d.inHours > 0
+      ? '${d.inHours}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}'
+      : '${d.inMinutes}:${two(d.inSeconds % 60)}';
 }
 
 class _CornerBadge extends StatelessWidget {
@@ -252,7 +254,8 @@ class _Legend extends StatelessWidget {
     return IgnorePointer(
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(color: Noct.bg.withValues(alpha: 0.85), borderRadius: BorderRadius.circular(Noct.rSm)),
+        decoration:
+            BoxDecoration(color: Noct.bg.withValues(alpha: 0.85), borderRadius: BorderRadius.circular(Noct.rSm)),
         child: Row(
           children: [
             Text('0 $unit', style: style),
@@ -285,12 +288,13 @@ class _Readout extends StatelessWidget {
   Widget build(BuildContext context) {
     final lean = effectiveLeanDeg(point);
     const label = TextStyle(fontSize: 9.5, color: Noct.n500, letterSpacing: 0.8);
-    const value = TextStyle(fontSize: 14, color: Noct.text, fontWeight: FontWeight.w500, fontFeatures: [FontFeature.tabularFigures()]);
+    const value = TextStyle(
+        fontSize: 14, color: Noct.text, fontWeight: FontWeight.w500, fontFeatures: [FontFeature.tabularFigures()]);
     Widget cell(String l, String v) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [Text(v, style: value), Text(l, style: label)],
-    );
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [Text(v, style: value), Text(l, style: label)],
+        );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -419,7 +423,12 @@ class _ProfilePainter extends CustomPainter {
     final sel = selected;
     if (sel != null && sel < points.length) {
       final x = xOf(points[sel]);
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), Paint()..color = Noct.n300..strokeWidth = 1);
+      canvas.drawLine(
+          Offset(x, 0),
+          Offset(x, size.height),
+          Paint()
+            ..color = Noct.n300
+            ..strokeWidth = 1);
       final v = metricValue(points[sel], metric);
       if (v != null) canvas.drawCircle(Offset(x, yOf(v)), 3.5, Paint()..color = Noct.text);
     }

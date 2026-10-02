@@ -136,6 +136,7 @@ class _StatCardScreenState extends State<StatCardScreen> {
                       }),
                   ],
                   value: _template,
+                  wrap: true,
                   onChanged: (t) => setState(() => _template = t),
                 ),
                 const SizedBox(height: 16),
@@ -227,12 +228,12 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 6),
           const Text('kilometers', style: TextStyle(color: Noct.n400, fontSize: 14, fontWeight: FontWeight.w400)),
           const SizedBox(height: 24),
-          Row(
+          Wrap(
+            spacing: 22,
+            runSpacing: 12,
             children: [
               _CardStat('Time', fmtDuration(trip.durationSeconds)),
-              const SizedBox(width: 22),
               _CardStat('Avg km/h', trip.avgSpeedKph == null ? '—' : trip.avgSpeedKph!.toStringAsFixed(0)),
-              const SizedBox(width: 22),
               _CardStat('Max km/h', trip.maxSpeedKph == null ? '—' : trip.maxSpeedKph!.toStringAsFixed(0)),
             ],
           ),
@@ -390,12 +391,12 @@ class _RouteCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(child: CustomPaint(size: Size.infinite, painter: _SpeedRoutePainter(points))),
-          Row(
+          Wrap(
+            spacing: 22,
+            runSpacing: 12,
             children: [
               _CardStat('km', trip.distanceKm.toStringAsFixed(1)),
-              const SizedBox(width: 22),
               _CardStat('Time', fmtDuration(trip.durationSeconds)),
-              const SizedBox(width: 22),
               _CardStat('Max km/h', trip.maxSpeedKph == null ? '—' : trip.maxSpeedKph!.toStringAsFixed(0)),
             ],
           ),
@@ -448,12 +449,12 @@ class _LeanCard extends StatelessWidget {
               },
             ),
           ),
-          Row(
+          Wrap(
+            spacing: 22,
+            runSpacing: 12,
             children: [
               _CardStat('km', trip.distanceKm.toStringAsFixed(1)),
-              const SizedBox(width: 22),
               _CardStat('Time', fmtDuration(trip.durationSeconds)),
-              const SizedBox(width: 22),
               _CardStat('Max km/h', trip.maxSpeedKph == null ? '—' : trip.maxSpeedKph!.toStringAsFixed(0)),
             ],
           ),

@@ -16,9 +16,9 @@ double? effectiveLeanDeg(TripPoint p) => p.bleLeanDeg?.abs() ?? p.phoneLeanDeg;
 double? effectiveSpeedKph(TripPoint p) => p.bleSpeedKph ?? p.speedKph;
 
 double? metricValue(TripPoint p, RideMetric metric) => switch (metric) {
-  RideMetric.speed => effectiveSpeedKph(p),
-  RideMetric.lean => effectiveLeanDeg(p),
-};
+      RideMetric.speed => effectiveSpeedKph(p),
+      RideMetric.lean => effectiveLeanDeg(p),
+    };
 
 /// Whether any point in [points] has a reading for [metric] — the
 /// analysis section hides the Lean tab for rides with no lean data at all.

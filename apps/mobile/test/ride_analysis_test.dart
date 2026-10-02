@@ -2,16 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:opentrip_mobile/data/models/trip_point.dart';
 import 'package:opentrip_mobile/trip/ride_analysis.dart';
 
-TripPoint _pt(int seq, {double? speed, double? phoneLean, double? bleLean, double lat = 0, double lon = 0}) => TripPoint(
-  tripId: 't',
-  seq: seq,
-  latitude: lat,
-  longitude: lon,
-  speedKph: speed,
-  phoneLeanDeg: phoneLean,
-  bleLeanDeg: bleLean,
-  timestamp: DateTime(2026, 1, 1).add(Duration(seconds: seq)),
-);
+TripPoint _pt(int seq, {double? speed, double? phoneLean, double? bleLean, double lat = 0, double lon = 0}) =>
+    TripPoint(
+      tripId: 't',
+      seq: seq,
+      latitude: lat,
+      longitude: lon,
+      speedKph: speed,
+      phoneLeanDeg: phoneLean,
+      bleLeanDeg: bleLean,
+      timestamp: DateTime(2026, 1, 1).add(Duration(seconds: seq)),
+    );
 
 void main() {
   group('effective readings', () {
@@ -70,7 +71,13 @@ void main() {
     });
 
     test('a single noisy dip mid-corner does not split it', () {
-      final points = [_pt(0, phoneLean: 20), _pt(1, phoneLean: 10), _pt(2, phoneLean: 25), _pt(3, phoneLean: 0), _pt(4, phoneLean: 0)];
+      final points = [
+        _pt(0, phoneLean: 20),
+        _pt(1, phoneLean: 10),
+        _pt(2, phoneLean: 25),
+        _pt(3, phoneLean: 0),
+        _pt(4, phoneLean: 0)
+      ];
       expect(detectCorners(points).length, 1);
     });
 

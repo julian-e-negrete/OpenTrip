@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../crew/crews_screen.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/ph_icons.dart';
@@ -118,6 +119,13 @@ class _FriendsScreenState extends State<FriendsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Friends', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, letterSpacing: -0.44)),
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CrewsScreen())),
+            icon: const Icon(Ph.usersThree, size: 16, color: Noct.a300),
+            label: const Text('Crews', style: TextStyle(color: Noct.a300)),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
