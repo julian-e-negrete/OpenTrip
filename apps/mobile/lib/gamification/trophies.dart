@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/ph_icons.dart';
+
 /// Snapshot of a rider's all-time stats, used to evaluate which trophies
 /// they've earned. Deliberately not speed-based — see
 /// /packages/kawasaki_rideology_ble and README.md's "why this exists":
@@ -45,63 +47,63 @@ final List<TrophyDefinition> trophyCatalog = [
     key: 'first_trip',
     name: 'First Trip',
     description: 'Record your first trip.',
-    icon: Icons.flag_outlined,
+    icon: Ph.flagCheckered,
     isEarned: (s) => s.tripCount >= 1,
   ),
   TrophyDefinition(
     key: 'five_trips',
     name: 'Regular',
     description: 'Record 5 trips.',
-    icon: Icons.repeat,
+    icon: Ph.repeat,
     isEarned: (s) => s.tripCount >= 5,
   ),
   TrophyDefinition(
     key: 'fifty_trips',
     name: 'Creature of Habit',
     description: 'Record 50 trips.',
-    icon: Icons.repeat_on_outlined,
+    icon: Ph.arrowsClockwise,
     isEarned: (s) => s.tripCount >= 50,
   ),
   TrophyDefinition(
     key: 'century',
     name: 'Century',
     description: 'A single trip of 100 km or more.',
-    icon: Icons.speed_outlined,
+    icon: Ph.gauge,
     isEarned: (s) => s.longestTripMeters >= 100000,
   ),
   TrophyDefinition(
     key: 'distance_1000km',
     name: 'Road Warrior',
     description: '1,000 km all-time.',
-    icon: Icons.route_outlined,
+    icon: Ph.path,
     isEarned: (s) => s.totalDistanceMeters >= 1000000,
   ),
   TrophyDefinition(
     key: 'distance_10000km',
     name: 'Odometer Breaker',
     description: '10,000 km all-time.',
-    icon: Icons.public_outlined,
+    icon: Ph.globeHemisphereWest,
     isEarned: (s) => s.totalDistanceMeters >= 10000000,
   ),
   TrophyDefinition(
     key: 'explorer_100',
     name: 'Explorer',
     description: '100 unique map areas explored.',
-    icon: Icons.explore_outlined,
+    icon: Ph.compass,
     isEarned: (s) => s.territoryCellCount >= 100,
   ),
   TrophyDefinition(
     key: 'explorer_1000',
     name: 'Cartographer',
     description: '1,000 unique map areas explored.',
-    icon: Icons.map_outlined,
+    icon: Ph.mapTrifold,
     isEarned: (s) => s.territoryCellCount >= 1000,
   ),
   TrophyDefinition(
     key: 'night_rider',
     name: 'Night Rider',
     description: 'Start a trip between 10 PM and 5 AM.',
-    icon: Icons.nightlight_outlined,
+    icon: Ph.moonStars,
     isEarned: (s) {
       final hour = s.lastTripStartedAt?.hour;
       if (hour == null) return false;

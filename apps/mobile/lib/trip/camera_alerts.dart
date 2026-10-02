@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:vibration/vibration.dart';
 
+import '../logging/error_reporter.dart';
 import '../logging/log_buffer.dart';
 import 'geo_math.dart';
 
@@ -51,8 +54,20 @@ class CameraAlert {
 class CameraAlertService {
   final _alertController = StreamController<CameraAlert>.broadcast();
   Stream<CameraAlert> get alerts => _alertController.stream;
+  final _audioPlayer = AudioPlayer();
+  bool _audioContextConfigured = false;
 
-  static const _alertRadiusMeters = 500.0;
+  /// The cameras loaded for the current stretch — so the map can plot
+  /// them ahead of time, not just react once you're within alert range.
+  final camerasNotifier = ValueNotifier<List<CameraPoint>>(const []);
+
+  // Alerts within this radius, but at highway speed a GPS fix can land
+  // anywhere inside it (fixes arrive every few seconds, not continuously)
+  // — the actual trigger distance ranges from here down to 0m depending
+  // on where the next fix happens to fall, not a fixed lead time. 1km
+  // keeps that whole range comfortably ahead of the camera instead of
+  // sometimes as close as a couple hundred meters.
+  static const _alertRadiusMeters = 1000.0;
   static const _requeryDistanceMeters = 15000.0;
   static const _queryRadiusDegrees = 0.09; // ~10km at most latitudes
 
@@ -67,6 +82,14 @@ class CameraAlertService {
   /// position, since those are just a network cache tied to geography,
   /// not to any one trip.
   void resetForNewTrip() => _alertedIds.clear();
+
+  /// Loads (or reuses the cached) camera list for [position] without
+  /// proximity-checking or alerting — for showing cameras on the map
+  /// before a recording starts, when there's nothing to alert about yet.
+  /// Recording itself still drives [onPosition] as the rider moves.
+  Future<void> loadNear(Position position) async {
+    if (_shouldRequery(position)) await _query(position);
+  }
 
   Future<void> onPosition(Position position) async {
     if (_shouldRequery(position)) {
@@ -114,6 +137,12 @@ class CameraAlertService {
       client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
       final request = await client.postUrl(Uri.parse('https://overpass-api.de/api/interpreter'));
       request.headers.set(HttpHeaders.contentTypeHeader, 'application/x-www-form-urlencoded');
+      // Overpass rejects requests carrying Dart's default HttpClient User-Agent
+      // (a generic "Dart/<version> (dart:io)" string) with a flat HTTP 406 —
+      // confirmed live, this silently broke every camera query. A real
+      // identifier, same convention as the map tiles' userAgentPackageName,
+      // is what their fair-use policy actually asks for anyway.
+      request.headers.set(HttpHeaders.userAgentHeader, 'co.opentrip.opentrip_mobile');
       request.write('data=${Uri.encodeQueryComponent(query)}');
       final response = await request.close().timeout(const Duration(seconds: 20));
       if (response.statusCode != 200) {
@@ -139,12 +168,14 @@ class CameraAlertService {
           })
           .whereType<CameraPoint>()
           .toList();
+      camerasNotifier.value = _cameras;
       logBuffer.add('Camera: loaded ${_cameras.length} camera(s) for this stretch');
-    } catch (e) {
+    } catch (e, st) {
       // Best-effort — no network, Overpass unavailable/rate-limiting, or a
       // malformed response just means no alerts for this stretch of the
       // trip, not a failed recording.
       logBuffer.add('Camera: query failed, no alerts for this stretch — $e');
+      unawaited(ErrorReporter.report('Camera: Overpass query', e, st));
     } finally {
       client?.close();
       _queryInFlight = false;
@@ -164,14 +195,60 @@ class CameraAlertService {
         _alertedIds.add(camera.id);
         logBuffer.add('Camera: ${camera.type.name} alert — ${distance.toStringAsFixed(0)}m away');
         // A physical cue works whether or not anyone's looking at a
-        // screen right now — the point of a driving alert.
-        unawaited(HapticFeedback.vibrate());
+        // screen right now — the point of a driving alert. This needs to
+        // be a real, sustained buzz a rider can feel over a moving
+        // motorcycle's own vibration and wind noise — flutter/services.dart's
+        // HapticFeedback is a brief UI-click tick meant for a button tap,
+        // not an alert; effectively imperceptible in that context, which
+        // is exactly what "alerts do not vibrate" turned out to mean.
+        unawaited(_buzz());
+        unawaited(_beep());
         _alertController.add(CameraAlert(camera, distance));
       }
     }
   }
 
+  Future<void> _buzz() async {
+    try {
+      if (!await Vibration.hasVibrator()) return;
+      // Three deliberate pulses, not one short tick — meant to be felt
+      // over engine vibration/wind noise, and distinct enough from any
+      // other haptic in the app that it reads as "look at the road", not
+      // just background phone noise.
+      await Vibration.vibrate(pattern: [0, 300, 150, 300, 150, 300]);
+    } catch (e, st) {
+      logBuffer.add('Camera: vibration failed — $e');
+      unawaited(ErrorReporter.report('Camera: vibration', e, st));
+    }
+  }
+
+  Future<void> _beep() async {
+    try {
+      if (!_audioContextConfigured) {
+        // audioplayers defaults to AndroidAudioFocus.gain/no iOS mixing —
+        // "this app is now the sole source of audio," which pauses or
+        // stops whatever else is playing, including the rider's own music
+        // (spotify_now_playing.dart just logs what's playing, it doesn't
+        // own the audio session, so this alert was the one silencing it).
+        // duckOthers instead just lowers other audio while this plays on
+        // top, the same way a GPS voice prompt or alarm layers over music
+        // rather than cutting it off.
+        await _audioPlayer.setAudioContext(AudioContextConfig(focus: AudioContextConfigFocus.duckOthers).build());
+        _audioContextConfigured = true;
+      }
+      // Same three-pulse cadence as _buzz — an audible cue reaches a
+      // rider whose phone isn't in a pocket (mounted, or a helmet
+      // intercom paired over Bluetooth) the way vibration alone can't.
+      await _audioPlayer.play(AssetSource('sounds/camera_alert.wav'));
+    } catch (e, st) {
+      logBuffer.add('Camera: alert sound failed — $e');
+      unawaited(ErrorReporter.report('Camera: alert sound', e, st));
+    }
+  }
+
   Future<void> dispose() async {
+    camerasNotifier.dispose();
+    await _audioPlayer.dispose();
     await _alertController.close();
   }
 }

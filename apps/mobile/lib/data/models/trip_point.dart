@@ -25,6 +25,31 @@ class TripPoint {
   final double? bleLeanDeg;
   final int? bleWaterTemperatureC;
 
+  // The rest of what RidingTelemetry can carry — kept per-point (not just
+  // as a trip-level max/min, see data/models/trip.dart) so the replay HUD
+  // can show how each of these actually moved over the ride, not just its
+  // extreme value.
+  final double? bleAccelG;
+  final double? bleFrontBrakePressureKpa;
+  final int? bleTcsLevelHb;
+  final int? bleTcsLevelLb;
+  final double? bleBattery12V;
+  final double? bleOdometerKm;
+  final double? bleTripAKm;
+  final double? bleTripBKm;
+  final int? bleFuelGauge;
+  final int? bleInletAirTemperatureC;
+  final double? bleTirePressureFrKpa;
+  final double? bleTirePressureRrKpa;
+
+  /// The phone-accelerometer lean estimate (trip/lean_angle_tracker.dart)
+  /// at this fix — only while "Track lean angle" is on. Kept per point,
+  /// not just as the trip's [Trip.phoneLeanMaxDeg], so ride analysis
+  /// (trips/ride_analysis_section.dart) can color the route by lean and
+  /// find individual corners for any mounted-phone ride, not only
+  /// BLE-connected bikes. Unsigned — the tracker can't tell left from right.
+  final double? phoneLeanDeg;
+
   const TripPoint({
     required this.tripId,
     required this.seq,
@@ -39,12 +64,42 @@ class TripPoint {
     this.bleThrottlePercent,
     this.bleLeanDeg,
     this.bleWaterTemperatureC,
+    this.bleAccelG,
+    this.bleFrontBrakePressureKpa,
+    this.bleTcsLevelHb,
+    this.bleTcsLevelLb,
+    this.bleBattery12V,
+    this.bleOdometerKm,
+    this.bleTripAKm,
+    this.bleTripBKm,
+    this.bleFuelGauge,
+    this.bleInletAirTemperatureC,
+    this.bleTirePressureFrKpa,
+    this.bleTirePressureRrKpa,
+    this.phoneLeanDeg,
   });
 
   /// Whether this point carries any bike telemetry at all — checked once
   /// by the replay HUD instead of testing every field individually.
   bool get hasBleTelemetry =>
-      bleSpeedKph != null || bleRpm != null || bleGear != null || bleThrottlePercent != null || bleLeanDeg != null;
+      bleSpeedKph != null ||
+      bleRpm != null ||
+      bleGear != null ||
+      bleThrottlePercent != null ||
+      bleLeanDeg != null ||
+      bleWaterTemperatureC != null ||
+      bleAccelG != null ||
+      bleFrontBrakePressureKpa != null ||
+      bleTcsLevelHb != null ||
+      bleTcsLevelLb != null ||
+      bleBattery12V != null ||
+      bleOdometerKm != null ||
+      bleTripAKm != null ||
+      bleTripBKm != null ||
+      bleFuelGauge != null ||
+      bleInletAirTemperatureC != null ||
+      bleTirePressureFrKpa != null ||
+      bleTirePressureRrKpa != null;
 
   TripPoint copyWith({
     double? bleSpeedKph,
@@ -53,6 +108,19 @@ class TripPoint {
     double? bleThrottlePercent,
     double? bleLeanDeg,
     int? bleWaterTemperatureC,
+    double? bleAccelG,
+    double? bleFrontBrakePressureKpa,
+    int? bleTcsLevelHb,
+    int? bleTcsLevelLb,
+    double? bleBattery12V,
+    double? bleOdometerKm,
+    double? bleTripAKm,
+    double? bleTripBKm,
+    int? bleFuelGauge,
+    int? bleInletAirTemperatureC,
+    double? bleTirePressureFrKpa,
+    double? bleTirePressureRrKpa,
+    double? phoneLeanDeg,
   }) {
     return TripPoint(
       tripId: tripId,
@@ -68,6 +136,19 @@ class TripPoint {
       bleThrottlePercent: bleThrottlePercent ?? this.bleThrottlePercent,
       bleLeanDeg: bleLeanDeg ?? this.bleLeanDeg,
       bleWaterTemperatureC: bleWaterTemperatureC ?? this.bleWaterTemperatureC,
+      bleAccelG: bleAccelG ?? this.bleAccelG,
+      bleFrontBrakePressureKpa: bleFrontBrakePressureKpa ?? this.bleFrontBrakePressureKpa,
+      bleTcsLevelHb: bleTcsLevelHb ?? this.bleTcsLevelHb,
+      bleTcsLevelLb: bleTcsLevelLb ?? this.bleTcsLevelLb,
+      bleBattery12V: bleBattery12V ?? this.bleBattery12V,
+      bleOdometerKm: bleOdometerKm ?? this.bleOdometerKm,
+      bleTripAKm: bleTripAKm ?? this.bleTripAKm,
+      bleTripBKm: bleTripBKm ?? this.bleTripBKm,
+      bleFuelGauge: bleFuelGauge ?? this.bleFuelGauge,
+      bleInletAirTemperatureC: bleInletAirTemperatureC ?? this.bleInletAirTemperatureC,
+      bleTirePressureFrKpa: bleTirePressureFrKpa ?? this.bleTirePressureFrKpa,
+      bleTirePressureRrKpa: bleTirePressureRrKpa ?? this.bleTirePressureRrKpa,
+      phoneLeanDeg: phoneLeanDeg ?? this.phoneLeanDeg,
     );
   }
 
@@ -85,6 +166,19 @@ class TripPoint {
     'ble_throttle_percent': bleThrottlePercent,
     'ble_lean_deg': bleLeanDeg,
     'ble_water_temp_c': bleWaterTemperatureC,
+    'ble_accel_g': bleAccelG,
+    'ble_front_brake_kpa': bleFrontBrakePressureKpa,
+    'ble_tcs_level_hb': bleTcsLevelHb,
+    'ble_tcs_level_lb': bleTcsLevelLb,
+    'ble_battery_12v': bleBattery12V,
+    'ble_odometer_km': bleOdometerKm,
+    'ble_trip_a_km': bleTripAKm,
+    'ble_trip_b_km': bleTripBKm,
+    'ble_fuel_gauge': bleFuelGauge,
+    'ble_inlet_air_temp_c': bleInletAirTemperatureC,
+    'ble_tire_pressure_fr_kpa': bleTirePressureFrKpa,
+    'ble_tire_pressure_rr_kpa': bleTirePressureRrKpa,
+    'phone_lean_deg': phoneLeanDeg,
   };
 
   static TripPoint fromRow(Map<String, Object?> row) => TripPoint(
@@ -101,6 +195,19 @@ class TripPoint {
     bleThrottlePercent: row['ble_throttle_percent'] as double?,
     bleLeanDeg: row['ble_lean_deg'] as double?,
     bleWaterTemperatureC: row['ble_water_temp_c'] as int?,
+    bleAccelG: row['ble_accel_g'] as double?,
+    bleFrontBrakePressureKpa: row['ble_front_brake_kpa'] as double?,
+    bleTcsLevelHb: row['ble_tcs_level_hb'] as int?,
+    bleTcsLevelLb: row['ble_tcs_level_lb'] as int?,
+    bleBattery12V: row['ble_battery_12v'] as double?,
+    bleOdometerKm: row['ble_odometer_km'] as double?,
+    bleTripAKm: row['ble_trip_a_km'] as double?,
+    bleTripBKm: row['ble_trip_b_km'] as double?,
+    bleFuelGauge: row['ble_fuel_gauge'] as int?,
+    bleInletAirTemperatureC: row['ble_inlet_air_temp_c'] as int?,
+    bleTirePressureFrKpa: row['ble_tire_pressure_fr_kpa'] as double?,
+    bleTirePressureRrKpa: row['ble_tire_pressure_rr_kpa'] as double?,
+    phoneLeanDeg: row['phone_lean_deg'] as double?,
   );
 
   /// What gets pushed to Supabase (supabase/schema.sql's `trip_points`
@@ -122,6 +229,19 @@ class TripPoint {
     'ble_throttle_percent': bleThrottlePercent,
     'ble_lean_deg': bleLeanDeg,
     'ble_water_temp_c': bleWaterTemperatureC,
+    'ble_accel_g': bleAccelG,
+    'ble_front_brake_kpa': bleFrontBrakePressureKpa,
+    'ble_tcs_level_hb': bleTcsLevelHb,
+    'ble_tcs_level_lb': bleTcsLevelLb,
+    'ble_battery_12v': bleBattery12V,
+    'ble_odometer_km': bleOdometerKm,
+    'ble_trip_a_km': bleTripAKm,
+    'ble_trip_b_km': bleTripBKm,
+    'ble_fuel_gauge': bleFuelGauge,
+    'ble_inlet_air_temp_c': bleInletAirTemperatureC,
+    'ble_tire_pressure_fr_kpa': bleTirePressureFrKpa,
+    'ble_tire_pressure_rr_kpa': bleTirePressureRrKpa,
+    'phone_lean_deg': phoneLeanDeg,
   };
 
   static TripPoint fromSupabaseRow(Map<String, Object?> row) => TripPoint(
@@ -138,5 +258,18 @@ class TripPoint {
     bleThrottlePercent: (row['ble_throttle_percent'] as num?)?.toDouble(),
     bleLeanDeg: (row['ble_lean_deg'] as num?)?.toDouble(),
     bleWaterTemperatureC: row['ble_water_temp_c'] as int?,
+    bleAccelG: (row['ble_accel_g'] as num?)?.toDouble(),
+    bleFrontBrakePressureKpa: (row['ble_front_brake_kpa'] as num?)?.toDouble(),
+    bleTcsLevelHb: row['ble_tcs_level_hb'] as int?,
+    bleTcsLevelLb: row['ble_tcs_level_lb'] as int?,
+    bleBattery12V: (row['ble_battery_12v'] as num?)?.toDouble(),
+    bleOdometerKm: (row['ble_odometer_km'] as num?)?.toDouble(),
+    bleTripAKm: (row['ble_trip_a_km'] as num?)?.toDouble(),
+    bleTripBKm: (row['ble_trip_b_km'] as num?)?.toDouble(),
+    bleFuelGauge: row['ble_fuel_gauge'] as int?,
+    bleInletAirTemperatureC: row['ble_inlet_air_temp_c'] as int?,
+    bleTirePressureFrKpa: (row['ble_tire_pressure_fr_kpa'] as num?)?.toDouble(),
+    bleTirePressureRrKpa: (row['ble_tire_pressure_rr_kpa'] as num?)?.toDouble(),
+    phoneLeanDeg: (row['phone_lean_deg'] as num?)?.toDouble(),
   );
 }

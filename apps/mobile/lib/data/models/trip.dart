@@ -24,6 +24,35 @@ class Trip {
   final int? bleMinWaterTemperatureC;
   final int? bleMaxWaterTemperatureC;
 
+  // The rest of what RidingTelemetry can report, summarized the same way
+  // as the fields above — see trips/trip_detail_screen.dart's "Full bike
+  // telemetry" section. Per-point values for all of these (so a replay
+  // can show how they moved, not just their extreme) live on
+  // data/models/trip_point.dart instead.
+  final double? bleMaxThrottlePercent;
+  final double? bleMaxAccelG;
+  /// Highest traction-control intervention level seen (max of the
+  /// protocol's high/low-byte TCS level fields) — not a temperature or
+  /// pressure, just an activation-level indicator, so there's no
+  /// meaningful "min" to pair it with the way water temp has one.
+  final int? bleMaxTcsLevel;
+  final double? bleMinBattery12V;
+  final double? bleMaxBattery12V;
+  final int? bleMinFuelGauge;
+  final int? bleMaxFuelGauge;
+  final int? bleMinInletAirTemperatureC;
+  final int? bleMaxInletAirTemperatureC;
+  final double? bleMinTirePressureFrKpa;
+  final double? bleMaxTirePressureFrKpa;
+  final double? bleMinTirePressureRrKpa;
+  final double? bleMaxTirePressureRrKpa;
+
+  /// The bike's own trip A/B odometer readings (Kawasaki Rideology's 0x41
+  /// "MC info" frame) at the last telemetry frame received during this
+  /// trip — last-write-wins like [bleOdometerKm] below, not a max/min.
+  final double? bleTripAKm;
+  final double? bleTripBKm;
+
   /// The bike's own odometer reading (Kawasaki Rideology's 0x41 "MC info"
   /// frame, `RidingTelemetry.odometerTenthKm`) at the last telemetry frame
   /// received during this trip — not a max/min like the fields above,
@@ -47,6 +76,15 @@ class Trip {
   final int? behaviorHardAccelCount;
   final int? behaviorHardBrakeCount;
   final int? behaviorHardCorneringCount;
+
+  /// Roll-race checkpoint times (trip/accel_run_tracker.dart) — one
+  /// continuous run from a standing start, GPS-derived like the behavior
+  /// stats above: 0-60 km/h as an in-run checkpoint, 0-180 km/h as the
+  /// finish condition, both timed from the same launch. Whether from a
+  /// dedicated racing/ attempt or nailed incidentally on an ordinary
+  /// ride. Null if the trip never reached that checkpoint.
+  final double? best0To60Seconds;
+  final double? best0To180Seconds;
 
   /// Phone-accelerometer-derived max lean angle (trip/lean_angle_tracker.dart)
   /// — opt-in per recording (the "Track lean angle" toggle on
@@ -78,6 +116,21 @@ class Trip {
     this.bleMaxBrakePressureKpa,
     this.bleMinWaterTemperatureC,
     this.bleMaxWaterTemperatureC,
+    this.bleMaxThrottlePercent,
+    this.bleMaxAccelG,
+    this.bleMaxTcsLevel,
+    this.bleMinBattery12V,
+    this.bleMaxBattery12V,
+    this.bleMinFuelGauge,
+    this.bleMaxFuelGauge,
+    this.bleMinInletAirTemperatureC,
+    this.bleMaxInletAirTemperatureC,
+    this.bleMinTirePressureFrKpa,
+    this.bleMaxTirePressureFrKpa,
+    this.bleMinTirePressureRrKpa,
+    this.bleMaxTirePressureRrKpa,
+    this.bleTripAKm,
+    this.bleTripBKm,
     this.bleOdometerKm,
     this.behaviorMaxAccelG,
     this.behaviorMaxBrakeG,
@@ -85,6 +138,8 @@ class Trip {
     this.behaviorHardAccelCount,
     this.behaviorHardBrakeCount,
     this.behaviorHardCorneringCount,
+    this.best0To60Seconds,
+    this.best0To180Seconds,
     this.phoneLeanMaxDeg,
     this.synced = false,
   });
@@ -96,6 +151,8 @@ class Trip {
       behaviorMaxBrakeG != null ||
       behaviorMaxCorneringG != null ||
       phoneLeanMaxDeg != null;
+
+  bool get hasAccelStats => best0To60Seconds != null || best0To180Seconds != null;
 
   bool get isFinished => endedAt != null;
 
@@ -114,6 +171,21 @@ class Trip {
     double? bleMaxBrakePressureKpa,
     int? bleMinWaterTemperatureC,
     int? bleMaxWaterTemperatureC,
+    double? bleMaxThrottlePercent,
+    double? bleMaxAccelG,
+    int? bleMaxTcsLevel,
+    double? bleMinBattery12V,
+    double? bleMaxBattery12V,
+    int? bleMinFuelGauge,
+    int? bleMaxFuelGauge,
+    int? bleMinInletAirTemperatureC,
+    int? bleMaxInletAirTemperatureC,
+    double? bleMinTirePressureFrKpa,
+    double? bleMaxTirePressureFrKpa,
+    double? bleMinTirePressureRrKpa,
+    double? bleMaxTirePressureRrKpa,
+    double? bleTripAKm,
+    double? bleTripBKm,
     double? bleOdometerKm,
     double? behaviorMaxAccelG,
     double? behaviorMaxBrakeG,
@@ -121,6 +193,8 @@ class Trip {
     int? behaviorHardAccelCount,
     int? behaviorHardBrakeCount,
     int? behaviorHardCorneringCount,
+    double? best0To60Seconds,
+    double? best0To180Seconds,
     double? phoneLeanMaxDeg,
   }) {
     return Trip(
@@ -140,6 +214,21 @@ class Trip {
       bleMaxBrakePressureKpa: bleMaxBrakePressureKpa,
       bleMinWaterTemperatureC: bleMinWaterTemperatureC,
       bleMaxWaterTemperatureC: bleMaxWaterTemperatureC,
+      bleMaxThrottlePercent: bleMaxThrottlePercent,
+      bleMaxAccelG: bleMaxAccelG,
+      bleMaxTcsLevel: bleMaxTcsLevel,
+      bleMinBattery12V: bleMinBattery12V,
+      bleMaxBattery12V: bleMaxBattery12V,
+      bleMinFuelGauge: bleMinFuelGauge,
+      bleMaxFuelGauge: bleMaxFuelGauge,
+      bleMinInletAirTemperatureC: bleMinInletAirTemperatureC,
+      bleMaxInletAirTemperatureC: bleMaxInletAirTemperatureC,
+      bleMinTirePressureFrKpa: bleMinTirePressureFrKpa,
+      bleMaxTirePressureFrKpa: bleMaxTirePressureFrKpa,
+      bleMinTirePressureRrKpa: bleMinTirePressureRrKpa,
+      bleMaxTirePressureRrKpa: bleMaxTirePressureRrKpa,
+      bleTripAKm: bleTripAKm,
+      bleTripBKm: bleTripBKm,
       bleOdometerKm: bleOdometerKm,
       behaviorMaxAccelG: behaviorMaxAccelG,
       behaviorMaxBrakeG: behaviorMaxBrakeG,
@@ -147,6 +236,8 @@ class Trip {
       behaviorHardAccelCount: behaviorHardAccelCount,
       behaviorHardBrakeCount: behaviorHardBrakeCount,
       behaviorHardCorneringCount: behaviorHardCorneringCount,
+      best0To60Seconds: best0To60Seconds,
+      best0To180Seconds: best0To180Seconds,
       phoneLeanMaxDeg: phoneLeanMaxDeg,
     );
   }
@@ -168,6 +259,21 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'ble_max_throttle_percent': bleMaxThrottlePercent,
+    'ble_max_accel_g': bleMaxAccelG,
+    'ble_max_tcs_level': bleMaxTcsLevel,
+    'ble_min_battery_12v': bleMinBattery12V,
+    'ble_max_battery_12v': bleMaxBattery12V,
+    'ble_min_fuel_gauge': bleMinFuelGauge,
+    'ble_max_fuel_gauge': bleMaxFuelGauge,
+    'ble_min_inlet_air_temp_c': bleMinInletAirTemperatureC,
+    'ble_max_inlet_air_temp_c': bleMaxInletAirTemperatureC,
+    'ble_min_tire_pressure_fr_kpa': bleMinTirePressureFrKpa,
+    'ble_max_tire_pressure_fr_kpa': bleMaxTirePressureFrKpa,
+    'ble_min_tire_pressure_rr_kpa': bleMinTirePressureRrKpa,
+    'ble_max_tire_pressure_rr_kpa': bleMaxTirePressureRrKpa,
+    'ble_trip_a_km': bleTripAKm,
+    'ble_trip_b_km': bleTripBKm,
     'ble_odometer_km': bleOdometerKm,
     'behavior_max_accel_g': behaviorMaxAccelG,
     'behavior_max_brake_g': behaviorMaxBrakeG,
@@ -175,6 +281,8 @@ class Trip {
     'behavior_hard_accel_count': behaviorHardAccelCount,
     'behavior_hard_brake_count': behaviorHardBrakeCount,
     'behavior_hard_cornering_count': behaviorHardCorneringCount,
+    'best_0_60_seconds': best0To60Seconds,
+    'best_0_180_seconds': best0To180Seconds,
     'phone_lean_max_deg': phoneLeanMaxDeg,
     'synced': synced ? 1 : 0,
   };
@@ -196,6 +304,21 @@ class Trip {
     bleMaxBrakePressureKpa: row['ble_max_brake_kpa'] as double?,
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    bleMaxThrottlePercent: row['ble_max_throttle_percent'] as double?,
+    bleMaxAccelG: row['ble_max_accel_g'] as double?,
+    bleMaxTcsLevel: row['ble_max_tcs_level'] as int?,
+    bleMinBattery12V: row['ble_min_battery_12v'] as double?,
+    bleMaxBattery12V: row['ble_max_battery_12v'] as double?,
+    bleMinFuelGauge: row['ble_min_fuel_gauge'] as int?,
+    bleMaxFuelGauge: row['ble_max_fuel_gauge'] as int?,
+    bleMinInletAirTemperatureC: row['ble_min_inlet_air_temp_c'] as int?,
+    bleMaxInletAirTemperatureC: row['ble_max_inlet_air_temp_c'] as int?,
+    bleMinTirePressureFrKpa: row['ble_min_tire_pressure_fr_kpa'] as double?,
+    bleMaxTirePressureFrKpa: row['ble_max_tire_pressure_fr_kpa'] as double?,
+    bleMinTirePressureRrKpa: row['ble_min_tire_pressure_rr_kpa'] as double?,
+    bleMaxTirePressureRrKpa: row['ble_max_tire_pressure_rr_kpa'] as double?,
+    bleTripAKm: row['ble_trip_a_km'] as double?,
+    bleTripBKm: row['ble_trip_b_km'] as double?,
     bleOdometerKm: row['ble_odometer_km'] as double?,
     behaviorMaxAccelG: row['behavior_max_accel_g'] as double?,
     behaviorMaxBrakeG: row['behavior_max_brake_g'] as double?,
@@ -203,6 +326,8 @@ class Trip {
     behaviorHardAccelCount: row['behavior_hard_accel_count'] as int?,
     behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
     behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
+    best0To60Seconds: row['best_0_60_seconds'] as double?,
+    best0To180Seconds: row['best_0_180_seconds'] as double?,
     phoneLeanMaxDeg: row['phone_lean_max_deg'] as double?,
     synced: (row['synced'] as int? ?? 0) != 0,
   );
@@ -225,6 +350,21 @@ class Trip {
     'ble_max_brake_kpa': bleMaxBrakePressureKpa,
     'ble_min_water_temp_c': bleMinWaterTemperatureC,
     'ble_max_water_temp_c': bleMaxWaterTemperatureC,
+    'ble_max_throttle_percent': bleMaxThrottlePercent,
+    'ble_max_accel_g': bleMaxAccelG,
+    'ble_max_tcs_level': bleMaxTcsLevel,
+    'ble_min_battery_12v': bleMinBattery12V,
+    'ble_max_battery_12v': bleMaxBattery12V,
+    'ble_min_fuel_gauge': bleMinFuelGauge,
+    'ble_max_fuel_gauge': bleMaxFuelGauge,
+    'ble_min_inlet_air_temp_c': bleMinInletAirTemperatureC,
+    'ble_max_inlet_air_temp_c': bleMaxInletAirTemperatureC,
+    'ble_min_tire_pressure_fr_kpa': bleMinTirePressureFrKpa,
+    'ble_max_tire_pressure_fr_kpa': bleMaxTirePressureFrKpa,
+    'ble_min_tire_pressure_rr_kpa': bleMinTirePressureRrKpa,
+    'ble_max_tire_pressure_rr_kpa': bleMaxTirePressureRrKpa,
+    'ble_trip_a_km': bleTripAKm,
+    'ble_trip_b_km': bleTripBKm,
     'ble_odometer_km': bleOdometerKm,
     'behavior_max_accel_g': behaviorMaxAccelG,
     'behavior_max_brake_g': behaviorMaxBrakeG,
@@ -232,6 +372,8 @@ class Trip {
     'behavior_hard_accel_count': behaviorHardAccelCount,
     'behavior_hard_brake_count': behaviorHardBrakeCount,
     'behavior_hard_cornering_count': behaviorHardCorneringCount,
+    'best_0_60_seconds': best0To60Seconds,
+    'best_0_180_seconds': best0To180Seconds,
     'phone_lean_max_deg': phoneLeanMaxDeg,
   };
 
@@ -253,6 +395,21 @@ class Trip {
     bleMaxBrakePressureKpa: (row['ble_max_brake_kpa'] as num?)?.toDouble(),
     bleMinWaterTemperatureC: row['ble_min_water_temp_c'] as int?,
     bleMaxWaterTemperatureC: row['ble_max_water_temp_c'] as int?,
+    bleMaxThrottlePercent: (row['ble_max_throttle_percent'] as num?)?.toDouble(),
+    bleMaxAccelG: (row['ble_max_accel_g'] as num?)?.toDouble(),
+    bleMaxTcsLevel: row['ble_max_tcs_level'] as int?,
+    bleMinBattery12V: (row['ble_min_battery_12v'] as num?)?.toDouble(),
+    bleMaxBattery12V: (row['ble_max_battery_12v'] as num?)?.toDouble(),
+    bleMinFuelGauge: row['ble_min_fuel_gauge'] as int?,
+    bleMaxFuelGauge: row['ble_max_fuel_gauge'] as int?,
+    bleMinInletAirTemperatureC: row['ble_min_inlet_air_temp_c'] as int?,
+    bleMaxInletAirTemperatureC: row['ble_max_inlet_air_temp_c'] as int?,
+    bleMinTirePressureFrKpa: (row['ble_min_tire_pressure_fr_kpa'] as num?)?.toDouble(),
+    bleMaxTirePressureFrKpa: (row['ble_max_tire_pressure_fr_kpa'] as num?)?.toDouble(),
+    bleMinTirePressureRrKpa: (row['ble_min_tire_pressure_rr_kpa'] as num?)?.toDouble(),
+    bleMaxTirePressureRrKpa: (row['ble_max_tire_pressure_rr_kpa'] as num?)?.toDouble(),
+    bleTripAKm: (row['ble_trip_a_km'] as num?)?.toDouble(),
+    bleTripBKm: (row['ble_trip_b_km'] as num?)?.toDouble(),
     bleOdometerKm: (row['ble_odometer_km'] as num?)?.toDouble(),
     behaviorMaxAccelG: (row['behavior_max_accel_g'] as num?)?.toDouble(),
     behaviorMaxBrakeG: (row['behavior_max_brake_g'] as num?)?.toDouble(),
@@ -260,6 +417,8 @@ class Trip {
     behaviorHardAccelCount: row['behavior_hard_accel_count'] as int?,
     behaviorHardBrakeCount: row['behavior_hard_brake_count'] as int?,
     behaviorHardCorneringCount: row['behavior_hard_cornering_count'] as int?,
+    best0To60Seconds: (row['best_0_60_seconds'] as num?)?.toDouble(),
+    best0To180Seconds: (row['best_0_180_seconds'] as num?)?.toDouble(),
     phoneLeanMaxDeg: (row['phone_lean_max_deg'] as num?)?.toDouble(),
     synced: true,
   );

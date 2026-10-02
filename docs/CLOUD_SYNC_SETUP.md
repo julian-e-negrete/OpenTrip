@@ -106,7 +106,25 @@ earlier run of this file may have left these callable without signing
 in. They only ever return the same aggregated, non-sensitive data the
 app itself shows once signed in, but re-running closes the gap regardless.
 
-## 5. That's it
+## 5. Enable crews (live group rides)
+
+1. Same SQL Editor, another **New query**.
+2. Paste [`supabase/crews.sql`](../supabase/crews.sql) — after
+   `friends.sql`, since adding someone to a crew checks that they're
+   your friend.
+3. **Run**.
+
+Creates `crews`, `crew_members` and `live_positions`, plus the functions
+behind the Crews screen and the crew markers on the Record map: create/
+rename/leave a crew, add a friend to it, set what you share with each
+crew (location, speed, lean), and `get_crew_live_positions()` — the only
+way to read anyone's position, which applies those sharing settings and
+ignores anything older than two minutes. The app deletes your own
+`live_positions` row when a ride ends. Re-running the file is safe.
+Skipping this step leaves the Crews screen empty and the Record map
+without crew markers; nothing else is affected.
+
+## 6. That's it
 
 No new dart-defines, no new secrets. The app already has everything it
 needs (the same `SUPABASE_URL`/`SUPABASE_ANON_KEY` used for login).

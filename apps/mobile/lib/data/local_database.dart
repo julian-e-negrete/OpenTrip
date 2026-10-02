@@ -26,7 +26,7 @@ class LocalDatabase {
     final path = p.join(dbPath, 'opentrip.db');
     return openDatabase(
       path,
-      version: 14,
+      version: 18,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -89,6 +89,30 @@ class LocalDatabase {
             auto_started INTEGER NOT NULL DEFAULT 0,
             phone_lean_max_deg REAL,
             ble_odometer_km REAL,
+            ble_max_throttle_percent REAL,
+            ble_max_accel_g REAL,
+            ble_max_tcs_level INTEGER,
+            ble_min_battery_12v REAL,
+            ble_max_battery_12v REAL,
+            ble_min_fuel_gauge INTEGER,
+            ble_max_fuel_gauge INTEGER,
+            ble_min_inlet_air_temp_c INTEGER,
+            ble_max_inlet_air_temp_c INTEGER,
+            ble_min_tire_pressure_fr_kpa REAL,
+            ble_max_tire_pressure_fr_kpa REAL,
+            ble_min_tire_pressure_rr_kpa REAL,
+            ble_max_tire_pressure_rr_kpa REAL,
+            ble_trip_a_km REAL,
+            ble_trip_b_km REAL,
+            best_0_60_seconds REAL,
+            -- Superseded by best_0_180_seconds below — the roll-race
+            -- redesign measures 0-180 km/h from the same standing start
+            -- as the 0-60 checkpoint, not a separate 100-180 rolling
+            -- time. No longer written by the app; column stays for
+            -- anyone upgrading from a build that had it, rather than a
+            -- destructive migration for a harmless, always-null leftover.
+            best_100_180_seconds REAL,
+            best_0_180_seconds REAL,
             synced INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -110,6 +134,19 @@ class LocalDatabase {
             ble_throttle_percent REAL,
             ble_lean_deg REAL,
             ble_water_temp_c INTEGER,
+            ble_accel_g REAL,
+            ble_front_brake_kpa REAL,
+            ble_tcs_level_hb INTEGER,
+            ble_tcs_level_lb INTEGER,
+            ble_battery_12v REAL,
+            ble_odometer_km REAL,
+            ble_trip_a_km REAL,
+            ble_trip_b_km REAL,
+            ble_fuel_gauge INTEGER,
+            ble_inlet_air_temp_c INTEGER,
+            ble_tire_pressure_fr_kpa REAL,
+            ble_tire_pressure_rr_kpa REAL,
+            phone_lean_deg REAL,
             PRIMARY KEY (trip_id, seq)
           )
         ''');
@@ -323,6 +360,77 @@ class LocalDatabase {
               PRIMARY KEY (trip_id, seq)
             )
           ''');
+        }
+        if (oldVersion < 15) {
+          final tripColumns = await db.rawQuery('PRAGMA table_info(trips)');
+          final tripExisting = tripColumns.map((c) => c['name']).toSet();
+          for (final column in [
+            'ble_max_throttle_percent REAL',
+            'ble_max_accel_g REAL',
+            'ble_max_tcs_level INTEGER',
+            'ble_min_battery_12v REAL',
+            'ble_max_battery_12v REAL',
+            'ble_min_fuel_gauge INTEGER',
+            'ble_max_fuel_gauge INTEGER',
+            'ble_min_inlet_air_temp_c INTEGER',
+            'ble_max_inlet_air_temp_c INTEGER',
+            'ble_min_tire_pressure_fr_kpa REAL',
+            'ble_max_tire_pressure_fr_kpa REAL',
+            'ble_min_tire_pressure_rr_kpa REAL',
+            'ble_max_tire_pressure_rr_kpa REAL',
+            'ble_trip_a_km REAL',
+            'ble_trip_b_km REAL',
+          ]) {
+            final name = column.split(' ').first;
+            if (!tripExisting.contains(name)) {
+              await db.execute('ALTER TABLE trips ADD COLUMN $column');
+            }
+          }
+
+          final pointColumns = await db.rawQuery('PRAGMA table_info(trip_points)');
+          final pointExisting = pointColumns.map((c) => c['name']).toSet();
+          for (final column in [
+            'ble_accel_g REAL',
+            'ble_front_brake_kpa REAL',
+            'ble_tcs_level_hb INTEGER',
+            'ble_tcs_level_lb INTEGER',
+            'ble_battery_12v REAL',
+            'ble_odometer_km REAL',
+            'ble_trip_a_km REAL',
+            'ble_trip_b_km REAL',
+            'ble_fuel_gauge INTEGER',
+            'ble_inlet_air_temp_c INTEGER',
+            'ble_tire_pressure_fr_kpa REAL',
+            'ble_tire_pressure_rr_kpa REAL',
+          ]) {
+            final name = column.split(' ').first;
+            if (!pointExisting.contains(name)) {
+              await db.execute('ALTER TABLE trip_points ADD COLUMN $column');
+            }
+          }
+        }
+        if (oldVersion < 16) {
+          final tripColumns = await db.rawQuery('PRAGMA table_info(trips)');
+          final tripExisting = tripColumns.map((c) => c['name']).toSet();
+          for (final column in ['best_0_60_seconds REAL', 'best_100_180_seconds REAL']) {
+            final name = column.split(' ').first;
+            if (!tripExisting.contains(name)) {
+              await db.execute('ALTER TABLE trips ADD COLUMN $column');
+            }
+          }
+        }
+        if (oldVersion < 17) {
+          final columns = await db.rawQuery('PRAGMA table_info(trips)');
+          final hasZeroToOneEighty = columns.any((c) => c['name'] == 'best_0_180_seconds');
+          if (!hasZeroToOneEighty) {
+            await db.execute('ALTER TABLE trips ADD COLUMN best_0_180_seconds REAL');
+          }
+        }
+        if (oldVersion < 18) {
+          final columns = await db.rawQuery('PRAGMA table_info(trip_points)');
+          if (!columns.any((c) => c['name'] == 'phone_lean_deg')) {
+            await db.execute('ALTER TABLE trip_points ADD COLUMN phone_lean_deg REAL');
+          }
         }
       },
     );

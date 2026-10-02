@@ -67,6 +67,37 @@ create table if not exists public.trips (
   ble_max_brake_kpa double precision,
   ble_min_water_temp_c integer,
   ble_max_water_temp_c integer,
+  -- The rest of what RidingTelemetry can report, summarized the same
+  -- min/max way — see apps/mobile/lib/data/models/trip.dart's matching
+  -- field comments for what each means. Per-point values for all of
+  -- these live on trip_points below instead.
+  ble_max_throttle_percent double precision,
+  ble_max_accel_g double precision,
+  ble_max_tcs_level integer,
+  ble_min_battery_12v double precision,
+  ble_max_battery_12v double precision,
+  ble_min_fuel_gauge integer,
+  ble_max_fuel_gauge integer,
+  ble_min_inlet_air_temp_c integer,
+  ble_max_inlet_air_temp_c integer,
+  ble_min_tire_pressure_fr_kpa double precision,
+  ble_max_tire_pressure_fr_kpa double precision,
+  ble_min_tire_pressure_rr_kpa double precision,
+  ble_max_tire_pressure_rr_kpa double precision,
+  ble_trip_a_km double precision,
+  ble_trip_b_km double precision,
+  -- Roll-race checkpoint times (apps/mobile/lib/trip/accel_run_tracker.dart)
+  -- — one continuous run from a standing start: the best (lowest) time
+  -- this trip reached 0-60 km/h (an in-run checkpoint) and 0-180 km/h
+  -- (the finish condition), both timed from the same launch. GPS-derived,
+  -- so available for every vehicle, not just BLE-equipped bikes — same
+  -- posture as the behavior stats below.
+  best_0_60_seconds double precision,
+  -- Superseded by best_0_180_seconds — the roll-race redesign measures
+  -- 0-180 km/h from the same standing start as the 0-60 checkpoint, not
+  -- a separate 100-180 rolling time. No longer written by the app.
+  best_100_180_seconds double precision,
+  best_0_180_seconds double precision,
   -- GPS-derived driving-behavior stats (apps/mobile/lib/trip/driving_math.dart)
   -- — available for every trip, not just BLE-equipped vehicles.
   behavior_max_accel_g double precision,
@@ -97,6 +128,24 @@ alter table public.trips add column if not exists behavior_hard_brake_count inte
 alter table public.trips add column if not exists behavior_hard_cornering_count integer;
 alter table public.trips add column if not exists phone_lean_max_deg double precision;
 alter table public.trips add column if not exists ble_odometer_km double precision;
+alter table public.trips add column if not exists ble_max_throttle_percent double precision;
+alter table public.trips add column if not exists ble_max_accel_g double precision;
+alter table public.trips add column if not exists ble_max_tcs_level integer;
+alter table public.trips add column if not exists ble_min_battery_12v double precision;
+alter table public.trips add column if not exists ble_max_battery_12v double precision;
+alter table public.trips add column if not exists ble_min_fuel_gauge integer;
+alter table public.trips add column if not exists ble_max_fuel_gauge integer;
+alter table public.trips add column if not exists ble_min_inlet_air_temp_c integer;
+alter table public.trips add column if not exists ble_max_inlet_air_temp_c integer;
+alter table public.trips add column if not exists ble_min_tire_pressure_fr_kpa double precision;
+alter table public.trips add column if not exists ble_max_tire_pressure_fr_kpa double precision;
+alter table public.trips add column if not exists ble_min_tire_pressure_rr_kpa double precision;
+alter table public.trips add column if not exists ble_max_tire_pressure_rr_kpa double precision;
+alter table public.trips add column if not exists ble_trip_a_km double precision;
+alter table public.trips add column if not exists ble_trip_b_km double precision;
+alter table public.trips add column if not exists best_0_60_seconds double precision;
+alter table public.trips add column if not exists best_100_180_seconds double precision;
+alter table public.trips add column if not exists best_0_180_seconds double precision;
 
 alter table public.trips enable row level security;
 
@@ -131,6 +180,25 @@ create table if not exists public.trip_points (
   ble_throttle_percent double precision,
   ble_lean_deg double precision,
   ble_water_temp_c integer,
+  -- The rest of what RidingTelemetry can report, per fix — see
+  -- apps/mobile/lib/data/models/trip_point.dart's matching field
+  -- comments for what each means.
+  ble_accel_g double precision,
+  ble_front_brake_kpa double precision,
+  ble_tcs_level_hb integer,
+  ble_tcs_level_lb integer,
+  ble_battery_12v double precision,
+  ble_odometer_km double precision,
+  ble_trip_a_km double precision,
+  ble_trip_b_km double precision,
+  ble_fuel_gauge integer,
+  ble_inlet_air_temp_c integer,
+  ble_tire_pressure_fr_kpa double precision,
+  ble_tire_pressure_rr_kpa double precision,
+  -- Phone-accelerometer lean estimate at this fix (only while "Track lean
+  -- angle" is on) — see trip_point.dart's phoneLeanDeg. Powers the
+  -- lean-colored route and corner list in ride analysis.
+  phone_lean_deg double precision,
   primary key (trip_id, seq)
 );
 
@@ -142,6 +210,19 @@ alter table public.trip_points add column if not exists ble_gear integer;
 alter table public.trip_points add column if not exists ble_throttle_percent double precision;
 alter table public.trip_points add column if not exists ble_lean_deg double precision;
 alter table public.trip_points add column if not exists ble_water_temp_c integer;
+alter table public.trip_points add column if not exists ble_accel_g double precision;
+alter table public.trip_points add column if not exists ble_front_brake_kpa double precision;
+alter table public.trip_points add column if not exists ble_tcs_level_hb integer;
+alter table public.trip_points add column if not exists ble_tcs_level_lb integer;
+alter table public.trip_points add column if not exists ble_battery_12v double precision;
+alter table public.trip_points add column if not exists ble_odometer_km double precision;
+alter table public.trip_points add column if not exists ble_trip_a_km double precision;
+alter table public.trip_points add column if not exists ble_trip_b_km double precision;
+alter table public.trip_points add column if not exists ble_fuel_gauge integer;
+alter table public.trip_points add column if not exists ble_inlet_air_temp_c integer;
+alter table public.trip_points add column if not exists ble_tire_pressure_fr_kpa double precision;
+alter table public.trip_points add column if not exists ble_tire_pressure_rr_kpa double precision;
+alter table public.trip_points add column if not exists phone_lean_deg double precision;
 
 alter table public.trip_points enable row level security;
 
@@ -192,6 +273,33 @@ create policy "trip_music_events_delete_own" on public.trip_music_events
   for delete using (
     exists (select 1 from public.trips t where t.id = trip_music_events.trip_id and t.user_id = auth.uid())
   );
+
+
+-- Client-reported error log: lets a developer (or an AI coding
+-- assistant working from this project's own data) see real on-device
+-- failures with their actual context and stack trace, instead of only
+-- reconstructing what might have happened from source code after the
+-- fact. Insert-only from the client's own auth session — no select/
+-- update/delete policy is granted, so a signed-in user can report
+-- errors but never read back anyone's (including their own) logged
+-- errors through the app; reading is a project-access operation, done
+-- directly against Postgres, not something the app itself does.
+create table if not exists public.error_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  occurred_at timestamptz not null default now(),
+  context text not null,
+  message text not null,
+  stack_trace text,
+  platform text
+);
+
+create index if not exists idx_error_logs_occurred_at on public.error_logs(occurred_at desc);
+
+alter table public.error_logs enable row level security;
+
+create policy "error_logs_insert_own" on public.error_logs
+  for insert with check (auth.uid() = user_id);
 
 
 -- Display name + country for now — avatar/vehicle photo sync needs

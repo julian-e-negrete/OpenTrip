@@ -64,6 +64,11 @@ class KawasakiClient {
 
   RidingTelemetry get current => _current;
 
+  /// Passthrough to the transport's own link-state stream — see
+  /// [BleTransport.connectionState]. Fires `false` on any drop, not just
+  /// an explicit [disconnect] call.
+  Stream<bool> get connectionState => transport.connectionState;
+
   Future<void> connect() async {
     _log('BLE: connecting…');
     await transport.connect();

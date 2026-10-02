@@ -16,6 +16,14 @@ abstract class BleTransport {
 
   bool get isConnected;
 
+  /// Fires `false` whenever the GATT link drops — including when the
+  /// bike goes out of range, its own firmware sleeps, or Android itself
+  /// tears down the connection — not just on an explicit [disconnect]
+  /// call. Callers that want to tell "I asked to disconnect" apart from
+  /// "it dropped on its own" need to track that themselves; this stream
+  /// only reports the link's actual state.
+  Stream<bool> get connectionState;
+
   /// Discover services/characteristics. Must resolve, at minimum, the
   /// control characteristic and the notify characteristics under
   /// [kServiceUuid] (see protocol_ids.dart) before this returns —

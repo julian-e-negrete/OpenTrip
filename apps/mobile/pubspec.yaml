@@ -30,6 +30,14 @@ dependencies:
   shared_preferences: ^2.5.5
   # GPS trip recording.
   geolocator: ^13.0.1
+  # A real, sustained vibration pattern for camera/radar alerts — see
+  # trip/camera_alerts.dart. flutter/services.dart's HapticFeedback is a
+  # brief UI-click tick meant for a button tap, not something a rider
+  # would feel over a moving motorcycle's own vibration/wind noise.
+  vibration: ^3.2.1
+  # Plays the camera/radar alert tone (assets/sounds/camera_alert.wav) —
+  # see trip/camera_alerts.dart.
+  audioplayers: ^6.8.1
   # Trip route map. Pure-Dart tile renderer (no native map SDK, no
   # Mapbox/Google billing) — see trips/trip_detail_screen.dart.
   flutter_map: ^7.0.2
@@ -41,11 +49,22 @@ dependencies:
   # Phone-based lean angle tracking (trip/lean_angle_tracker.dart) — the
   # accelerometer, not activity/location sensors, so no runtime permission.
   sensors_plus: ^6.1.1
+  # Nocturne theme (see theme/app_theme.dart): Inter everywhere.
+  google_fonts: ^8.2.1
+  # Bundled only for its font assets (lib/fonts/Phosphor*.ttf) — its own
+  # Dart icon-data classes don't compile against this Flutter SDK anymore
+  # (they `extend IconData`, which is now a `final` class). See
+  # theme/ph_icons.dart, which references the same glyphs by codepoint.
+  phosphor_flutter: ^2.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  integration_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/sounds/

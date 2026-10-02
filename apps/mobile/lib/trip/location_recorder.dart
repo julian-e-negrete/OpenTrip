@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../data/models/trip_point.dart';
+import '../logging/error_reporter.dart';
 import '../logging/log_buffer.dart';
+import 'accel_run_tracker.dart';
 import 'camera_alerts.dart';
 import 'driving_math.dart';
 import 'geo_math.dart';
@@ -108,6 +111,11 @@ class LocationRecorder {
   String? _tripId;
   DateTime? _startedAt;
   int _seq = 0;
+
+  /// Independent of GPS fixes arriving at all — see [_tick]'s doc
+  /// comment for why this has to exist.
+  Timer? _tickTimer;
+  double? _lastSpeedKph;
   double _distanceMeters = 0;
   double? _maxSpeedKph;
   TripPoint? _lastAcceptedPoint;
@@ -126,12 +134,23 @@ class LocationRecorder {
   int _hardBrakeCount = 0;
   int _hardCorneringCount = 0;
 
+  // Roll-race timer (trip/accel_run_tracker.dart) — one continuous run
+  // from a standing start, 0-60 km/h as an in-run checkpoint and 0-180
+  // km/h as the finish condition, both from the same launch. GPS speed
+  // only, same as the behavior stats above, so every vehicle gets this
+  // for free, not just BLE-equipped bikes. Runs during every recording
+  // (not just a dedicated racing/ attempt), so a good pull nailed
+  // incidentally on an ordinary ride still counts.
+  final _rollRace = RollRaceTracker();
+
   double? get behaviorMaxAccelG => _maxAccelMps2 == null ? null : mps2ToG(_maxAccelMps2!);
   double? get behaviorMaxBrakeG => _maxBrakeMps2 == null ? null : mps2ToG(_maxBrakeMps2!);
   double? get behaviorMaxCorneringG => _maxCorneringMps2 == null ? null : mps2ToG(_maxCorneringMps2!);
   int get behaviorHardAccelCount => _hardAccelCount;
   int get behaviorHardBrakeCount => _hardBrakeCount;
   int get behaviorHardCorneringCount => _hardCorneringCount;
+  double? get best0To60Seconds => _rollRace.bestZeroToSixtySeconds;
+  double? get best0To180Seconds => _rollRace.bestZeroToOneEightySeconds;
 
   Stream<TripPoint> get pointStream => _pointsController.stream;
   Stream<RecordingStats> get statsStream => _statsController.stream;
@@ -140,6 +159,14 @@ class LocationRecorder {
   /// Built into the recorder itself rather than trip/recording_screen.dart
   /// wiring its own.
   Stream<CameraAlert> get cameraAlertStream => _cameraAlerts.alerts;
+
+  /// The cameras loaded for the current stretch, so the map can plot them
+  /// ahead of time — see trip/camera_alerts.dart.
+  ValueListenable<List<CameraPoint>> get camerasNotifier => _cameraAlerts.camerasNotifier;
+
+  /// Loads cameras near [position] for the idle (not-yet-recording) map —
+  /// see CameraAlertService.loadNear.
+  Future<void> loadCamerasNear(Position position) => _cameraAlerts.loadNear(position);
 
   bool get isRecording => _positionSub != null;
 
@@ -195,16 +222,43 @@ class LocationRecorder {
     _hardAccelCount = 0;
     _hardBrakeCount = 0;
     _hardCorneringCount = 0;
+    _rollRace.reset();
 
     logBuffer.add('GPS: starting position stream (${Platform.operatingSystem})');
     _positionSub = Geolocator.getPositionStream(locationSettings: _buildLocationSettings()).listen(
       _onPosition,
       onError: (Object error, StackTrace stack) {
         logBuffer.add('GPS: position stream ERROR: $error');
+        unawaited(ErrorReporter.report('GPS: position stream', error, stack));
       },
       onDone: () {
         logBuffer.add('GPS: position stream closed (accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount glitch-rejected=$_rejectedGlitchCount)');
       },
+    );
+    _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+  }
+
+  /// A [RecordingStats] update wasn't otherwise guaranteed at any
+  /// particular rate — [_onPosition] only fires when a new fix actually
+  /// arrives, which [_buildLocationSettings]'s `distanceFilter: 3` means
+  /// it doesn't while stopped (parked, waiting at a light, or just
+  /// hasn't pulled away yet). Elapsed time is wall-clock, not something
+  /// that should ever depend on movement, so the whole display —
+  /// including the clock — read as hung any time the rider wasn't
+  /// currently moving. This ticks once a second regardless, recomputing
+  /// elapsed live and re-emitting whatever distance/speed the last real
+  /// fix reported.
+  void _tick() {
+    final startedAt = _startedAt;
+    if (startedAt == null) return;
+    _statsController.add(
+      RecordingStats(
+        elapsed: DateTime.now().difference(startedAt),
+        distanceMeters: _distanceMeters,
+        currentSpeedKph: _lastSpeedKph,
+        maxSpeedKph: _maxSpeedKph,
+        pointCount: _seq,
+      ),
     );
   }
 
@@ -215,6 +269,12 @@ class LocationRecorder {
       return AndroidSettings(
         accuracy: LocationAccuracy.best,
         distanceFilter: 3,
+        // geolocator_android defaults this to 5000ms when left unset —
+        // independent of distanceFilter, so even riding fast enough to
+        // clear 3m in well under a second still only got a fix every 5s,
+        // making live speed/position feel laggy rather than tracking in
+        // real time. 1s matches a real speedometer's update rate.
+        intervalDuration: const Duration(seconds: 1),
         foregroundNotificationConfig: showForegroundNotification
             ? const ForegroundNotificationConfig(
                 notificationTitle: 'OpenTrip is recording',
@@ -327,6 +387,25 @@ class LocationRecorder {
     if (speedKph != null && (_maxSpeedKph == null || speedKph > _maxSpeedKph!)) {
       _maxSpeedKph = speedKph;
     }
+    _lastSpeedKph = speedKph;
+
+    if (speedKph != null) {
+      // Logged only on an actual completed checkpoint (rare), not per-fix
+      // — this fires during any recording, not just a dedicated racing/
+      // attempt, so logging every launch/re-arm transition here would
+      // flood a plain ride's log for no reason.
+      final prevZeroToSixty = _rollRace.bestZeroToSixtySeconds;
+      final prevZeroToOneEighty = _rollRace.bestZeroToOneEightySeconds;
+      _rollRace.onFix(speedKph, now);
+      final newZeroToSixty = _rollRace.bestZeroToSixtySeconds;
+      final newZeroToOneEighty = _rollRace.bestZeroToOneEightySeconds;
+      if (newZeroToSixty != null && newZeroToSixty != prevZeroToSixty) {
+        logBuffer.add('Racing: 0-60 km/h in ${newZeroToSixty.toStringAsFixed(2)}s');
+      }
+      if (newZeroToOneEighty != null && newZeroToOneEighty != prevZeroToOneEighty) {
+        logBuffer.add('Racing: 0-180 km/h in ${newZeroToOneEighty.toStringAsFixed(2)}s');
+      }
+    }
 
     if (_seq == 1 || _seq % 20 == 0) {
       logBuffer.add(
@@ -356,6 +435,8 @@ class LocationRecorder {
     );
     await _positionSub?.cancel();
     _positionSub = null;
+    _tickTimer?.cancel();
+    _tickTimer = null;
     final elapsed = _startedAt == null ? Duration.zero : DateTime.now().difference(_startedAt!);
     return RecordingStats(
       elapsed: elapsed,
@@ -368,6 +449,7 @@ class LocationRecorder {
 
   Future<void> dispose() async {
     await _positionSub?.cancel();
+    _tickTimer?.cancel();
     await _pointsController.close();
     await _statsController.close();
     await _cameraAlerts.dispose();

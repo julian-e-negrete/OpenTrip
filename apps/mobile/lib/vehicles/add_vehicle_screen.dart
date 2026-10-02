@@ -8,6 +8,9 @@ import '../data/catalog/vehicle_catalog.dart';
 import '../data/local_image_store.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/vehicle_repository.dart';
+import '../theme/app_theme.dart';
+import '../theme/ph_icons.dart';
+import '../theme/primitives.dart';
 
 /// Vehicle creation is deliberately brand -> model, not free text, for
 /// motorcycles and cars: a model in the catalog (data/catalog/vehicle_catalog.dart)
@@ -266,33 +269,28 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           if (_usesCatalog) ..._buildCatalogFields() else _buildFreeNameField(),
           if (_model?.connector != null && _model!.connector != VehicleBleConnector.none) ...[
             const SizedBox(height: 12),
-            Card(
-              color: Theme.of(context).colorScheme.primaryContainer,
-              child: const Padding(
-                padding: EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Icon(Icons.bluetooth),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'This model supports Kawasaki Rideology BLE — telemetry '
-                        'can connect automatically when recording a trip.',
-                      ),
+            const NoctPanel(
+              accent: true,
+              padding: EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  Icon(Ph.bluetooth, size: 18, color: Noct.a200),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'This model supports Kawasaki Rideology BLE — telemetry '
+                      'can connect automatically when recording a trip.',
+                      style: TextStyle(fontSize: 12, color: Noct.a200, height: 1.4),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ],
           const SizedBox(height: 24),
-          Text(
-            'Mileage & service',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
+          const Text(
+            'MILEAGE & SERVICE',
+            style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.accent, fontWeight: FontWeight.w400),
           ),
           const SizedBox(height: 8),
           TextField(
@@ -321,15 +319,9 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
             const SizedBox(height: 12),
           ],
-          FilledButton(
+          NoctOutlinedButton(
+            label: _saving ? 'Saving…' : (_editing ? 'Save changes' : 'Save vehicle'),
             onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(_editing ? 'Save changes' : 'Save vehicle'),
           ),
         ],
       ),

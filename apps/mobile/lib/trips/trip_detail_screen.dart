@@ -7,7 +7,14 @@ import '../data/models/trip_music_event.dart';
 import '../data/models/trip_point.dart';
 import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
+import '../theme/app_theme.dart';
+import '../theme/dark_tile_layer.dart';
+import '../theme/date_fmt.dart';
+import '../theme/layout_prefs.dart';
+import '../theme/ph_icons.dart';
+import '../theme/primitives.dart';
 import '../trip/route_replay.dart';
+import 'ride_analysis_section.dart';
 import 'stat_card_screen.dart';
 
 class TripDetailScreen extends StatefulWidget {
@@ -44,23 +51,17 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (mounted) setState(() => _musicEvents = events);
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
-  }
-
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete trip?'),
         content: Text('This ${widget.trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(dialogContext).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
@@ -72,426 +73,219 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
+  void _share() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => StatCardScreen(trip: widget.trip, vehicle: widget.vehicle, points: _points)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final trip = widget.trip;
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.vehicle?.name ?? 'Trip'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            tooltip: 'Share',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => StatCardScreen(trip: trip, vehicle: widget.vehicle)),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Delete trip',
-            onPressed: _confirmDelete,
-          ),
-        ],
-      ),
-      body: ListView(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(20),
-              child: SizedBox(height: 260, child: _RouteMap(points: _points)),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                _HeroStats(distanceKm: trip.distanceKm, durationLabel: _fmtDuration(trip.durationSeconds)),
-                const SizedBox(height: 20),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 1.9,
-                  children: [
-                    _StatCard(
-                      'Avg speed',
-                      trip.avgSpeedKph == null ? '—' : '${trip.avgSpeedKph!.toStringAsFixed(0)} km/h',
-                      scheme.primary,
-                    ),
-                    _StatCard(
-                      'Max speed',
-                      trip.maxSpeedKph == null ? '—' : '${trip.maxSpeedKph!.toStringAsFixed(0)} km/h',
-                      scheme.primary,
-                    ),
-                  ],
+    return ListenableBuilder(
+      listenable: LayoutPrefs.instance,
+      builder: (context, _) {
+        return Scaffold(
+          body: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              SizedBox(
+                height: 320,
+                child: _HeroMap(
+                  points: _points,
+                  onBack: () => Navigator.of(context).pop(),
+                  onShare: _share,
+                  onDelete: _confirmDelete,
                 ),
-                const SizedBox(height: 8),
-                _Row('Started', trip.startedAt.toLocal().toString().substring(0, 19)),
-                if (trip.endedAt != null) _Row('Ended', trip.endedAt!.toLocal().toString().substring(0, 19)),
-                _Row('GPS points recorded', '${trip.pointCount}'),
-                if (trip.hasBleTelemetry) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 4),
-                    child: Text(
-                      'From the bike',
-                      style: TextStyle(color: scheme.secondary, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-                    ),
-                  ),
-                  if (trip.bleMaxSpeedKph != null)
-                    _Row('Max speed (bike)', '${trip.bleMaxSpeedKph!.toStringAsFixed(0)} km/h'),
-                  if (trip.bleMaxRpm != null) _Row('Max RPM', '${trip.bleMaxRpm}'),
-                  if (trip.bleMaxLeanDeg != null)
-                    _Row('Max lean angle', '${trip.bleMaxLeanDeg!.toStringAsFixed(0)}°'),
-                  if (trip.bleMaxBrakePressureKpa != null)
-                    _Row('Max front brake pressure', '${trip.bleMaxBrakePressureKpa!.toStringAsFixed(0)} kPa'),
-                  if (trip.bleMinWaterTemperatureC != null && trip.bleMaxWaterTemperatureC != null)
-                    _Row(
-                      'Water temperature range',
-                      '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC} °C',
-                    ),
-                  if (trip.bleOdometerKm != null)
-                    _Row('Odometer at end of trip', '${trip.bleOdometerKm!.toStringAsFixed(0)} km'),
-                ],
-                if (trip.hasBehaviorStats) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 4),
-                    child: Text(
-                      'Driving behavior',
-                      style: TextStyle(color: scheme.tertiary, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-                    ),
-                  ),
-                  if (trip.behaviorMaxAccelG != null)
-                    _Row(
-                      'Hardest acceleration',
-                      '${trip.behaviorMaxAccelG!.toStringAsFixed(2)}g'
-                      '${trip.behaviorHardAccelCount == null ? '' : ' · ${trip.behaviorHardAccelCount} hard'}',
-                    ),
-                  if (trip.behaviorMaxBrakeG != null)
-                    _Row(
-                      'Hardest braking',
-                      '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g'
-                      '${trip.behaviorHardBrakeCount == null ? '' : ' · ${trip.behaviorHardBrakeCount} hard'}',
-                    ),
-                  if (trip.behaviorMaxCorneringG != null)
-                    _Row(
-                      'Hardest cornering',
-                      '${trip.behaviorMaxCorneringG!.toStringAsFixed(2)}g'
-                      '${trip.behaviorHardCorneringCount == null ? '' : ' · ${trip.behaviorHardCorneringCount} hard'}',
-                    ),
-                  if (trip.phoneLeanMaxDeg != null)
-                    _Row('Max lean angle (phone)', '${trip.phoneLeanMaxDeg!.toStringAsFixed(0)}°'),
-                ],
-                if (_musicEvents != null && _musicEvents!.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(top: 16, bottom: 4),
-                    child: Text(
-                      'Soundtrack',
-                      style: TextStyle(color: scheme.primary, fontWeight: FontWeight.w800, letterSpacing: 0.3),
-                    ),
-                  ),
-                  ..._musicEvents!.map(
-                    (event) => _MusicRow(event: event, tripStartedAt: trip.startedAt),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+                child: _Headline(trip: trip, vehicle: widget.vehicle),
+              ),
+              if (LayoutPrefs.instance.tripDetail == TripDetailVariant.grid)
+                _StatGrid(trip: trip)
+              else
+                _StatReport(trip: trip),
+              if (_points != null && _points!.length >= 2) RideAnalysisSection(points: _points!),
+              _FullBikeTelemetry(trip: trip),
+              if (_musicEvents != null && _musicEvents!.isNotEmpty)
+                _Soundtrack(events: _musicEvents!, tripStartedAt: trip.startedAt),
+              const SizedBox(height: 12),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-class _HeroStats extends StatelessWidget {
-  const _HeroStats({required this.distanceKm, required this.durationLabel});
-  final double distanceKm;
-  final String durationLabel;
+class _Headline extends StatelessWidget {
+  const _Headline({required this.trip, required this.vehicle});
+  final Trip trip;
+  final Vehicle? vehicle;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            Column(
-              children: [
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: distanceKm.toStringAsFixed(2),
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
-                          color: scheme.secondary,
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' km',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: scheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  'DISTANCE',
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-            Container(width: 1, height: 40, color: scheme.outlineVariant),
-            Column(
-              children: [
-                Text(
-                  durationLabel,
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: scheme.onSurface),
-                ),
-                Text(
-                  'DURATION',
-                  style: TextStyle(
-                    color: scheme.onSurfaceVariant,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard(this.label, this.value, this.valueColor);
-  final String label;
-  final String value;
-  final Color valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: valueColor)),
-            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Route polyline (or an animated replay, see [_playing]) over either
-/// OpenStreetMap street tiles or Esri's public World Imagery satellite
-/// tiles — the street server (tile.openstreetmap.org) is fine for this
-/// app's current scale but comes with OSM's tile usage policy (low
-/// volume, no heavy production traffic); the satellite one
-/// (server.arcgisonline.com) is Esri's community-shared service, used
-/// the same way here — no API key, fine at this scale, not meant for
-/// heavy/production traffic, attribution shown. Self-hosting either or
-/// switching to a paid provider is the documented upgrade path if that
-/// ever becomes a real concern. See docs/ROADMAP.md.
-///
-/// Replay pace defaults to [_baseDuration] regardless of how long the
-/// actual trip was — an hours-long drive played back in real time
-/// wouldn't be watched by anyone — but the speed chip (1×/2×/4×/8×) lets
-/// it go faster still. [positionAtProgress] paces the *marker* by the
-/// trip's real elapsed time within that window (see
-/// trip/route_replay.dart), so a stretch where you idled at a light
-/// plays slower than the open road, not identically fast, at any speed
-/// setting. While the marker is moving (or paused partway through), a
-/// small instrument HUD reads live speed and — if this trip has any BLE
-/// telemetry (trip/recording_screen.dart samples it onto each GPS point
-/// as it's recorded, see data/models/trip_point.dart) — RPM, gear, and
-/// lean off whichever point the marker has most recently reached, the
-/// same way route_replay.dart already picks the "traveled so far" prefix
-/// for the trailing polyline.
-class _RouteMap extends StatefulWidget {
-  const _RouteMap({required this.points});
-  final List<TripPoint>? points;
-
-  @override
-  State<_RouteMap> createState() => _RouteMapState();
-}
-
-class _RouteMapState extends State<_RouteMap> with SingleTickerProviderStateMixin {
-  static const _baseDuration = Duration(seconds: 18);
-  static const _speedOptions = [1, 2, 4, 8];
-
-  late final AnimationController _controller;
-  bool _satellite = false;
-  int _speedIndex = 0;
-
-  int get _speedMultiplier => _speedOptions[_speedIndex];
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(vsync: this, duration: _baseDuration);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _togglePlay() {
-    if (_controller.isAnimating) {
-      _controller.stop();
-    } else {
-      if (_controller.isCompleted) _controller.value = 0;
-      _controller.forward();
-    }
-    setState(() {});
-  }
-
-  void _cycleSpeed() {
-    setState(() => _speedIndex = (_speedIndex + 1) % _speedOptions.length);
-    // AnimationController.duration is only consulted when forward()/
-    // reverse() actually (re)starts the simulation — mutating it alone
-    // doesn't retroactively speed up a simulation already in flight, so
-    // an animating controller needs forward() called again to pick up
-    // the new pace for whatever fraction is left.
-    _controller.duration = Duration(milliseconds: _baseDuration.inMilliseconds ~/ _speedMultiplier);
-    if (_controller.isAnimating) _controller.forward();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final pts = widget.points;
-    if (pts == null) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    if (pts.isEmpty) {
-      return const ColoredBox(
-        color: Color(0xFF1A1A1A),
-        child: Center(child: Text('No route recorded for this trip.')),
-      );
-    }
-
-    final routePoints = pts.map((p) => LatLng(p.latitude, p.longitude)).toList();
-    final bounds = LatLngBounds.fromPoints(routePoints);
-
-    return Stack(
+    final kicker = [fmtWeekdayDayMonth(trip.startedAt), if (vehicle != null) vehicle!.name].join(' · ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            final traveled = pts.length < 2 ? pts.length : pointCountAtProgress(pts, _controller.value);
-            final (curLat, curLon) = positionAtProgress(pts, _controller.value);
-            final current = LatLng(curLat, curLon);
-            final traveledPoints = [...routePoints.take(traveled), current];
-            final hudPoint = pts[traveled - 1];
-
-            return Stack(
-              children: [
-                FlutterMap(
-                  options: MapOptions(
-                    initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: _satellite
-                          ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                          : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'co.opentrip.opentrip_mobile',
-                    ),
-                    PolylineLayer(
-                      polylines: [
-                        // Full route, dim — context for where the animated
-                        // portion is headed while replaying.
-                        Polyline(points: routePoints, strokeWidth: 3, color: Colors.white.withValues(alpha: 0.35)),
-                        Polyline(
-                          points: traveledPoints,
-                          strokeWidth: 4,
-                          color: Theme.of(context).colorScheme.secondary,
-                        ),
-                      ],
-                    ),
-                    // Start/end pin colors and the HUD/chips' black54
-                    // background are deliberately fixed, not
-                    // Theme.of(context) — they sit on top of unpredictable
-                    // street/satellite tile imagery, not app chrome, and
-                    // green-start/red-end is a universal map convention
-                    // worth keeping recognizable regardless of the app's
-                    // own accent palette.
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: routePoints.first,
-                          width: 16,
-                          height: 16,
-                          child: const DecoratedBox(
-                            decoration: BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
-                          ),
-                        ),
-                        Marker(
-                          point: routePoints.last,
-                          width: 16,
-                          height: 16,
-                          child: const DecoratedBox(
-                            decoration: BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                          ),
-                        ),
-                        if (_controller.isAnimating || _controller.value > 0)
-                          Marker(
-                            point: current,
-                            width: 22,
-                            height: 22,
-                            child: const Icon(Icons.navigation, color: Colors.white, shadows: [
-                              Shadow(color: Colors.black, blurRadius: 4),
-                            ]),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-                if (_controller.value > 0)
-                  Positioned(top: 8, left: 8, child: _TelemetryHud(point: hudPoint)),
-              ],
-            );
-          },
+        Text(
+          kicker.toUpperCase(),
+          style: const TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.n500, fontWeight: FontWeight.w400),
         ),
-        if (pts.length >= 2)
-          Positioned(
-            right: 8,
-            bottom: 8,
+        const SizedBox(height: 6),
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: trip.distanceKm.toStringAsFixed(1), style: Noct.stat(56)),
+              TextSpan(
+                text: ' km in ${_fmtDuration(trip.durationSeconds)}',
+                style: const TextStyle(fontSize: 14, color: Noct.n400, fontWeight: FontWeight.w400),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _fmtDuration(int seconds) {
+    final d = Duration(seconds: seconds);
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    return h > 0 ? '${h}h ${m}m' : '${m}m';
+  }
+}
+
+/// Variant A — the default: six stat panels in a 2-column grid. Design
+/// handoff §2.
+class _StatGrid extends StatelessWidget {
+  const _StatGrid({required this.trip});
+  final Trip trip;
+
+  @override
+  Widget build(BuildContext context) {
+    final leanDeg = trip.bleMaxLeanDeg ?? trip.phoneLeanMaxDeg;
+    final waterRange = trip.bleMinWaterTemperatureC != null && trip.bleMaxWaterTemperatureC != null
+        ? '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC}°'
+        : null;
+    final cells = [
+      ('Avg km/h', trip.avgSpeedKph?.toStringAsFixed(0), null),
+      ('Max km/h', trip.maxSpeedKph?.toStringAsFixed(0), null),
+      ('Max lean', leanDeg == null ? null : '${leanDeg.toStringAsFixed(0)}°', Noct.a300),
+      ('Max rpm', trip.bleMaxRpm?.toString(), null),
+      ('Hardest brake', trip.behaviorMaxBrakeG == null ? null : '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g', null),
+      ('Water temp', waterRange, null),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
+      child: GridView.count(
+        crossAxisCount: 2,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        mainAxisSpacing: 9,
+        crossAxisSpacing: 9,
+        childAspectRatio: 1.7,
+        children: [
+          for (final (label, value, color) in cells)
+            NoctPanel(child: NoctStat(value: value ?? '—', label: label, valueSize: 24, valueColor: color)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Variant B — grouped label/value rows, no panels. Design handoff §2.
+class _StatReport extends StatelessWidget {
+  const _StatReport({required this.trip});
+  final Trip trip;
+
+  @override
+  Widget build(BuildContext context) {
+    final ride = [
+      ('Average speed', trip.avgSpeedKph == null ? null : '${trip.avgSpeedKph!.toStringAsFixed(0)} km/h'),
+      ('Max speed', trip.maxSpeedKph == null ? null : '${trip.maxSpeedKph!.toStringAsFixed(0)} km/h'),
+      ('GPS points', '${trip.pointCount}'),
+    ];
+    final bike = [
+      ('Max rpm', trip.bleMaxRpm?.toString()),
+      ('Max lean angle', trip.bleMaxLeanDeg == null ? null : '${trip.bleMaxLeanDeg!.toStringAsFixed(0)}°'),
+      (
+        'Water temperature',
+        trip.bleMinWaterTemperatureC == null || trip.bleMaxWaterTemperatureC == null
+            ? null
+            : '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC} °C',
+      ),
+      ('Odometer at end', trip.bleOdometerKm == null ? null : '${trip.bleOdometerKm!.toStringAsFixed(0)} km'),
+    ];
+    final behavior = [
+      (
+        'Hardest braking',
+        trip.behaviorMaxBrakeG == null ? null : '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g',
+      ),
+      (
+        'Hardest cornering',
+        trip.behaviorMaxCorneringG == null ? null : '${trip.behaviorMaxCorneringG!.toStringAsFixed(2)}g',
+      ),
+    ];
+    final racing = [
+      ('0-60 km/h', trip.best0To60Seconds == null ? null : '${trip.best0To60Seconds!.toStringAsFixed(2)}s'),
+      (
+        '0-180 km/h',
+        trip.best0To180Seconds == null ? null : '${trip.best0To180Seconds!.toStringAsFixed(2)}s',
+      ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Group('From the ride', ride),
+          _Group('From the bike', bike),
+          _Group('Behaviour', behavior),
+          _Group('Racing', racing),
+        ],
+      ),
+    );
+  }
+}
+
+class _Group extends StatelessWidget {
+  const _Group(this.title, this.rows);
+  final String title;
+  final List<(String, String?)> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final populated = rows.where((r) => r.$2 != null).toList();
+    if (populated.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 18, bottom: 4),
+          child: Text(
+            title.toUpperCase(),
+            style: const TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.accent, fontWeight: FontWeight.w400),
+          ),
+        ),
+        for (final (label, value) in populated)
+          Container(
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Noct.n900, width: 1))),
+            padding: const EdgeInsets.symmetric(vertical: 9),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _MapChip(
-                  icon: _satellite ? Icons.map_outlined : Icons.satellite_alt_outlined,
-                  tooltip: _satellite ? 'Street map' : 'Satellite',
-                  onPressed: () => setState(() => _satellite = !_satellite),
-                ),
-                const SizedBox(width: 8),
-                _SpeedChip(multiplier: _speedMultiplier, onPressed: _cycleSpeed),
-                const SizedBox(width: 8),
-                _MapChip(
-                  icon: _controller.isAnimating ? Icons.pause : Icons.play_arrow,
-                  tooltip: _controller.isAnimating ? 'Pause replay' : 'Play replay',
-                  onPressed: _togglePlay,
+                Text(label, style: const TextStyle(fontSize: 13, color: Noct.n400, fontWeight: FontWeight.w400)),
+                Text(
+                  value!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                    color: Noct.text,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ],
             ),
@@ -501,134 +295,51 @@ class _RouteMapState extends State<_RouteMap> with SingleTickerProviderStateMixi
   }
 }
 
-/// A compact instrument readout for whichever point the replay marker has
-/// most recently reached — always shows GPS speed (falling back to the
-/// bike's own speed reading when this trip has BLE telemetry, since a
-/// bike's speedometer is more accurate at low speed than a GPS estimate),
-/// plus RPM/gear/lean whenever that point happens to carry them. Renders
-/// nothing for a point with no usable reading at all, rather than an
-/// empty floating chip.
-class _TelemetryHud extends StatelessWidget {
-  const _TelemetryHud({required this.point});
-  final TripPoint point;
+/// Every bike-reported stat the headline sections above don't already
+/// show (see _StatGrid/_StatReport's own "bike" rows) — max rpm/lean/
+/// water temp/odometer are the highlights; this is everything else
+/// RidingTelemetry can carry, summarized the same min/max way. Shown
+/// regardless of which layout variant is picked, and hidden entirely for
+/// a GPS-only trip (no BLE connector) rather than showing an empty
+/// "Full bike telemetry" heading over nothing.
+class _FullBikeTelemetry extends StatelessWidget {
+  const _FullBikeTelemetry({required this.trip});
+  final Trip trip;
+
+  static String? _range(num? min, num? max, String unit, {int decimals = 0}) {
+    if (min == null && max == null) return null;
+    String fmt(num v) => v.toStringAsFixed(decimals);
+    if (min == null) return '${fmt(max!)}$unit';
+    if (max == null) return '${fmt(min)}$unit';
+    if (min == max) return '${fmt(min)}$unit';
+    return '${fmt(min)}–${fmt(max)}$unit';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final speed = point.bleSpeedKph ?? point.speedKph;
-    final readouts = <(String, String)>[
-      if (speed != null) ('SPEED', '${speed.toStringAsFixed(0)} km/h'),
-      if (point.bleRpm != null) ('RPM', '${point.bleRpm}'),
-      if (point.bleGear != null) ('GEAR', '${point.bleGear}'),
-      if (point.bleLeanDeg != null) ('LEAN', '${point.bleLeanDeg!.toStringAsFixed(0)}°'),
+    if (!trip.hasBleTelemetry) return const SizedBox.shrink();
+    final rows = [
+      ('Max throttle', trip.bleMaxThrottlePercent == null ? null : '${trip.bleMaxThrottlePercent!.toStringAsFixed(0)}%'),
+      ('Max G-force', trip.bleMaxAccelG == null ? null : '${trip.bleMaxAccelG!.toStringAsFixed(2)}g'),
+      ('Max TCS level', trip.bleMaxTcsLevel?.toString()),
+      ('12V battery', _range(trip.bleMinBattery12V, trip.bleMaxBattery12V, ' V', decimals: 1)),
+      ('Fuel gauge', _range(trip.bleMinFuelGauge, trip.bleMaxFuelGauge, ' /15')),
+      ('Inlet air temp', _range(trip.bleMinInletAirTemperatureC, trip.bleMaxInletAirTemperatureC, ' °C')),
+      ('Front tire pressure', _range(trip.bleMinTirePressureFrKpa, trip.bleMaxTirePressureFrKpa, ' kPa')),
+      ('Rear tire pressure', _range(trip.bleMinTirePressureRrKpa, trip.bleMaxTirePressureRrKpa, ' kPa')),
+      ('Trip A', trip.bleTripAKm == null ? null : '${trip.bleTripAKm!.toStringAsFixed(1)} km'),
+      ('Trip B', trip.bleTripBKm == null ? null : '${trip.bleTripBKm!.toStringAsFixed(1)} km'),
     ];
-    if (readouts.isEmpty) return const SizedBox.shrink();
-
-    return Material(
-      color: Colors.black54,
-      borderRadius: BorderRadius.circular(14),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (var i = 0; i < readouts.length; i++) ...[
-              if (i > 0) const SizedBox(width: 16),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    readouts[i].$2,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15),
-                  ),
-                  Text(
-                    readouts[i].$1,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MapChip extends StatelessWidget {
-  const _MapChip({required this.icon, required this.tooltip, required this.onPressed});
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black54,
-      shape: const CircleBorder(),
-      child: IconButton(icon: Icon(icon, color: Colors.white), tooltip: tooltip, onPressed: onPressed),
-    );
-  }
-}
-
-class _SpeedChip extends StatelessWidget {
-  const _SpeedChip({required this.multiplier, required this.onPressed});
-  final int multiplier;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.black54,
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onPressed,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: Center(
-            child: Text(
-              '$multiplier×',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Row extends StatelessWidget {
-  const _Row(this.label, this.value);
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-        ],
-      ),
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
+      child: _Group('Full bike telemetry', rows),
     );
   }
 }
 
-/// One track in the "Soundtrack" list — the track/artist plus how far
-/// into the trip it started playing, so scrolling the list doubles as a
-/// rough timeline of the ride.
-class _MusicRow extends StatelessWidget {
-  const _MusicRow({required this.event, required this.tripStartedAt});
-  final TripMusicEvent event;
+class _Soundtrack extends StatelessWidget {
+  const _Soundtrack({required this.events, required this.tripStartedAt});
+  final List<TripMusicEvent> events;
   final DateTime tripStartedAt;
 
   String _fmtOffset(Duration d) {
@@ -640,40 +351,532 @@ class _MusicRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.music_note, size: 16, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  event.track,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (event.artist != null)
-                  Text(
-                    event.artist!,
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          const Text(
+            'SOUNDTRACK',
+            style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.n500, fontWeight: FontWeight.w400),
+          ),
+          const SizedBox(height: 11),
+          for (final event in events)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 11),
+              child: Row(
+                children: [
+                  const Icon(Ph.musicNoteFill, size: 14, color: Noct.a400),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          event.track,
+                          style: const TextStyle(fontSize: 13, color: Noct.text, fontWeight: FontWeight.w400),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (event.artist != null)
+                          Text(
+                            event.artist!,
+                            style: const TextStyle(fontSize: 11, color: Noct.n500, fontWeight: FontWeight.w400),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
                   ),
-              ],
+                  const SizedBox(width: 8),
+                  Text(
+                    _fmtOffset(event.startedAt.difference(tripStartedAt)),
+                    style: const TextStyle(fontSize: 11, color: Noct.n600, fontWeight: FontWeight.w400),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            _fmtOffset(event.startedAt.difference(tripStartedAt)),
-            style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
-          ),
         ],
       ),
+    );
+  }
+}
+
+/// Full-bleed replay map: real tiles (street or satellite, toggled via
+/// the layer chip), a doubled route stroke, a scrim so the floating
+/// controls read over any tile imagery, and a scrubber that paces the
+/// marker by the trip's real elapsed time (see route_replay.dart), not
+/// point index — a stretch idled at a light plays slower than the open
+/// road at any speed setting.
+class _HeroMap extends StatefulWidget {
+  const _HeroMap({required this.points, required this.onBack, required this.onShare, required this.onDelete});
+
+  final List<TripPoint>? points;
+  final VoidCallback onBack;
+  final VoidCallback onShare;
+  final VoidCallback onDelete;
+
+  @override
+  State<_HeroMap> createState() => _HeroMapState();
+}
+
+class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  bool _satellite = false;
+  bool _doubleSpeed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // A real duration (see _realDuration) that depends on widget.points
+    // isn't known yet at this point — points load in asynchronously
+    // after this screen mounts — so this placeholder just avoids leaving
+    // AnimationController's duration null; _togglePlay/_toggleSpeed
+    // always set the real one before any playback actually starts.
+    _controller = AnimationController(vsync: this, duration: const Duration(seconds: 1));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Real time the trip itself took, first point to last — a 45-minute
+  /// ride plays back over a real 45 minutes, uncapped, by design (user
+  /// call, reaffirmed after a capped version was tried and rejected:
+  /// "I want to be able to watch a 45-minute ride in 45 minutes"). Floored
+  /// at 1s so a near-instant trip (or one with a single point) doesn't
+  /// hand AnimationController a zero/negative duration.
+  Duration _realDuration(List<TripPoint> pts) {
+    if (pts.length < 2) return const Duration(seconds: 1);
+    final ms = pts.last.timestamp.difference(pts.first.timestamp).inMilliseconds;
+    return Duration(milliseconds: ms < 1000 ? 1000 : ms);
+  }
+
+  void _togglePlay() {
+    if (_controller.isAnimating) {
+      _controller.stop();
+    } else {
+      final pts = widget.points;
+      if (pts != null) {
+        _controller.duration = Duration(
+          milliseconds: _realDuration(pts).inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
+        );
+      }
+      if (_controller.isCompleted) _controller.value = 0;
+      _controller.forward();
+    }
+    setState(() {});
+  }
+
+  void _toggleSpeed() {
+    setState(() => _doubleSpeed = !_doubleSpeed);
+    final pts = widget.points;
+    if (pts == null) return;
+    _controller.duration = Duration(
+      milliseconds: _realDuration(pts).inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
+    );
+    if (_controller.isAnimating) _controller.forward();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pts = widget.points;
+    if (pts == null) {
+      return const ColoredBox(color: Noct.canvas, child: Center(child: CircularProgressIndicator()));
+    }
+    if (pts.isEmpty) {
+      return const ColoredBox(
+        color: Noct.canvas,
+        child: Center(child: Text('No route recorded for this trip.', style: TextStyle(color: Noct.n500))),
+      );
+    }
+
+    final routePoints = pts.map((p) => LatLng(p.latitude, p.longitude)).toList();
+    final bounds = LatLngBounds.fromPoints(routePoints);
+    // A trip with no real movement (every point at ~the same spot — a
+    // very short recording, or a stationary test) gives CameraFit.bounds
+    // a zero-area box, which makes flutter_map's own zoom-to-fit math
+    // divide by zero internally and throw ("Unsupported operation:
+    // Infinity or NaN toInt") rather than just picking some zoom level.
+    // Center-and-zoom sidesteps that fit calculation entirely.
+    final isDegenerate =
+        (bounds.north - bounds.south).abs() < 1e-6 && (bounds.east - bounds.west).abs() < 1e-6;
+    final mapOptions = isDegenerate
+        ? MapOptions(initialCenter: routePoints.first, initialZoom: 16)
+        : MapOptions(initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)));
+
+    return ColoredBox(
+      color: Noct.canvas,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final traveled = pts.length < 2 ? pts.length : pointCountAtProgress(pts, _controller.value);
+          final (curLat, curLon) = positionAtProgress(pts, _controller.value);
+          final current = LatLng(curLat, curLon);
+          final traveledPoints = [...routePoints.take(traveled), current];
+          final hudPoint = pts[(traveled - 1).clamp(0, pts.length - 1)];
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              FlutterMap(
+                options: mapOptions,
+                children: [
+                  // Satellite imagery is exempt from Nocturne's palette —
+                  // a photograph can't be made to match an app color
+                  // scheme — but the street mode uses the same darkened
+                  // OSM tiles as territory_map_screen.dart (see
+                  // theme/dark_tile_layer.dart for why it's not a real
+                  // dark-styled basemap: that needs a paid/key-gated
+                  // provider now).
+                  if (_satellite)
+                    TileLayer(
+                      urlTemplate:
+                          'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                      userAgentPackageName: 'co.opentrip.opentrip_mobile',
+                    )
+                  else
+                    const DarkTileLayer(),
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(points: routePoints, strokeWidth: 12, color: Noct.accent.withValues(alpha: 0.18)),
+                      Polyline(
+                        points: traveledPoints,
+                        strokeWidth: 3,
+                        color: Noct.accent,
+                        strokeCap: StrokeCap.round,
+                      ),
+                    ],
+                  ),
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: routePoints.first,
+                        width: 5.5,
+                        height: 5.5,
+                        child: const DecoratedBox(decoration: BoxDecoration(color: Noct.n200, shape: BoxShape.circle)),
+                      ),
+                      Marker(
+                        point: routePoints.last,
+                        width: 5.5,
+                        height: 5.5,
+                        child: const DecoratedBox(decoration: BoxDecoration(color: Noct.a200, shape: BoxShape.circle)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              // Scrim: lets the floating chips and capsule read over any
+              // tile imagery underneath.
+              IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Noct.bg.withValues(alpha: 0.90),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Noct.bg,
+                      ],
+                      stops: const [0.0, 0.30, 0.55, 0.99],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                // The hero map is deliberately full-bleed under the status
+                // bar/notch, but these chips have to be real tap targets —
+                // without the safe-area inset they render (and hit-test)
+                // right under the system status bar, unreachable.
+                top: 12 + MediaQuery.paddingOf(context).top,
+                left: 10,
+                right: 10,
+                child: Row(
+                  children: [
+                    _MapChip(icon: Ph.arrowLeft, onTap: widget.onBack),
+                    const Spacer(),
+                    _MapChip(icon: Ph.export_, onTap: widget.onShare),
+                    const SizedBox(width: 8),
+                    _MapChip(icon: Ph.trash, onTap: widget.onDelete),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 14,
+                bottom: 64,
+                child: _TelemetryCapsule(point: hudPoint),
+              ),
+              Positioned(
+                left: 14,
+                right: 14,
+                bottom: 18,
+                child: _Scrubber(
+                  controller: _controller,
+                  realDuration: _realDuration(pts),
+                  doubleSpeed: _doubleSpeed,
+                  satellite: _satellite,
+                  onTogglePlay: _togglePlay,
+                  onToggleSpeed: _toggleSpeed,
+                  onToggleLayer: () => setState(() => _satellite = !_satellite),
+                  onScrub: (v) {
+                    _controller.stop();
+                    setState(() => _controller.value = v);
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MapChip extends StatelessWidget {
+  const _MapChip({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: Material(
+        color: Noct.bg.withValues(alpha: 0.60),
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: Icon(icon, size: 19, color: Noct.text),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TelemetryCapsule extends StatefulWidget {
+  const _TelemetryCapsule({required this.point});
+  final TripPoint point;
+
+  @override
+  State<_TelemetryCapsule> createState() => _TelemetryCapsuleState();
+}
+
+class _TelemetryCapsuleState extends State<_TelemetryCapsule> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final point = widget.point;
+    final speed = point.bleSpeedKph ?? point.speedKph;
+    final columns = [
+      ('km/h', speed?.toStringAsFixed(0), null),
+      ('rpm', point.bleRpm?.toString(), null),
+      ('gear', point.bleGear?.toString(), null),
+      ('lean', point.bleLeanDeg == null ? null : '${point.bleLeanDeg!.toStringAsFixed(0)}°', Noct.a300),
+    ];
+    // Every other field this point carries — tapping the capsule reveals
+    // these too, so what changed during the ride (throttle, TCS
+    // intervention, tire pressure...) is visible while scrubbing through
+    // the replay, not just the four headline numbers above.
+    final more = <(String, String)>[
+      if (point.bleThrottlePercent != null) ('throttle', '${point.bleThrottlePercent!.toStringAsFixed(0)}%'),
+      if (point.bleAccelG != null) ('g-force', '${point.bleAccelG!.toStringAsFixed(2)}g'),
+      if (point.bleFrontBrakePressureKpa != null) ('fr brake', '${point.bleFrontBrakePressureKpa!.toStringAsFixed(0)} kPa'),
+      if (point.bleTcsLevelHb != null || point.bleTcsLevelLb != null)
+        ('tcs', '${point.bleTcsLevelHb ?? 0}/${point.bleTcsLevelLb ?? 0}'),
+      if (point.bleWaterTemperatureC != null) ('water', '${point.bleWaterTemperatureC}°'),
+      if (point.bleInletAirTemperatureC != null) ('inlet air', '${point.bleInletAirTemperatureC}°'),
+      if (point.bleTirePressureFrKpa != null) ('fr tire', '${point.bleTirePressureFrKpa!.toStringAsFixed(0)} kPa'),
+      if (point.bleTirePressureRrKpa != null) ('rr tire', '${point.bleTirePressureRrKpa!.toStringAsFixed(0)} kPa'),
+      if (point.bleBattery12V != null) ('battery', '${point.bleBattery12V!.toStringAsFixed(1)}V'),
+      if (point.bleFuelGauge != null) ('fuel', '${point.bleFuelGauge}/15'),
+      if (point.bleOdometerKm != null) ('odometer', '${point.bleOdometerKm!.toStringAsFixed(0)} km'),
+      if (point.bleTripAKm != null) ('trip a', '${point.bleTripAKm!.toStringAsFixed(1)} km'),
+      if (point.bleTripBKm != null) ('trip b', '${point.bleTripBKm!.toStringAsFixed(1)} km'),
+    ];
+    return GestureDetector(
+      onTap: more.isEmpty ? null : () => setState(() => _expanded = !_expanded),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 260),
+        decoration: BoxDecoration(
+          color: Noct.canvas.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(Noct.rMd),
+          border: Border.all(color: Noct.n800, width: 1),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 9),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < columns.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 16),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        columns[i].$2 ?? '—',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: columns[i].$3 ?? Noct.text,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        columns[i].$1.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          letterSpacing: 0.9,
+                          color: Noct.n500,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (more.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  Icon(_expanded ? Ph.caretUp : Ph.caretDown, size: 12, color: Noct.n500),
+                ],
+              ],
+            ),
+            if (_expanded && more.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: Noct.n800),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                children: [
+                  for (final (label, value) in more)
+                    RichText(
+                      text: TextSpan(
+                        style: const TextStyle(fontSize: 11, fontFeatures: [FontFeature.tabularFigures()]),
+                        children: [
+                          TextSpan(text: '${label.toUpperCase()} ', style: const TextStyle(color: Noct.n500)),
+                          TextSpan(text: value, style: const TextStyle(color: Noct.text, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Scrubber extends StatelessWidget {
+  const _Scrubber({
+    required this.controller,
+    required this.realDuration,
+    required this.doubleSpeed,
+    required this.satellite,
+    required this.onTogglePlay,
+    required this.onToggleSpeed,
+    required this.onToggleLayer,
+    required this.onScrub,
+  });
+
+  final AnimationController controller;
+  // The trip's actual real duration, independent of the 1x/2x playback
+  // multiplier — for a long trip played at real time, a few seconds of
+  // watching moves the slider by only a couple of pixels, easy to mistake
+  // for the replay being stuck rather than just genuinely slow. This
+  // clock is what actually proves it's progressing.
+  final Duration realDuration;
+  final bool doubleSpeed;
+  final bool satellite;
+  final VoidCallback onTogglePlay;
+  final VoidCallback onToggleSpeed;
+  final VoidCallback onToggleLayer;
+  final ValueChanged<double> onScrub;
+
+  static String _fmt(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final elapsed = realDuration * controller.value.clamp(0.0, 1.0);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4, right: 4),
+          child: Text(
+            '${_fmt(elapsed)} / ${_fmt(realDuration)}',
+            style: const TextStyle(
+              fontSize: 10.5,
+              color: Noct.n400,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+        Row(
+          children: [
+            GestureDetector(
+              onTap: onTogglePlay,
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Noct.accent.withValues(alpha: 0.10),
+                  border: Border.all(color: Noct.accent, width: 1.5),
+                ),
+                child: Icon(controller.isAnimating ? Ph.pauseFill : Ph.playFill, size: 14, color: Noct.a200),
+              ),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  activeTrackColor: Noct.accent,
+                  inactiveTrackColor: Noct.n800,
+                  thumbColor: Noct.a200,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.5),
+                  overlayShape: SliderComponentShape.noOverlay,
+                ),
+                child: Slider(value: controller.value.clamp(0.0, 1.0), onChanged: onScrub),
+              ),
+            ),
+            GestureDetector(
+              onTap: onToggleSpeed,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  doubleSpeed ? '2×' : '1×',
+                  style: const TextStyle(fontSize: 11, color: Noct.n400, fontWeight: FontWeight.w400),
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: onToggleLayer,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(Ph.globeHemisphereWest, size: 16, color: satellite ? Noct.accent : Noct.n400),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

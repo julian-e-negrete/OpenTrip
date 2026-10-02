@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../auth/current_user.dart';
 import '../data/models/trip.dart';
 import '../data/repositories/gamification_repository.dart';
 import '../data/repositories/trip_repository.dart';
+import '../theme/app_theme.dart';
+import '../theme/date_fmt.dart';
+import '../theme/ph_icons.dart';
+import '../theme/primitives.dart';
 import 'trophies.dart';
 
 /// A month-windowed slice of the same all-time stats the Account tab and
 /// leaderboard already show — no new data, just
 /// TripRepository.listForUserInRange/GamificationRepository's range
-/// queries instead of the all-time ones. Works for guests too (it's all
-/// local, keyed by CurrentUser.instance.id() regardless of sign-in
-/// state) — unlike the leaderboard/friends screens, nothing here needs
-/// another user's data.
+/// queries instead of the all-time ones. Works for guests too.
 class MonthlyRecapScreen extends StatefulWidget {
   const MonthlyRecapScreen({super.key});
 
@@ -82,20 +84,12 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
     return '${hours}h ${minutes}m';
   }
 
-  static const _monthNames = [
-    'January',
-    'February',
-    'March',
-    'April',
-    'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
-  ];
+  Future<void> _share() async {
+    final totalKm = (_trips.fold<double>(0, (sum, t) => sum + t.distanceMeters) / 1000).toStringAsFixed(0);
+    await SharePlus.instance.share(
+      ShareParams(text: 'I rode $totalKm km in ${fmtMonthName(_month)} on OpenTrip 🏍️'),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -104,7 +98,12 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
     final longest = _trips.fold<double>(0, (max, t) => t.distanceMeters > max ? t.distanceMeters : max);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Monthly recap')),
+      appBar: AppBar(
+        title: const SizedBox.shrink(),
+        actions: [
+          IconButton(icon: const Icon(Ph.export_, size: 18, color: Noct.n400), tooltip: 'Share', onPressed: _share),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -112,13 +111,16 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _shiftMonth(-1)),
+                IconButton(
+                  icon: const Icon(Ph.caretLeft, size: 16, color: Noct.n500),
+                  onPressed: () => _shiftMonth(-1),
+                ),
                 Text(
-                  '${_monthNames[_month.month - 1]} ${_month.year}',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  '${fmtMonthName(_month)} ${_month.year}',
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w500, letterSpacing: -0.65, color: Noct.text),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.chevron_right),
+                  icon: Icon(Ph.caretRight, size: 16, color: _isCurrentMonth ? Noct.n800 : Noct.n500),
                   onPressed: _isCurrentMonth ? null : () => _shiftMonth(1),
                 ),
               ],
@@ -131,49 +133,102 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
                 ? const Center(
                     child: Padding(
                       padding: EdgeInsets.all(24),
-                      child: Text('No trips recorded this month.', textAlign: TextAlign.center),
+                      child: Text(
+                        'No trips recorded this month.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Noct.n500, fontSize: 13),
+                      ),
                     ),
                   )
                 : ListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 26),
                     children: [
-                      GridView.count(
-                        crossAxisCount: 2,
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 1.6,
-                        children: [
-                          _RecapStat('Distance', '${(totalDistance / 1000).toStringAsFixed(0)} km'),
-                          _RecapStat('Trips', '${_trips.length}'),
-                          _RecapStat('Time driving', _fmtDuration(totalDuration)),
-                          _RecapStat('Longest trip', '${(longest / 1000).toStringAsFixed(0)} km'),
-                          _RecapStat('New territory', '$_newTerritoryCells areas'),
-                          _RecapStat('Trophies earned', '${_trophiesEarned.length}'),
-                        ],
+                      const Text(
+                        'YOU RODE',
+                        style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.n500, fontWeight: FontWeight.w400),
                       ),
+                      const SizedBox(height: 4),
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(text: (totalDistance / 1000).toStringAsFixed(0), style: Noct.stat(68)),
+                            TextSpan(
+                              text: ' km over ${_trips.length} ride${_trips.length == 1 ? '' : 's'}',
+                              style: const TextStyle(fontSize: 15, color: Noct.n400, fontWeight: FontWeight.w400),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const FadingRule(),
+                      Container(
+                        decoration: const BoxDecoration(border: Border(top: BorderSide(color: Noct.n800))),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    decoration: const BoxDecoration(border: Border(right: BorderSide(color: Noct.n800))),
+                                    child: _RecapCell('Time driving', _fmtDuration(totalDuration)),
+                                  ),
+                                ),
+                                Expanded(child: _RecapCell('Longest trip', '${(longest / 1000).toStringAsFixed(0)} km')),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      border: Border(right: BorderSide(color: Noct.n800), top: BorderSide(color: Noct.n800)),
+                                    ),
+                                    child: _RecapCell('New areas', '$_newTerritoryCells', color: Noct.a300),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Container(
+                                    decoration: const BoxDecoration(border: Border(top: BorderSide(color: Noct.n800))),
+                                    child: _RecapCell('Trophies', '${_trophiesEarned.length}'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const FadingRule(),
                       if (_trophiesEarned.isNotEmpty) ...[
-                        Padding(
-                          padding: const EdgeInsets.only(top: 24, bottom: 8),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 24, bottom: 8),
                           child: Text(
-                            'Trophies this month',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w800,
+                            'EARNED THIS MONTH',
+                            style: TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.accent, fontWeight: FontWeight.w400),
+                          ),
+                        ),
+                        for (final t in _trophiesEarned)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 9),
+                            child: NoctPanel(
+                              padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                              child: Row(
+                                children: [
+                                  Icon(t.icon, size: 20, color: Noct.a300),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(t.name, style: const TextStyle(fontSize: 13.5, color: Noct.text, fontWeight: FontWeight.w400)),
+                                        Text(t.description, style: const TextStyle(fontSize: 11, color: Noct.n500)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        // Trophies stay gold regardless of theme — the same
-                        // reason a real medal doesn't change color to match
-                        // the room it's displayed in.
-                        ..._trophiesEarned.map(
-                          (t) => ListTile(
-                            leading: Icon(t.icon, color: Colors.amber),
-                            title: Text(t.name),
-                            subtitle: Text(t.description),
-                          ),
-                        ),
                       ],
                     ],
                   ),
@@ -184,24 +239,24 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
   }
 }
 
-class _RecapStat extends StatelessWidget {
-  const _RecapStat(this.label, this.value);
+class _RecapCell extends StatelessWidget {
+  const _RecapCell(this.label, this.value, {this.color});
   final String label;
   final String value;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-            Text(label, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12)),
-          ],
-        ),
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value, style: Noct.stat(26, color: color)),
+          const SizedBox(height: 4),
+          Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, letterSpacing: 1.2, color: Noct.n500)),
+        ],
       ),
     );
   }
