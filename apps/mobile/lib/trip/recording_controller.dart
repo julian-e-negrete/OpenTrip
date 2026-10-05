@@ -10,6 +10,13 @@ class RecordingController {
 
   final isRecording = ValueNotifier<bool>(false);
 
+  /// Whether the Record overlay is actually on screen. HomeShell keeps
+  /// RecordingScreen mounted (Offstage) for the app's whole lifetime so
+  /// a trip keeps recording across tab switches — this is how parts of
+  /// it that should only act when *seen* (like asking for location
+  /// permission to center the idle map) can tell the difference.
+  final isRecordScreenVisible = ValueNotifier<bool>(false);
+
   /// Set by HomeShell's state so screens with no direct access to the
   /// shell (e.g. Trips' empty state) can still open the Record overlay,
   /// same as tapping the raised control.

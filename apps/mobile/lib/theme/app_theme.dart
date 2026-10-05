@@ -99,7 +99,7 @@ abstract final class Noct {
 abstract final class AppTheme {
   static ThemeData get dark {
     final base = ThemeData.dark(useMaterial3: true);
-    final scheme = const ColorScheme.dark(
+    const scheme = ColorScheme.dark(
       brightness: Brightness.dark,
       primary: Noct.accent,
       onPrimary: Noct.a100,

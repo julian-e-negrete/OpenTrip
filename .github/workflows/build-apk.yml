@@ -100,6 +100,10 @@ jobs:
   # anything the app itself did.
   integration-test:
     runs-on: ubuntu-latest
+    # Emulator boot + two debug builds normally take ~25 minutes. Without
+    # a cap, a test stuck waiting (e.g. on a system dialog nobody can
+    # tap) holds the runner for GitHub's 6-hour maximum.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -126,7 +130,19 @@ jobs:
           arch: x86_64
           profile: pixel_6
           working-directory: apps/mobile
-          script: flutter test integration_test/app_test.dart
+          # Pre-grant the runtime permissions the app asks for, so the test
+          # never sits behind an Android permission dialog — the app stops
+          # drawing frames while one is up, which leaves pumpAndSettle
+          # waiting forever. Installing a debug build first gives `pm
+          # grant` something to grant to; `flutter test` then reinstalls
+          # over it with `install -r`, which keeps granted permissions.
+          script: |
+            flutter build apk --debug
+            adb install -r build/app/outputs/flutter-apk/app-debug.apk
+            adb shell pm grant co.opentrip.opentrip_mobile android.permission.ACCESS_FINE_LOCATION
+            adb shell pm grant co.opentrip.opentrip_mobile android.permission.ACCESS_COARSE_LOCATION
+            adb shell pm grant co.opentrip.opentrip_mobile android.permission.POST_NOTIFICATIONS
+            flutter test integration_test/app_test.dart
 
   # Compile-only sanity check for iOS — this project has no way to build
   # or run iOS locally (see docs/IOS_TESTING_SETUP.md), so this is the
@@ -140,7 +156,11 @@ jobs:
   # to install and test a build). macOS runners are free/unlimited for
   # this repo since it's public.
   verify-ios:
-    runs-on: macos-15
+    # macos-26 for Xcode 26 / the iOS 26 SDK: device_info_plus (pulled in
+    # by vibration) calls an iOS 26 API since 12.4.0, which doesn't
+    # compile against macos-15's Xcode 16.
+    runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 

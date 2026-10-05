@@ -992,7 +992,28 @@ class _MapVariantState extends State<_MapVariant> {
   @override
   void initState() {
     super.initState();
+    // RecordingScreen is mounted (hidden) from the moment the shell
+    // appears, so asking for location here would pop the system
+    // permission dialog over whatever tab the rider is actually looking
+    // at. Wait until the Record overlay is really on screen.
+    final visible = RecordingController.instance.isRecordScreenVisible;
+    if (visible.value) {
+      _loadIdleLocation();
+    } else {
+      visible.addListener(_onVisibilityChanged);
+    }
+  }
+
+  void _onVisibilityChanged() {
+    if (!RecordingController.instance.isRecordScreenVisible.value) return;
+    RecordingController.instance.isRecordScreenVisible.removeListener(_onVisibilityChanged);
     _loadIdleLocation();
+  }
+
+  @override
+  void dispose() {
+    RecordingController.instance.isRecordScreenVisible.removeListener(_onVisibilityChanged);
+    super.dispose();
   }
 
   Future<void> _loadIdleLocation() async {
