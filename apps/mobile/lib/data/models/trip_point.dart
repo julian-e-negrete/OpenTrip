@@ -42,6 +42,14 @@ class TripPoint {
   final double? bleTirePressureFrKpa;
   final double? bleTirePressureRrKpa;
 
+  /// The phone-accelerometer lean estimate (trip/lean_angle_tracker.dart)
+  /// at this fix — only while "Track lean angle" is on. Kept per point,
+  /// not just as the trip's [Trip.phoneLeanMaxDeg], so ride analysis
+  /// (trips/ride_analysis_section.dart) can color the route by lean and
+  /// find individual corners for any mounted-phone ride, not only
+  /// BLE-connected bikes. Unsigned — the tracker can't tell left from right.
+  final double? phoneLeanDeg;
+
   const TripPoint({
     required this.tripId,
     required this.seq,
@@ -68,6 +76,7 @@ class TripPoint {
     this.bleInletAirTemperatureC,
     this.bleTirePressureFrKpa,
     this.bleTirePressureRrKpa,
+    this.phoneLeanDeg,
   });
 
   /// Whether this point carries any bike telemetry at all — checked once
@@ -111,6 +120,7 @@ class TripPoint {
     int? bleInletAirTemperatureC,
     double? bleTirePressureFrKpa,
     double? bleTirePressureRrKpa,
+    double? phoneLeanDeg,
   }) {
     return TripPoint(
       tripId: tripId,
@@ -138,6 +148,7 @@ class TripPoint {
       bleInletAirTemperatureC: bleInletAirTemperatureC ?? this.bleInletAirTemperatureC,
       bleTirePressureFrKpa: bleTirePressureFrKpa ?? this.bleTirePressureFrKpa,
       bleTirePressureRrKpa: bleTirePressureRrKpa ?? this.bleTirePressureRrKpa,
+      phoneLeanDeg: phoneLeanDeg ?? this.phoneLeanDeg,
     );
   }
 
@@ -167,6 +178,7 @@ class TripPoint {
     'ble_inlet_air_temp_c': bleInletAirTemperatureC,
     'ble_tire_pressure_fr_kpa': bleTirePressureFrKpa,
     'ble_tire_pressure_rr_kpa': bleTirePressureRrKpa,
+    'phone_lean_deg': phoneLeanDeg,
   };
 
   static TripPoint fromRow(Map<String, Object?> row) => TripPoint(
@@ -195,6 +207,7 @@ class TripPoint {
     bleInletAirTemperatureC: row['ble_inlet_air_temp_c'] as int?,
     bleTirePressureFrKpa: row['ble_tire_pressure_fr_kpa'] as double?,
     bleTirePressureRrKpa: row['ble_tire_pressure_rr_kpa'] as double?,
+    phoneLeanDeg: row['phone_lean_deg'] as double?,
   );
 
   /// What gets pushed to Supabase (supabase/schema.sql's `trip_points`
@@ -228,6 +241,7 @@ class TripPoint {
     'ble_inlet_air_temp_c': bleInletAirTemperatureC,
     'ble_tire_pressure_fr_kpa': bleTirePressureFrKpa,
     'ble_tire_pressure_rr_kpa': bleTirePressureRrKpa,
+    'phone_lean_deg': phoneLeanDeg,
   };
 
   static TripPoint fromSupabaseRow(Map<String, Object?> row) => TripPoint(
@@ -256,5 +270,6 @@ class TripPoint {
     bleInletAirTemperatureC: row['ble_inlet_air_temp_c'] as int?,
     bleTirePressureFrKpa: (row['ble_tire_pressure_fr_kpa'] as num?)?.toDouble(),
     bleTirePressureRrKpa: (row['ble_tire_pressure_rr_kpa'] as num?)?.toDouble(),
+    phoneLeanDeg: (row['phone_lean_deg'] as num?)?.toDouble(),
   );
 }

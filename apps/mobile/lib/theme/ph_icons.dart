@@ -62,6 +62,21 @@ abstract final class Ph {
   static const IconData securityCamera = IconData(0xeca4, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData trafficSignal = IconData(0xe9aa, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData warning = IconData(0xe4e0, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowBendUpLeft = IconData(0xe024, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowBendUpRight = IconData(0xe026, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowElbowUpLeft = IconData(0xe054, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowElbowUpRight = IconData(0xe056, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowUUpLeft = IconData(0xe08a, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowUp = IconData(0xe08e, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowArcLeft = IconData(0xe014, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData arrowArcRight = IconData(0xe016, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData broadcast = IconData(0xe0f2, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData chartLine = IconData(0xe154, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData flagBanner = IconData(0xe622, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData mapPin = IconData(0xe316, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData navigationArrow = IconData(0xeade, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData usersThree = IconData(0xe68e, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData speedometer = IconData(0xee74, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
 
   /// Fill weight — used only for the now-playing music note and the
   /// replay play glyph, per the design handoff.

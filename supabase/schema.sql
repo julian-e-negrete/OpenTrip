@@ -195,6 +195,10 @@ create table if not exists public.trip_points (
   ble_inlet_air_temp_c integer,
   ble_tire_pressure_fr_kpa double precision,
   ble_tire_pressure_rr_kpa double precision,
+  -- Phone-accelerometer lean estimate at this fix (only while "Track lean
+  -- angle" is on) — see trip_point.dart's phoneLeanDeg. Powers the
+  -- lean-colored route and corner list in ride analysis.
+  phone_lean_deg double precision,
   primary key (trip_id, seq)
 );
 
@@ -218,6 +222,7 @@ alter table public.trip_points add column if not exists ble_fuel_gauge integer;
 alter table public.trip_points add column if not exists ble_inlet_air_temp_c integer;
 alter table public.trip_points add column if not exists ble_tire_pressure_fr_kpa double precision;
 alter table public.trip_points add column if not exists ble_tire_pressure_rr_kpa double precision;
+alter table public.trip_points add column if not exists phone_lean_deg double precision;
 
 alter table public.trip_points enable row level security;
 

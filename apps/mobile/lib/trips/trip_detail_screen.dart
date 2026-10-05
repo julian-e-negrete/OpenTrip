@@ -17,6 +17,7 @@ import '../theme/primitives.dart';
 import '../trip/orphan_recovery.dart';
 import '../trip/recording_controller.dart';
 import '../trip/route_replay.dart';
+import 'ride_analysis_section.dart';
 import 'stat_card_screen.dart';
 
 class TripDetailScreen extends StatefulWidget {
@@ -132,7 +133,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   void _share() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => StatCardScreen(trip: _trip, vehicle: widget.vehicle)),
+      MaterialPageRoute(builder: (_) => StatCardScreen(trip: _trip, vehicle: widget.vehicle, points: _points)),
     );
   }
 
@@ -168,6 +169,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 _StatGrid(trip: trip)
               else
                 _StatReport(trip: trip),
+              if (_points != null && _points!.length >= 2) RideAnalysisSection(points: _points!),
               _FullBikeTelemetry(trip: trip),
               if (_musicEvents != null && _musicEvents!.isNotEmpty)
                 _Soundtrack(events: _musicEvents!, tripStartedAt: trip.startedAt),

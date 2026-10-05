@@ -492,6 +492,41 @@
   "Soundtrack" list on trip detail with how far into the trip each track
   started.
 
+- **Reva-style ride reports and group riding.** Modeled on the Reva
+  ride tracker's feature set (live lean HUD, detailed ride reports,
+  crews), minus its paywall:
+  - **Ride analysis** (`trips/ride_analysis_section.dart`,
+    `trip/ride_analysis.dart` — tested): trip detail now shows the
+    route colored by speed or lean angle, tap anywhere on it to read
+    speed/lean/gear/rpm at that spot, a draggable speed/lean profile
+    chart over the ride's timeline, and a "Deepest corners" list (peak
+    lean + apex speed per corner, tap to jump the map there). Lean
+    prefers the bike's own IMU (`bleLeanDeg`) and falls back to the
+    phone-accelerometer estimate, which is now stored per point
+    (`trip_points.phone_lean_deg`, local DB v18) rather than only as
+    the trip max — so this works for any mounted-phone ride.
+  - **Share-card templates** (`trips/stat_card_screen.dart`): Classic,
+    Route (the ride's shape, colored by speed), Lean (a max-lean gauge;
+    offered only when the trip has lean data) and Story (9:16, sized
+    for Instagram/WhatsApp stories).
+  - **Crews** (`crew/`, `supabase/crews.sql`): named groups of friends.
+    While you record, crewmates who are also riding appear on the
+    Record map with live speed and lean; tap one to navigate to them
+    turn by turn (`crew/crew_navigation_screen.dart`, routes from the
+    public OSRM demo server via `crew/nav_route.dart` — tested —
+    refetched when you go off-route or they move away from the route's
+    end, rate-limited to one request per 15s). Sharing is per crew and
+    per member (location / speed / lean), plus a global "share while
+    riding" switch; only accepted friends can be added; positions are
+    readable only through `get_crew_live_positions()`, which applies
+    those flags and drops anything older than 2 minutes, and your row
+    is deleted when the ride ends. Positions are polled every 5s rather
+    than pushed over Realtime, because what each rider may see depends
+    on sharing flags a Realtime row subscription can't evaluate.
+    Reachable from the Ranks tab and the Friends screen; a "Crew live"
+    map shows who's riding without recording yourself. Crew markers
+    currently appear on the Map layout of the Record tab only.
+
 ## Removed
 
 - **Auto-start drive detection.** Built, shipped, then rolled back on

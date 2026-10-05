@@ -77,17 +77,23 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void initState() {
     super.initState();
-    RecordingController.instance.openRecordScreen = () => setState(() => _showingRecord = true);
+    RecordingController.instance.openRecordScreen = () => _setShowingRecord(true);
   }
 
   @override
   void dispose() {
     RecordingController.instance.openRecordScreen = null;
+    RecordingController.instance.isRecordScreenVisible.value = false;
     super.dispose();
   }
 
+  void _setShowingRecord(bool showing) {
+    setState(() => _showingRecord = showing);
+    RecordingController.instance.isRecordScreenVisible.value = showing;
+  }
+
   void _selectTab(_Tab tab) {
-    setState(() => _showingRecord = false);
+    _setShowingRecord(false);
     if (tab == _tab) {
       // Tapping the already-active tab returns it to its root screen.
       _navigatorKeys[tab]!.currentState?.popUntil((route) => route.isFirst);
@@ -106,7 +112,7 @@ class _HomeShellState extends State<HomeShell> {
   /// per the handoff's Record section.
   void _onTapRecord() {
     if (!_showingRecord) {
-      setState(() => _showingRecord = true);
+      _setShowingRecord(true);
       return;
     }
     final rc = RecordingController.instance;
@@ -143,7 +149,7 @@ class _HomeShellState extends State<HomeShell> {
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         if (_showingRecord) {
-          setState(() => _showingRecord = false);
+          _setShowingRecord(false);
           return;
         }
         final nestedNavigator = _navigatorKeys[_tab]!.currentState;
