@@ -79,9 +79,12 @@ class _RacingScreenState extends State<RacingScreen> {
     final userId = await CurrentUser.instance.id();
     final vehicles = await VehicleRepository.instance.listForUser(userId);
     if (!mounted) return;
-    final selected = _selectedVehicle;
-    final stillExists = selected != null && vehicles.any((v) => v.id == selected.id);
-    final vehicle = stillExists ? selected : (vehicles.isEmpty ? null : vehicles.first);
+    // Re-pick the selection from the fresh list by id, not the old
+    // instance: Vehicle has no value equality, so keeping the stale object
+    // leaves the segmented control with nothing highlighted (and shows
+    // pre-edit details) after any reload.
+    final selectedId = _selectedVehicle?.id;
+    final vehicle = vehicles.where((v) => v.id == selectedId).firstOrNull ?? vehicles.firstOrNull;
     setState(() {
       _vehicles = vehicles;
       _selectedVehicle = vehicle;
@@ -183,30 +186,35 @@ class _RacingScreenState extends State<RacingScreen> {
                     const SizedBox(height: 22),
                     const Text('PERSONAL BEST', style: Noct.statLabel),
                     const SizedBox(height: 9),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: NoctPanel(
-                            child: NoctStat(
-                              value: bestZeroToSixty == null ? '—' : bestZeroToSixty.toStringAsFixed(2),
-                              suffix: bestZeroToSixty == null ? null : 's',
-                              label: '0-60 km/h',
-                              valueSize: 28,
+                    // IntrinsicHeight + stretch: a "—" card has no suffix
+                    // span, so it lays out a few px shorter than a timed one.
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: NoctPanel(
+                              child: NoctStat(
+                                value: bestZeroToSixty == null ? '—' : bestZeroToSixty.toStringAsFixed(2),
+                                suffix: bestZeroToSixty == null ? null : 's',
+                                label: '0-60 km/h',
+                                valueSize: 28,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: NoctPanel(
-                            child: NoctStat(
-                              value: bestZeroToOneEighty == null ? '—' : bestZeroToOneEighty.toStringAsFixed(2),
-                              suffix: bestZeroToOneEighty == null ? null : 's',
-                              label: '0-180 km/h',
-                              valueSize: 28,
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: NoctPanel(
+                              child: NoctStat(
+                                value: bestZeroToOneEighty == null ? '—' : bestZeroToOneEighty.toStringAsFixed(2),
+                                suffix: bestZeroToOneEighty == null ? null : 's',
+                                label: '0-180 km/h',
+                                valueSize: 28,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 22),
                     const Text('COUNTDOWN', style: Noct.statLabel),
@@ -219,7 +227,17 @@ class _RacingScreenState extends State<RacingScreen> {
                     const SizedBox(height: 22),
                     NoctOutlinedButton(label: 'Start roll race', icon: Ph.flagCheckered, onPressed: _start),
                     const SizedBox(height: 10),
-                    NoctOutlinedButton(label: 'Race a friend (coming soon)', onPressed: _raceAFriend),
+                    // Not available yet, so it must not look like the primary
+                    // action above it — a quiet text button, still tappable
+                    // for the "coming soon" explanation.
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: _raceAFriend,
+                        style: TextButton.styleFrom(foregroundColor: Noct.n500),
+                        icon: const Icon(Ph.users, size: 15),
+                        label: const Text('Race a friend · coming soon'),
+                      ),
+                    ),
                   ],
                 ),
     );

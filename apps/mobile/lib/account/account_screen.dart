@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../auth/sign_in_prompt.dart';
 import '../auth/auth_service.dart';
 import '../auth/current_user.dart';
-import '../auth/login_screen.dart';
 import '../data/account_data_service.dart';
 import '../data/catalog/country_catalog.dart';
 import '../data/data_events.dart';
@@ -171,24 +171,27 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _signIn() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => LoginScreen(onContinueAsGuest: () => Navigator.of(context).pop())));
+    await pushSignIn(context);
     if (mounted) await _load();
   }
 
   Future<void> _deleteAccount() async {
+    final guest = CurrentUser.instance.isGuest;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text(
-          'This permanently deletes every vehicle, trip, and photo — on '
-          'this device, and in the cloud if you\'re signed in and synced. '
-          'This cannot be undone.\n\n'
-          'If you\'re signed in with Google or email, this does not delete '
-          'the Google/email account itself — only this app\'s data. '
-          'You\'ll be signed out.',
+        // A guest has no account to delete — only what's on this device.
+        title: Text(guest ? 'Delete all local data?' : 'Delete account?'),
+        content: Text(
+          guest
+              ? 'This permanently deletes every vehicle, trip, and photo on '
+                    'this device. This cannot be undone.'
+              : 'This permanently deletes every vehicle, trip, and photo — on '
+                    'this device, and in the cloud if you\'re signed in and synced. '
+                    'This cannot be undone.\n\n'
+                    'If you\'re signed in with Google or email, this does not delete '
+                    'the Google/email account itself — only this app\'s data. '
+                    'You\'ll be signed out.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
@@ -482,7 +485,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       child: OutlinedButton(
                         onPressed: _busy ? null : _deleteAccount,
                         style: OutlinedButton.styleFrom(side: const BorderSide(color: Noct.n800), foregroundColor: Noct.n500),
-                        child: Text(_busy ? 'Deleting…' : 'Delete account'),
+                        child: Text(_busy ? 'Deleting…' : (guest ? 'Delete local data' : 'Delete account')),
                       ),
                     ),
                   ],

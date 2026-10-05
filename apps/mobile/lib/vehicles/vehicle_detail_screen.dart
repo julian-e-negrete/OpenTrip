@@ -167,13 +167,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     return confirmed ?? false;
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final hours = d.inHours;
-    final minutes = d.inMinutes % 60;
-    if (hours == 0) return '${minutes}m';
-    return '${hours}h ${minutes}m';
-  }
 
   String _typeLabel(VehicleType type) => switch (type) {
     VehicleType.motorcycle => 'Motorcycle',
@@ -225,7 +218,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                    child: _ThreeStatGrid(trips: _trips, fmtDuration: _fmtDuration),
+                    child: _ThreeStatGrid(trips: _trips, fmtDuration: fmtDuration),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
@@ -253,6 +246,7 @@ class _OdometerPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serviceInterval = vehicle.serviceIntervalKm;
+    final noReading = mileage.source == MileageSource.entered && vehicle.startingOdometerKm == null;
     double? remainingKm;
     double? progress;
     var overdue = false;
@@ -271,13 +265,20 @@ class _OdometerPanel extends StatelessWidget {
           Text.rich(
             TextSpan(
               children: [
-                TextSpan(text: fmtThousands(mileage.km.round()), style: Noct.stat(34)),
                 TextSpan(
-                  text: switch (mileage.source) {
-                    MileageSource.bike => " km · from the bike's odometer",
-                    MileageSource.trips => ' km · estimated from recorded trips',
-                    MileageSource.entered => ' km · as entered',
-                  },
+                  // Nothing entered and nothing recorded yet: a bare "0 km ·
+                  // as entered" read as if the rider had typed 0.
+                  text: noReading ? '—' : fmtThousands(mileage.km.round()),
+                  style: Noct.stat(34),
+                ),
+                TextSpan(
+                  text: noReading
+                      ? '  no odometer reading yet — add one with edit'
+                      : switch (mileage.source) {
+                          MileageSource.bike => " km · from the bike's odometer",
+                          MileageSource.trips => ' km · estimated from recorded trips',
+                          MileageSource.entered => ' km · as entered',
+                        },
                   style: const TextStyle(fontSize: 12, color: Noct.n400, fontWeight: FontWeight.w400),
                 ),
               ],
@@ -430,12 +431,6 @@ class _RecentTrips extends StatelessWidget {
   final Vehicle vehicle;
   final Future<bool> Function(Trip) onConfirmDelete;
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final hours = d.inHours;
-    final minutes = d.inMinutes % 60;
-    return hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -489,7 +484,7 @@ class _RecentTrips extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${fmtDayMonth(trip.startedAt)} · ${_fmtDuration(trip.durationSeconds)}',
+                              '${fmtDayMonth(trip.startedAt)} · ${fmtDuration(trip.durationSeconds)}',
                               style: const TextStyle(fontSize: 11, color: Noct.n500),
                             ),
                           ],

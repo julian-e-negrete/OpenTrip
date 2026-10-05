@@ -40,3 +40,14 @@ String fmtMonthName(DateTime d) => switch (d.month) {
   11 => 'November',
   _ => 'December',
 };
+
+/// A ride's length the way it's shown everywhere — `45s`, `22m`, `1h 5m`.
+/// One helper so the trip list, detail, recap, vehicle and share card can't
+/// drift apart again (they had grown three different formats).
+String fmtDuration(int seconds) {
+  if (seconds < 60) return '${seconds < 0 ? 0 : seconds}s';
+  final d = Duration(seconds: seconds);
+  final h = d.inHours;
+  final m = d.inMinutes % 60;
+  return h > 0 ? '${h}h ${m}m' : '${m}m';
+}

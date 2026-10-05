@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../auth/sign_in_prompt.dart';
 import '../auth/current_user.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
@@ -126,15 +127,14 @@ class _FriendsScreenState extends State<FriendsScreen> {
         appBar: AppBar(
           title: const Text('Friends', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, letterSpacing: -0.44)),
         ),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Sign in to find riders and add friends.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Noct.n500, fontSize: 13),
-            ),
-          ),
+        body: SignInPrompt(
+          icon: Ph.users,
+          title: 'Ride with friends',
+          message: 'Find other riders, add friends and compare rides — friends need an account.',
+          onSignedIn: () {
+            setState(() {});
+            _load();
+          },
         ),
       );
     }

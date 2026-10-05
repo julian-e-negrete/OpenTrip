@@ -66,18 +66,13 @@ class _StatCardScreenState extends State<StatCardScreen> {
     final trip = widget.trip;
     final name = widget.vehicle?.name;
     return switch (_template) {
-      StatCardTemplate.classic => _StatCard(trip: trip, vehicleName: name, fmtDuration: _fmtDuration),
-      StatCardTemplate.route => _RouteCard(trip: trip, vehicleName: name, points: widget.points!, fmtDuration: _fmtDuration),
-      StatCardTemplate.lean => _LeanCard(trip: trip, vehicleName: name, maxLeanDeg: _maxLeanDeg!, fmtDuration: _fmtDuration),
-      StatCardTemplate.story => _StoryCard(trip: trip, vehicleName: name, points: widget.points!, maxLeanDeg: _maxLeanDeg, fmtDuration: _fmtDuration),
+      StatCardTemplate.classic => _StatCard(trip: trip, vehicleName: name, fmtDuration: fmtDuration),
+      StatCardTemplate.route => _RouteCard(trip: trip, vehicleName: name, points: widget.points!, fmtDuration: fmtDuration),
+      StatCardTemplate.lean => _LeanCard(trip: trip, vehicleName: name, maxLeanDeg: _maxLeanDeg!, fmtDuration: fmtDuration),
+      StatCardTemplate.story => _StoryCard(trip: trip, vehicleName: name, points: widget.points!, maxLeanDeg: _maxLeanDeg, fmtDuration: fmtDuration),
     };
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
-  }
 
   /// Captures the card below (via [RepaintBoundary]) as PNG bytes —
   /// shared by [_share] (writes to a temp file for the share sheet) and

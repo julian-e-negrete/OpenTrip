@@ -190,12 +190,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
       // Keep the current selection if it still exists (e.g. a vehicle was
       // added elsewhere while this tab already had one picked, possibly
       // mid-recording) — only fall back to the first vehicle if it's gone
-      // or nothing was selected yet.
-      final selected = _selectedVehicle;
-      final stillExists = selected != null && vehicles.any((v) => v.id == selected.id);
-      if (!stillExists) {
-        _selectedVehicle = vehicles.isEmpty ? null : vehicles.first;
-      }
+      // or nothing was selected yet. Take the fresh instance for that id,
+      // so an edit (rename, BLE connector) shows up here immediately.
+      final selectedId = _selectedVehicle?.id;
+      _selectedVehicle = vehicles.where((v) => v.id == selectedId).firstOrNull ?? vehicles.firstOrNull;
       _loadingVehicles = false;
     });
   }
@@ -590,7 +588,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               ListTile(
                 leading: Icon(v.type == VehicleType.car ? Ph.car : Ph.motorcycle, color: Noct.accent),
                 title: Text(v.name, style: const TextStyle(color: Noct.text)),
-                subtitle: Text(v.type.name, style: const TextStyle(color: Noct.n500)),
+                subtitle: Text(v.type.label, style: const TextStyle(color: Noct.n500)),
                 trailing: v.id == _selectedVehicle?.id ? const Icon(Ph.caretRight, color: Noct.accent, size: 16) : null,
                 onTap: () => Navigator.pop(context, v),
               ),
@@ -758,7 +756,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         // again — rather than a second navigation — is what starts the
         // trip. This is the reliable, unambiguous fallback for that.
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14 + Noct.recordControlOverhang),
           child: SizedBox(
             width: double.infinity,
             child: OutlinedButton(

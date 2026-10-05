@@ -138,7 +138,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 18),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 18 + Noct.recordControlOverhang),
               children: [
                 if (_vehicles.isEmpty)
                   const Padding(
@@ -265,8 +265,15 @@ class _VehicleRow extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              supportsBle ? '${vehicle.type.name} · Kawasaki Rideology BLE' : vehicle.type.name,
+                              [
+                                if ('${vehicle.brand} ${vehicle.model}'.trim().isNotEmpty)
+                                  '${vehicle.brand} ${vehicle.model}'.trim(),
+                                // Telemetry support is already shown by the Connect pill.
+                                vehicle.type.label,
+                              ].join(' · '),
                               style: const TextStyle(fontSize: 11.5, color: Noct.n500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),

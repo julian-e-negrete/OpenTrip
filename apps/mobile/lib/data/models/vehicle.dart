@@ -1,5 +1,15 @@
 enum VehicleType { motorcycle, car, bicycle, other }
 
+extension VehicleTypeLabel on VehicleType {
+  /// For display — `type.name` is the storage value (`motorcycle`).
+  String get label => switch (this) {
+    VehicleType.motorcycle => 'Motorcycle',
+    VehicleType.car => 'Car',
+    VehicleType.bicycle => 'Bicycle',
+    VehicleType.other => 'Other',
+  };
+}
+
 /// How this vehicle's live telemetry (if any) is read. Only one connector
 /// exists today — see /packages/kawasaki_rideology_ble — everything else
 /// is GPS-only. Normally derived automatically from the selected

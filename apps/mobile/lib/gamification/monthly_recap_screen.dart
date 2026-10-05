@@ -76,13 +76,6 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
     _load();
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final hours = d.inHours;
-    final minutes = d.inMinutes % 60;
-    if (hours == 0) return '${minutes}m';
-    return '${hours}h ${minutes}m';
-  }
 
   Future<void> _share() async {
     final totalKm = (_trips.fold<double>(0, (sum, t) => sum + t.distanceMeters) / 1000).toStringAsFixed(0);
@@ -170,7 +163,7 @@ class _MonthlyRecapScreenState extends State<MonthlyRecapScreen> {
                                 Expanded(
                                   child: Container(
                                     decoration: const BoxDecoration(border: Border(right: BorderSide(color: Noct.n800))),
-                                    child: _RecapCell('Time driving', _fmtDuration(totalDuration)),
+                                    child: _RecapCell('Time driving', fmtDuration(totalDuration)),
                                   ),
                                 ),
                                 Expanded(child: _RecapCell('Longest trip', '${(longest / 1000).toStringAsFixed(0)} km')),

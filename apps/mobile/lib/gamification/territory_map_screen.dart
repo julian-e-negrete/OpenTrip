@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../auth/sign_in_prompt.dart';
 import '../auth/current_user.dart';
 import '../data/data_events.dart';
 import '../friends/friend_models.dart';
@@ -103,17 +104,17 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
   @override
   Widget build(BuildContext context) {
     if (CurrentUser.instance.isGuest) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: Noct.bg,
-        body: Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Sign in to see conquered territory across all riders.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Noct.n500, fontSize: 13),
-            ),
-          ),
+        appBar: AppBar(title: const Text('Map')),
+        body: SignInPrompt(
+          icon: Ph.hexagon,
+          title: 'Claim your territory',
+          message: 'The map shows which areas you and other riders have conquered — it needs an account.',
+          onSignedIn: () {
+            setState(() {});
+            _load();
+          },
         ),
       );
     }

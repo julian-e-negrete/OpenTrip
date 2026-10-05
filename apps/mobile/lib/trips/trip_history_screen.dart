@@ -70,11 +70,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     });
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
-  }
 
   Future<bool> _confirmDelete(Trip trip) async {
     // Only block deletion of a trip that's genuinely recording *in this
@@ -236,7 +231,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                         )
                       else if (LayoutPrefs.instance.tripList == TripListVariant.cards)
                         SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14 + Noct.recordControlOverhang),
                           sliver: SliverList.separated(
                             itemCount: _visibleTrips.length,
                             separatorBuilder: (context, index) => const SizedBox(height: 10),
@@ -245,7 +240,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                               return _RouteCardRow(
                                 trip: trip,
                                 vehicle: _vehiclesById[trip.vehicleId],
-                                fmtDuration: _fmtDuration,
+                                fmtDuration: fmtDuration,
                                 onTap: () => _openTrip(trip, _vehiclesById[trip.vehicleId]),
                                 onConfirmDelete: () => _confirmDelete(trip),
                                 onDelete: () => TripRepository.instance.deleteTrip(trip.id),
@@ -255,7 +250,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                         )
                       else
                         SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, Noct.recordControlOverhang + 8),
                           sliver: SliverList.builder(
                             itemCount: _visibleTrips.length,
                             itemBuilder: (context, i) {
@@ -263,7 +258,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                               return _DenseLogRow(
                                 trip: trip,
                                 vehicle: _vehiclesById[trip.vehicleId],
-                                fmtDuration: _fmtDuration,
+                                fmtDuration: fmtDuration,
                                 onTap: () => _openTrip(trip, _vehiclesById[trip.vehicleId]),
                                 onConfirmDelete: () => _confirmDelete(trip),
                                 onDelete: () => TripRepository.instance.deleteTrip(trip.id),

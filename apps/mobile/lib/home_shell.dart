@@ -188,7 +188,8 @@ class _HomeShellState extends State<HomeShell> {
         bottomNavigationBar: (_canPopActiveTab && !_showingRecord)
             ? null
             : _NocturneBottomBar(
-                activeTab: _tab,
+                // No tab is "current" while the Record overlay covers them.
+                activeTab: _showingRecord ? null : _tab,
                 onSelectTab: _selectTab,
                 onTapRecord: _onTapRecord,
               ),
@@ -225,7 +226,7 @@ class _NocturneBottomBar extends StatelessWidget {
     required this.onTapRecord,
   });
 
-  final _Tab activeTab;
+  final _Tab? activeTab;
   final ValueChanged<_Tab> onSelectTab;
   final VoidCallback onTapRecord;
 
@@ -258,19 +259,19 @@ class _NocturneBottomBar extends StatelessWidget {
                 // equal flex keeps the gap — and the raised control
                 // centered on it below — in the bar's true middle.
                 children: [
-                  _destination(_Tab.trips),
-                  _destination(_Tab.ranks),
-                  _destination(_Tab.racing),
+                  _destination(context, _Tab.trips),
+                  _destination(context, _Tab.ranks),
+                  _destination(context, _Tab.racing),
                   const SizedBox(width: 60),
-                  _destination(_Tab.map),
-                  _destination(_Tab.crew),
-                  _destination(_Tab.garage),
+                  _destination(context, _Tab.map),
+                  _destination(context, _Tab.crew),
+                  _destination(context, _Tab.garage),
                 ],
               ),
             ),
           ),
           Positioned(
-            top: -24,
+            top: -Noct.recordControlOverhang,
             left: 0,
             right: 0,
             child: Center(
@@ -282,7 +283,7 @@ class _NocturneBottomBar extends StatelessWidget {
     );
   }
 
-  Widget _destination(_Tab tab, {int flex = 1}) {
+  Widget _destination(BuildContext context, _Tab tab, {int flex = 1}) {
     final d = _destinations[tab]!;
     final active = tab == activeTab;
     final color = active ? Noct.accent : Noct.n500;
@@ -294,16 +295,20 @@ class _NocturneBottomBar extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 150),
-              style: TextStyle(color: color),
-              child: Icon(d.icon, size: 20, color: color),
-            ),
+            Icon(d.icon, size: 20, color: color),
             const SizedBox(height: 3),
+            // Built from the inherited style, not a bare TextStyle:
+            // AnimatedDefaultTextStyle *replaces* the ambient style, so a
+            // bare one drops the theme's Inter family and the labels fall
+            // back to the platform font.
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 150),
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w400, color: color),
-              child: Text(d.label),
+              style: DefaultTextStyle.of(context).style.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w400,
+                color: color,
+              ),
+              child: Text(d.label, maxLines: 1, overflow: TextOverflow.clip, softWrap: false),
             ),
           ],
         ),

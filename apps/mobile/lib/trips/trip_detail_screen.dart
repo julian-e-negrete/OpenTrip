@@ -12,10 +12,12 @@ import '../theme/app_theme.dart';
 import '../theme/dark_tile_layer.dart';
 import '../theme/date_fmt.dart';
 import '../theme/layout_prefs.dart';
+import '../theme/num_fmt.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
 import '../trip/orphan_recovery.dart';
 import '../trip/recording_controller.dart';
+import '../trip/ride_analysis.dart';
 import '../trip/route_replay.dart';
 import 'ride_analysis_section.dart';
 import 'stat_card_screen.dart';
@@ -260,7 +262,7 @@ class _Headline extends StatelessWidget {
             children: [
               TextSpan(text: trip.distanceKm.toStringAsFixed(1), style: Noct.stat(56)),
               TextSpan(
-                text: ' km in ${_fmtDuration(trip.durationSeconds)}',
+                text: ' km in ${fmtDuration(trip.durationSeconds)}',
                 style: const TextStyle(fontSize: 14, color: Noct.n400, fontWeight: FontWeight.w400),
               ),
             ],
@@ -270,12 +272,6 @@ class _Headline extends StatelessWidget {
     );
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final h = d.inHours;
-    final m = d.inMinutes % 60;
-    return h > 0 ? '${h}h ${m}m' : '${m}m';
-  }
 }
 
 /// Variant A — the default: six stat panels in a 2-column grid. Design
@@ -291,26 +287,37 @@ class _StatGrid extends StatelessWidget {
         ? '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC}°'
         : null;
     final cells = [
-      ('Avg km/h', trip.displayAvgSpeedKph?.toStringAsFixed(0), null),
-      ('Max km/h', trip.maxSpeedKph?.toStringAsFixed(0), null),
-      ('Max lean', leanDeg == null ? null : '${leanDeg.toStringAsFixed(0)}°', Noct.a300),
-      ('Max rpm', trip.bleMaxRpm?.toString(), null),
-      ('Hardest brake', trip.behaviorMaxBrakeG == null ? null : '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g', null),
-      ('Water temp', waterRange, null),
+      ('Avg km/h', trip.displayAvgSpeedKph?.toStringAsFixed(0) ?? '—', null),
+      ('Max km/h', trip.maxSpeedKph?.toStringAsFixed(0) ?? '—', null),
+      // The rest only when this trip actually has them — a GPS-only car
+      // trip shouldn't show a wall of "—" tiles (the report variant below
+      // already skips empty rows the same way).
+      if (leanDeg != null) ('Max lean', '${leanDeg.toStringAsFixed(0)}°', Noct.a300),
+      if (trip.bleMaxRpm != null) ('Max rpm', fmtThousands(trip.bleMaxRpm!), null),
+      if (trip.behaviorMaxBrakeG != null) ('Hardest brake', '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g', null),
+      if (waterRange != null) ('Water temp', waterRange, null),
     ];
+    // Height from the content (panel padding + value + label), scaled with
+    // the rider's text size — a width-derived aspect ratio left most of
+    // each tile empty on wide phones.
+    final tileHeight = 26 + MediaQuery.textScalerOf(context).scale(46);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
-      child: GridView.count(
-        crossAxisCount: 2,
+      child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 9,
-        crossAxisSpacing: 9,
-        childAspectRatio: 1.7,
-        children: [
-          for (final (label, value, color) in cells)
-            NoctPanel(child: NoctStat(value: value ?? '—', label: label, valueSize: 24, valueColor: color)),
-        ],
+        padding: EdgeInsets.zero,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 9,
+          crossAxisSpacing: 9,
+          mainAxisExtent: tileHeight,
+        ),
+        itemCount: cells.length,
+        itemBuilder: (context, i) {
+          final (label, value, color) = cells[i];
+          return NoctPanel(child: NoctStat(value: value, label: label, valueSize: 24, valueColor: color));
+        },
       ),
     );
   }
@@ -829,7 +836,8 @@ class _TelemetryCapsuleState extends State<_TelemetryCapsule> {
       ('km/h', speed?.toStringAsFixed(0), null),
       ('rpm', point.bleRpm?.toString(), null),
       ('gear', point.bleGear?.toString(), null),
-      ('lean', point.bleLeanDeg == null ? null : '${point.bleLeanDeg!.toStringAsFixed(0)}°', Noct.a300),
+      // Bike IMU when connected, else the phone's estimate ("Track lean angle").
+      ('lean', effectiveLeanDeg(point) == null ? null : '${effectiveLeanDeg(point)!.toStringAsFixed(0)}°', Noct.a300),
     ];
     // Every other field this point carries — tapping the capsule reveals
     // these too, so what changed during the ride (throttle, TCS

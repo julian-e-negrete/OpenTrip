@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../auth/sign_in_prompt.dart';
 import '../auth/auth_service.dart';
 import '../config/app_config.dart';
 import '../friends/friend_models.dart';
@@ -86,7 +87,7 @@ class _CrewsScreenState extends State<CrewsScreen> {
     final available = CrewService.instance.isAvailable;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Crews', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w500, letterSpacing: -0.44)),
+        title: const Text('Crew'),
         actions: [
           if (available)
             IconButton(
@@ -106,12 +107,11 @@ class _CrewsScreenState extends State<CrewsScreen> {
             )
           : null,
       body: !available
-          ? const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Sign in to create crews and see your friends live on the map while you ride.',
-                style: TextStyle(color: Noct.n400, fontSize: 13.5),
-              ),
+          ? SignInPrompt(
+              icon: Ph.usersThree,
+              title: 'Ride together',
+              message: 'Crews see each other live on the map — position, speed and lean — and can navigate to one another. Crews need an account.',
+              onSignedIn: _load,
             )
           : _loading
               ? const Center(child: CircularProgressIndicator())
