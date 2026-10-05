@@ -12,6 +12,7 @@ import '../data/repositories/vehicle_repository.dart';
 import '../theme/app_theme.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/location_recorder.dart';
 import '../trip/recording_controller.dart';
 import 'solo_race_screen.dart';
 
@@ -114,6 +115,22 @@ class _RacingScreenState extends State<RacingScreen> {
       );
       return;
     }
+    // Every permission dialog a recording can raise (location, the
+    // notification permission, the one-time battery-optimization
+    // exemption) has to be out of the way before the countdown starts —
+    // the race only starts recording at GO, so otherwise a first-ever
+    // race throws a system dialog over the screen at the exact moment
+    // the rider launches, with the race clock already running under it.
+    // The second ensureReady() call inside LocationRecorder.start() at GO
+    // is then a silent no-op.
+    try {
+      await LocationRecorder.ensureReady();
+    } on StateError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      return;
+    }
+    if (!mounted) return;
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => SoloRaceScreen(vehicle: vehicle, countdownSeconds: _countdownSeconds)),
     );
