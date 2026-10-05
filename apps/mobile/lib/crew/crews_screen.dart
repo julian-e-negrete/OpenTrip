@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../auth/auth_service.dart';
+import '../config/app_config.dart';
 import '../friends/friend_models.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
@@ -26,11 +29,24 @@ class _CrewsScreenState extends State<CrewsScreen> {
   List<Crew> _crews = [];
   bool _loading = true;
   bool _shareWhileRiding = true;
+  StreamSubscription<Object>? _authSub;
 
   @override
   void initState() {
     super.initState();
     _load();
+    // This is a bottom-bar tab root, so it stays alive across a guest
+    // signing in (or a rider signing out) — without this it would keep
+    // showing whatever it loaded under the old session.
+    if (AppConfig.isSupabaseConfigured) {
+      _authSub = AuthService.instance.onAuthStateChange.listen((_) => _load());
+    }
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

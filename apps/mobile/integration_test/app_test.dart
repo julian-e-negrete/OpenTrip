@@ -28,8 +28,8 @@ void main() {
     // Trips tab is the shell's default.
     expect(find.text('Trips'), findsWidgets);
 
-    // Each of the other three tabs renders without throwing.
-    for (final icon in [Ph.ranking, Ph.hexagon, Ph.motorcycle]) {
+    // Each of the other tabs renders without throwing.
+    for (final icon in [Ph.ranking, Ph.flagCheckered, Ph.hexagon, Ph.usersThree, Ph.motorcycle]) {
       await tester.tap(find.byIcon(icon));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

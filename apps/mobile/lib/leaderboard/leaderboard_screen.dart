@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../auth/current_user.dart';
-import '../crew/crews_screen.dart';
 import '../friends/friends_screen.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
@@ -109,11 +108,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FriendsScreen()));
                   if (mounted) _load();
                 },
-              ),
-              IconButton(
-                icon: const Icon(Ph.usersThree),
-                tooltip: 'Crews',
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CrewsScreen())),
               ),
             ],
           ),

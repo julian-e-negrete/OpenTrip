@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'crew/crews_screen.dart';
 import 'gamification/territory_map_screen.dart';
 import 'leaderboard/leaderboard_screen.dart';
 import 'racing/racing_screen.dart';
@@ -11,11 +12,11 @@ import 'trip/recording_screen.dart';
 import 'trips/trip_history_screen.dart';
 import 'vehicles/vehicle_list_screen.dart';
 
-enum _Tab { trips, ranks, racing, map, garage }
+enum _Tab { trips, ranks, racing, map, crew, garage }
 
 /// Post-login (or post-guest) shell.
 ///
-/// Four bottom destinations, each its own [Navigator] with an independent
+/// Six bottom destinations, each its own [Navigator] with an independent
 /// stack — pushing a child screen (trip detail, friends, vehicle detail,
 /// account, ...) from within a tab keeps that tab lit, for free, because
 /// `Navigator.of(context)` inside those screens resolves to the tab's own
@@ -63,6 +64,7 @@ class _HomeShellState extends State<HomeShell> {
     _Tab.ranks: GlobalKey<NavigatorState>(),
     _Tab.racing: GlobalKey<NavigatorState>(),
     _Tab.map: GlobalKey<NavigatorState>(),
+    _Tab.crew: GlobalKey<NavigatorState>(),
     _Tab.garage: GlobalKey<NavigatorState>(),
   };
 
@@ -71,6 +73,7 @@ class _HomeShellState extends State<HomeShell> {
     _Tab.ranks: LeaderboardScreen(),
     _Tab.racing: RacingScreen(),
     _Tab.map: TerritoryMapScreen(),
+    _Tab.crew: CrewsScreen(),
     _Tab.garage: VehicleListScreen(),
   };
 
@@ -134,7 +137,7 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      // Always false: with four independent per-tab Navigators (see the
+      // Always false: with six independent per-tab Navigators (see the
       // class doc comment), only this one — the outermost, wrapping the
       // whole shell — is wired into the platform back button/gesture at
       // all. A plain `canPop: !_showingRecord` let the framework complete
@@ -231,6 +234,7 @@ class _NocturneBottomBar extends StatelessWidget {
     _Tab.ranks: (icon: Ph.ranking, label: 'Ranks'),
     _Tab.racing: (icon: Ph.flagCheckered, label: 'Racing'),
     _Tab.map: (icon: Ph.hexagon, label: 'Map'),
+    _Tab.crew: (icon: Ph.usersThree, label: 'Crew'),
     _Tab.garage: (icon: Ph.motorcycle, label: 'Garage'),
   };
 
@@ -250,21 +254,17 @@ class _NocturneBottomBar extends StatelessWidget {
             child: SizedBox(
               height: 62,
               child: Row(
-                // Three tabs sit left of the raised control's gap, two sit
-                // right — an odd total (5) can't split into equal-count
-                // halves the way the original four could. Uneven flex
-                // (2 per left tab, 3 per right tab: 6 either side) keeps
-                // the two *groups* equal-width instead, so the gap — and
-                // the raised control centered on it below — still lands
-                // in the bar's true middle rather than drifting toward
-                // the heavier side.
+                // Three tabs either side of the raised control's gap, so
+                // equal flex keeps the gap — and the raised control
+                // centered on it below — in the bar's true middle.
                 children: [
-                  _destination(_Tab.trips, flex: 2),
-                  _destination(_Tab.ranks, flex: 2),
-                  _destination(_Tab.racing, flex: 2),
+                  _destination(_Tab.trips),
+                  _destination(_Tab.ranks),
+                  _destination(_Tab.racing),
                   const SizedBox(width: 60),
-                  _destination(_Tab.map, flex: 3),
-                  _destination(_Tab.garage, flex: 3),
+                  _destination(_Tab.map),
+                  _destination(_Tab.crew),
+                  _destination(_Tab.garage),
                 ],
               ),
             ),
