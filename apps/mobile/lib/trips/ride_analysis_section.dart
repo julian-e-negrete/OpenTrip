@@ -111,8 +111,13 @@ class _RideAnalysisSectionState extends State<RideAnalysisSection> {
                       initialZoom: 16,
                       initialCameraFit:
                           degenerate ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24)),
+                      // No one-finger drag: this map sits inside trip
+                      // detail's scrolling ListView, and a drag that
+                      // starts on it would pan the map instead of
+                      // scrolling the page. Pinch (with two-finger pan)
+                      // and double-tap still zoom/move it.
                       interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate & ~InteractiveFlag.drag,
                       ),
                       onTap: (_, latLng) => _select(nearestPointIndex(pts, latLng.latitude, latLng.longitude)),
                     ),

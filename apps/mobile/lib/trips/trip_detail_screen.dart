@@ -664,9 +664,16 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     // Center-and-zoom sidesteps that fit calculation entirely.
     final isDegenerate =
         (bounds.north - bounds.south).abs() < 1e-6 && (bounds.east - bounds.west).abs() < 1e-6;
+    // No one-finger drag — this map is the header of trip detail's
+    // scrolling ListView, so a swipe starting on it has to scroll the
+    // page, not pan the map. Pinch (with two-finger pan) still works.
+    const interaction = InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.drag);
     final mapOptions = isDegenerate
-        ? MapOptions(initialCenter: routePoints.first, initialZoom: 16)
-        : MapOptions(initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)));
+        ? MapOptions(initialCenter: routePoints.first, initialZoom: 16, interactionOptions: interaction)
+        : MapOptions(
+            initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
+            interactionOptions: interaction,
+          );
 
     return ColoredBox(
       color: Noct.canvas,
