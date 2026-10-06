@@ -28,6 +28,7 @@ import '../theme/layout_prefs.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
 import '../vehicle/ble_connection_service.dart';
+import '../vehicles/add_vehicle_screen.dart';
 import 'camera_alerts.dart';
 import 'lean_angle_tracker.dart';
 import 'location_recorder.dart';
@@ -660,13 +661,30 @@ class _RecordingScreenState extends State<RecordingScreen> {
             child: _loadingVehicles
                 ? const Center(child: CircularProgressIndicator())
                 : _vehicles.isEmpty
-                ? const Center(
+                // A first-time rider's first tap on record lands here —
+                // offer the next step right away instead of sending them
+                // off to find the Garage tab.
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Add a vehicle first (Garage tab) before recording a trip.',
-                        style: TextStyle(color: Noct.n500, fontSize: 13),
-                        textAlign: TextAlign.center,
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Add the vehicle you\'re riding first — trips are recorded per vehicle.',
+                            style: TextStyle(color: Noct.n400, fontSize: 13.5),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 18),
+                          NoctOutlinedButton(
+                            label: 'Add a vehicle',
+                            icon: Ph.plus,
+                            expand: false,
+                            onPressed: () => Navigator.of(
+                              context,
+                            ).push(MaterialPageRoute(builder: (_) => const AddVehicleScreen())),
+                          ),
+                        ],
                       ),
                     ),
                   )
