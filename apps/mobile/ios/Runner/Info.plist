@@ -41,6 +41,10 @@
 	     has no effect. -->
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Used to keep recording your trip's route if you lock your phone or switch apps while riding.</string>
+	<!-- Only standard HTTPS (exempt) — declaring it here skips App Store
+	     Connect's export-compliance question on every TestFlight build. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
@@ -53,7 +57,10 @@
 	     create that iOS client in Google Cloud Console. Guest mode works
 	     without this being filled in — see auth/current_user.dart — so an
 	     iOS build with the placeholder left as-is still runs, it just
-	     can't complete Google sign-in. -->
+	     can't complete Google sign-in. CI (.github/workflows/) swaps in
+	     the real value when a GOOGLE_IOS_CLIENT_ID secret is set. The
+	     placeholder must stay a syntactically valid scheme (letters,
+	     digits, '.', '-', '+'), or App Store Connect rejects the upload. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -61,7 +68,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>REPLACE_WITH_REVERSED_IOS_CLIENT_ID</string>
+				<string>com.googleusercontent.apps.not-configured</string>
 			</array>
 		</dict>
 	</array>

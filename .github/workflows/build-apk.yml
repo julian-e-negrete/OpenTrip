@@ -81,6 +81,10 @@ jobs:
             `app-arm64-v8a-release.apk` for basically any Android phone
             from the last ~8 years — sideload it (enable "install unknown
             apps" for whatever app you downloaded it with) and open it.
+
+            iPhone: `OpenTrip-unsigned.ipa` installs with Sideloadly or
+            AltStore using your own Apple ID (re-install every 7 days) —
+            see docs/IOS_DISTRIBUTION.md. Or ask for a TestFlight invite.
           files: apps/mobile/build/app/outputs/flutter-apk/*.apk
 
   # Drives the real app on a real Android system — integration_test/
@@ -185,6 +189,39 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
-      - name: Build iOS (no code signing — compile check only)
+      - name: Set the Google Sign-In URL scheme
+        env:
+          GOOGLE_IOS_CLIENT_ID: ${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+        run: .github/scripts/ios-set-google-url-scheme.sh
+
+      # Compile check, and the build friends sideload: no code signing here
+      # (that needs an Apple account) — Sideloadly/AltStore sign it on
+      # install with the tester's own Apple ID. See docs/IOS_DISTRIBUTION.md.
+      - name: Build iOS (unsigned)
         working-directory: apps/mobile
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_WEB_CLIENT_ID }} \
+            --dart-define=GOOGLE_IOS_CLIENT_ID=${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+
+      - name: Package an unsigned .ipa
+        working-directory: apps/mobile/build/ios/iphoneos
+        run: |
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -qry OpenTrip-unsigned.ipa Payload
+
+      - name: Upload the .ipa as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opentrip-ios-unsigned
+          path: apps/mobile/build/ios/iphoneos/OpenTrip-unsigned.ipa
+
+      - name: Add the .ipa to the "Latest build" release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: apps/mobile/build/ios/iphoneos/OpenTrip-unsigned.ipa

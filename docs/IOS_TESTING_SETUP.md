@@ -1,5 +1,9 @@
 # Testing on iOS (no Mac of your own required — borrow one)
 
+> **Just want friends to try it?** You likely don't need this guide:
+> see [`IOS_DISTRIBUTION.md`](IOS_DISTRIBUTION.md) for TestFlight links
+> or the CI-built `.ipa`. This guide is for building from a Mac yourself.
+
 This project has never been built or run on iOS before — every feature
 in it was built and tested on Android only (see `/README.md`). The
 Dart/Flutter code and the iOS project files (`apps/mobile/ios/`) are set
