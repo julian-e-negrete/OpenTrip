@@ -111,8 +111,13 @@ class _RideAnalysisSectionState extends State<RideAnalysisSection> {
                       initialZoom: 16,
                       initialCameraFit:
                           degenerate ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(24)),
+                      // No one-finger drag: this map sits inside trip
+                      // detail's scrolling ListView, and a drag that
+                      // starts on it would pan the map instead of
+                      // scrolling the page. Pinch (with two-finger pan)
+                      // and double-tap still zoom/move it.
                       interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate & ~InteractiveFlag.drag,
                       ),
                       onTap: (_, latLng) => _select(nearestPointIndex(pts, latLng.latitude, latLng.longitude)),
                     ),
@@ -258,7 +263,7 @@ class _Legend extends StatelessWidget {
             BoxDecoration(color: Noct.bg.withValues(alpha: 0.85), borderRadius: BorderRadius.circular(Noct.rSm)),
         child: Row(
           children: [
-            Text('0 $unit', style: style),
+            Text(unit == '°' ? '0°' : '0 $unit', style: style),
             const SizedBox(width: 8),
             Expanded(
               child: Container(
@@ -270,7 +275,7 @@ class _Legend extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Text('${max.toStringAsFixed(0)} $unit', style: style),
+            Text(unit == '°' ? '${max.toStringAsFixed(0)}°' : '${max.toStringAsFixed(0)} $unit', style: style),
           ],
         ),
       ),
@@ -464,7 +469,7 @@ class _CornerRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 9),
         child: Row(
           children: [
-            _CornerBadge(rank: rank),
+            SizedBox(width: 20, height: 20, child: _CornerBadge(rank: rank)),
             const SizedBox(width: 12),
             Text('${corner.peakLeanDeg.toStringAsFixed(0)}°', style: num.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(width: 14),

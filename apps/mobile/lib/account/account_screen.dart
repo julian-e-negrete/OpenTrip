@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
+import '../auth/sign_in_prompt.dart';
 import '../auth/auth_service.dart';
 import '../auth/current_user.dart';
-import '../auth/login_screen.dart';
 import '../data/account_data_service.dart';
 import '../data/catalog/country_catalog.dart';
 import '../data/data_events.dart';
@@ -171,24 +171,27 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _signIn() async {
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => LoginScreen(onContinueAsGuest: () => Navigator.of(context).pop())));
+    await pushSignIn(context);
     if (mounted) await _load();
   }
 
   Future<void> _deleteAccount() async {
+    final guest = CurrentUser.instance.isGuest;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text(
-          'This permanently deletes every vehicle, trip, and photo — on '
-          'this device, and in the cloud if you\'re signed in and synced. '
-          'This cannot be undone.\n\n'
-          'If you\'re signed in with Google or email, this does not delete '
-          'the Google/email account itself — only this app\'s data. '
-          'You\'ll be signed out.',
+        // A guest has no account to delete — only what's on this device.
+        title: Text(guest ? 'Delete all local data?' : 'Delete account?'),
+        content: Text(
+          guest
+              ? 'This permanently deletes every vehicle, trip, and photo on '
+                    'this device. This cannot be undone.'
+              : 'This permanently deletes every vehicle, trip, and photo — on '
+                    'this device, and in the cloud if you\'re signed in and synced. '
+                    'This cannot be undone.\n\n'
+                    'If you\'re signed in with Google or email, this does not delete '
+                    'the Google/email account itself — only this app\'s data. '
+                    'You\'ll be signed out.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
@@ -419,13 +422,24 @@ class _AccountScreenState extends State<AccountScreen> {
                       ),
                     _PreferenceRow(
                       title: 'Sync now',
-                      subtitle: _syncing ? 'Syncing…' : _syncStatusText(),
-                      trailing: GestureDetector(
-                        onTap: _syncing ? null : _syncNow,
-                        child: _syncing
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n400))
-                            : const Icon(Ph.cloudArrowUp, size: 18, color: Noct.n400),
-                      ),
+                      // Guest data never leaves this device (see
+                      // sync/sync_service.dart's _canSync) — tapping used
+                      // to flash "Syncing…" and then silently revert to
+                      // "Not synced yet" with no explanation, reading as
+                      // a failed sync rather than an unavailable one.
+                      subtitle: guest
+                          ? 'Sign in to sync across devices'
+                          : (_syncing ? 'Syncing…' : _syncStatusText()),
+                      trailing: _syncing
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Noct.n400))
+                          : const Icon(Ph.cloudArrowUp, size: 18, color: Noct.n400),
+                      onTap: _syncing
+                          ? null
+                          : guest
+                              ? () => ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Sign in to sync your trips and vehicles across devices.')),
+                                )
+                              : _syncNow,
                     ),
                     // Debug-only affordance, not in the design handoff's
                     // Account spec — kept reachable now that the old
@@ -434,10 +448,8 @@ class _AccountScreenState extends State<AccountScreen> {
                     _PreferenceRow(
                       title: 'Debug logs',
                       subtitle: 'Low-level BLE connection activity',
-                      trailing: GestureDetector(
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogScreen())),
-                        child: const Icon(Icons.article_outlined, size: 18, color: Noct.n400),
-                      ),
+                      trailing: const Icon(Icons.article_outlined, size: 18, color: Noct.n400),
+                      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogScreen())),
                     ),
                   ],
                 ),
@@ -473,7 +485,7 @@ class _AccountScreenState extends State<AccountScreen> {
                       child: OutlinedButton(
                         onPressed: _busy ? null : _deleteAccount,
                         style: OutlinedButton.styleFrom(side: const BorderSide(color: Noct.n800), foregroundColor: Noct.n500),
-                        child: Text(_busy ? 'Deleting…' : 'Delete account'),
+                        child: Text(_busy ? 'Deleting…' : (guest ? 'Delete local data' : 'Delete account')),
                       ),
                     ),
                   ],
@@ -546,14 +558,20 @@ class _AppearanceBlock<T> extends StatelessWidget {
 }
 
 class _PreferenceRow extends StatelessWidget {
-  const _PreferenceRow({required this.title, required this.subtitle, required this.trailing});
+  const _PreferenceRow({required this.title, required this.subtitle, required this.trailing, this.onTap});
   final String title;
   final String subtitle;
   final Widget trailing;
 
+  /// Makes the whole row tappable, not just [trailing] — a row with a
+  /// title/subtitle and a small trailing icon reads as fully tappable
+  /// (this is a standard settings-row layout), but without this every
+  /// tap that missed the icon itself silently did nothing.
+  final VoidCallback? onTap;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final row = Container(
       decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Noct.n900, width: 1))),
       padding: const EdgeInsets.symmetric(vertical: 14),
       child: Row(
@@ -573,5 +591,8 @@ class _PreferenceRow extends StatelessWidget {
         ],
       ),
     );
+    final onTap = this.onTap;
+    if (onTap == null) return row;
+    return GestureDetector(onTap: onTap, behavior: HitTestBehavior.opaque, child: row);
   }
 }

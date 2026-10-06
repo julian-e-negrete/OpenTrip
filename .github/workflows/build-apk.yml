@@ -81,6 +81,10 @@ jobs:
             `app-arm64-v8a-release.apk` for basically any Android phone
             from the last ~8 years — sideload it (enable "install unknown
             apps" for whatever app you downloaded it with) and open it.
+
+            iPhone: `OpenTrip-unsigned.ipa` installs with Sideloadly or
+            AltStore using your own Apple ID (re-install every 7 days) —
+            see docs/IOS_DISTRIBUTION.md. Or ask for a TestFlight invite.
           files: apps/mobile/build/app/outputs/flutter-apk/*.apk
 
   # Drives the real app on a real Android system — integration_test/
@@ -100,6 +104,10 @@ jobs:
   # anything the app itself did.
   integration-test:
     runs-on: ubuntu-latest
+    # Emulator boot + two debug builds normally take ~25 minutes. Without
+    # a cap, a test stuck waiting (e.g. on a system dialog nobody can
+    # tap) holds the runner for GitHub's 6-hour maximum.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -118,15 +126,38 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
+      # Hardware acceleration for the emulator — without KVM it runs in
+      # software emulation, which is slow enough to miss the boot timeout
+      # (as run #41 did) or take minutes per APK install. This is the
+      # setup android-emulator-runner documents for Ubuntu runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Run integration tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
+          emulator-boot-timeout: 900
           api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_6
           working-directory: apps/mobile
-          script: flutter test integration_test/app_test.dart
+          # Pre-grant the runtime permissions the app asks for, so the test
+          # never sits behind an Android permission dialog — the app stops
+          # drawing frames while one is up, which leaves pumpAndSettle
+          # waiting forever. Installing a debug build first gives `pm
+          # grant` something to grant to; `flutter test` then reinstalls
+          # over it with `install -r`, which keeps granted permissions.
+          script: |
+            flutter build apk --debug
+            adb install -r build/app/outputs/flutter-apk/app-debug.apk
+            adb shell pm grant co.opentrip.opentrip_mobile android.permission.ACCESS_FINE_LOCATION
+            adb shell pm grant co.opentrip.opentrip_mobile android.permission.ACCESS_COARSE_LOCATION
+            adb shell pm grant co.opentrip.opentrip_mobile android.permission.POST_NOTIFICATIONS
+            flutter test integration_test/app_test.dart
 
   # Compile-only sanity check for iOS — this project has no way to build
   # or run iOS locally (see docs/IOS_TESTING_SETUP.md), so this is the
@@ -140,7 +171,11 @@ jobs:
   # to install and test a build). macOS runners are free/unlimited for
   # this repo since it's public.
   verify-ios:
-    runs-on: macos-15
+    # macos-26 for Xcode 26 / the iOS 26 SDK: device_info_plus (pulled in
+    # by vibration) calls an iOS 26 API since 12.4.0, which doesn't
+    # compile against macos-15's Xcode 16.
+    runs-on: macos-26
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -154,6 +189,39 @@ jobs:
         working-directory: apps/mobile
         run: flutter pub get
 
-      - name: Build iOS (no code signing — compile check only)
+      - name: Set the Google Sign-In URL scheme
+        env:
+          GOOGLE_IOS_CLIENT_ID: ${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+        run: .github/scripts/ios-set-google-url-scheme.sh
+
+      # Compile check, and the build friends sideload: no code signing here
+      # (that needs an Apple account) — Sideloadly/AltStore sign it on
+      # install with the tester's own Apple ID. See docs/IOS_DISTRIBUTION.md.
+      - name: Build iOS (unsigned)
         working-directory: apps/mobile
-        run: flutter build ios --release --no-codesign
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=GOOGLE_WEB_CLIENT_ID=${{ secrets.GOOGLE_WEB_CLIENT_ID }} \
+            --dart-define=GOOGLE_IOS_CLIENT_ID=${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+
+      - name: Package an unsigned .ipa
+        working-directory: apps/mobile/build/ios/iphoneos
+        run: |
+          mkdir -p Payload
+          cp -R Runner.app Payload/
+          zip -qry OpenTrip-unsigned.ipa Payload
+
+      - name: Upload the .ipa as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opentrip-ios-unsigned
+          path: apps/mobile/build/ios/iphoneos/OpenTrip-unsigned.ipa
+
+      - name: Add the .ipa to the "Latest build" release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          files: apps/mobile/build/ios/iphoneos/OpenTrip-unsigned.ipa

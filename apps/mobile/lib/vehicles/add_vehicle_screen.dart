@@ -122,6 +122,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       _type = type;
       _brand = null;
       _model = null;
+      _error = null;
     });
   }
 
@@ -334,10 +335,25 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
       DropdownButtonFormField<CatalogBrand>(
         initialValue: _brand,
         decoration: const InputDecoration(labelText: 'Brand', border: OutlineInputBorder()),
+        // A long list (the motorcycle brand list runs past 15 entries,
+        // "Other / not listed" always last) triggered a real Flutter
+        // DropdownButton quirk: with nothing selected yet, the framework
+        // opens the menu scrolled so the last item sits right at the
+        // very bottom edge of its own clip rect, rendering as a
+        // half-height sliver until manually scrolled past. Explicitly
+        // capping the menu height is the documented mitigation — it
+        // changes how the framework computes that initial scroll
+        // offset, keeping every item (including the last one) fully
+        // visible instead of clipped right at the edge.
+        menuMaxHeight: 400,
         items: brands.map((b) => DropdownMenuItem(value: b, child: Text(b.name))).toList(),
         onChanged: (b) => setState(() {
           _brand = b;
           _model = null;
+          // Was previously left showing "Pick a brand and model" until
+          // the next failed Save attempt re-evaluated it, well after the
+          // rider had actually already fixed it.
+          _error = null;
         }),
       ),
       const SizedBox(height: 16),
@@ -359,7 +375,10 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             items: _brand!.models
                 .map((m) => DropdownMenuItem(value: m, child: Text(m.name)))
                 .toList(),
-            onChanged: (m) => setState(() => _model = m),
+            onChanged: (m) => setState(() {
+              _model = m;
+              _error = null;
+            }),
           ),
     ];
   }

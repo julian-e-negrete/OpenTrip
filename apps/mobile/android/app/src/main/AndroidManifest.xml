@@ -37,6 +37,16 @@
          foreground-service one above. Requested in
          trip/location_recorder.dart's ensureReady(). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the app ask the OS (a standard system dialog, not a
+         settings deep-link) to stop battery-optimizing it — a real gap
+         found from actual synced ride data: some OEM battery managers
+         throttle GPS fixes down to one every 30s-plus even with the
+         foreground service above correctly running. Legitimate use here
+         (Play Store policy-compliant) since continuous background GPS
+         recording is this app's core purpose, not incidental. Requested
+         at most once ever, see trip/location_recorder.dart's
+         _requestBatteryOptimizationExemptionOnce(). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- geolocator's background position stream (used for the same
          foreground GPS recording above) needs a wake lock to keep the CPU
          running while the screen is off. Previously came in transitively
@@ -54,10 +64,18 @@
     <!-- Supabase auth/sync network calls. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Saving a shared trip card to the device's gallery (trips/
+         stat_card_screen.dart, via the `gal` package) — only needed on
+         API 29 and below; from API 30 scoped storage means the platform
+         handles this without a declared permission at all. -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+
     <application
         android:label="opentrip_mobile"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

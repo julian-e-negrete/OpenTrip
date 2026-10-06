@@ -55,6 +55,11 @@ abstract final class Noct {
   // Radii
   static const rSm = 4.0, rMd = 8.0, rLg = 14.0;
 
+  /// How far HomeShell's raised record control rises above the bottom
+  /// bar. Anything a tab pins to the bottom of its body has to clear this,
+  /// or the control covers its middle.
+  static const recordControlOverhang = 24.0;
+
   /// Elevation is a hairline edge, never a drop shadow, at rest.
   static const shadowSm = <BoxShadow>[];
   static Border get edgeSm => Border.all(color: n800, width: 1);
@@ -99,7 +104,7 @@ abstract final class Noct {
 abstract final class AppTheme {
   static ThemeData get dark {
     final base = ThemeData.dark(useMaterial3: true);
-    final scheme = const ColorScheme.dark(
+    const scheme = ColorScheme.dark(
       brightness: Brightness.dark,
       primary: Noct.accent,
       onPrimary: Noct.a100,

@@ -158,6 +158,22 @@ class Trip {
 
   double get distanceKm => distanceMeters / 1000.0;
 
+  /// avgSpeedKph (distance/duration) and maxSpeedKph (the single
+  /// highest instantaneous GPS reading) are computed independently and
+  /// should always satisfy avg <= max for any real ride — but a GPS
+  /// glitch that gets wholesale-accepted once enough time has passed
+  /// (see trip/location_recorder.dart's _maxPlausibleSpeedKph comment)
+  /// can inflate distance, and therefore avg, without a matching
+  /// instantaneous speed spike. Never actually true physically, so this
+  /// clamps what's *shown* rather than let a UI display something
+  /// literally impossible — doesn't touch the stored/synced value.
+  double? get displayAvgSpeedKph {
+    final avg = avgSpeedKph;
+    final max = maxSpeedKph;
+    if (avg != null && max != null && avg > max) return max;
+    return avg;
+  }
+
   Trip finish({
     required DateTime endedAt,
     required double distanceMeters,

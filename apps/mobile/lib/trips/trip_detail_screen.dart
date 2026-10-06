@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../auth/current_user.dart';
 import '../data/models/trip.dart';
 import '../data/models/trip_music_event.dart';
 import '../data/models/trip_point.dart';
@@ -11,8 +12,12 @@ import '../theme/app_theme.dart';
 import '../theme/dark_tile_layer.dart';
 import '../theme/date_fmt.dart';
 import '../theme/layout_prefs.dart';
+import '../theme/num_fmt.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/orphan_recovery.dart';
+import '../trip/recording_controller.dart';
+import '../trip/ride_analysis.dart';
 import '../trip/route_replay.dart';
 import 'ride_analysis_section.dart';
 import 'stat_card_screen.dart';
@@ -30,10 +35,13 @@ class TripDetailScreen extends StatefulWidget {
 class _TripDetailScreenState extends State<TripDetailScreen> {
   List<TripPoint>? _points;
   List<TripMusicEvent>? _musicEvents;
+  late Trip _trip;
+  bool _recovering = false;
 
   @override
   void initState() {
     super.initState();
+    _trip = widget.trip;
     _loadPoints();
     _loadMusicEvents();
   }
@@ -42,21 +50,73 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     // TripRepository.pointsForTrip falls back to a remote pull if this
     // trip has no local points yet (e.g. it arrived via cloud sync from
     // another device) — see sync/sync_service.dart.
-    final points = await TripRepository.instance.pointsForTrip(widget.trip.id);
+    final points = await TripRepository.instance.pointsForTrip(_trip.id);
     if (mounted) setState(() => _points = points);
   }
 
   Future<void> _loadMusicEvents() async {
-    final events = await TripRepository.instance.musicEventsForTrip(widget.trip.id);
+    final events = await TripRepository.instance.musicEventsForTrip(_trip.id);
     if (mounted) setState(() => _musicEvents = events);
   }
 
+  /// True for a trip whose recording session died before Stop & Save
+  /// ever ran — unfinished, but with no live recording behind it in
+  /// this app session (RecordingController.instance.isRecording is
+  /// process-wide, and there's only ever one active recording at a
+  /// time). Its GPS points were already saved as they came in, so
+  /// there's real data to offer recovering it from — see
+  /// trip/orphan_recovery.dart.
+  bool get _orphaned => !_trip.isFinished && !RecordingController.instance.isRecording.value;
+
+  Future<void> _recover() async {
+    setState(() => _recovering = true);
+    try {
+      final userId = await CurrentUser.instance.id();
+      final recovered = await OrphanRecovery.recover(userId: userId, trip: _trip);
+      if (!mounted) return;
+      setState(() => _trip = recovered);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Trip recovered: ${recovered.distanceKm.toStringAsFixed(2)} km')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Couldn\'t recover this trip: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _recovering = false);
+    }
+  }
+
   Future<void> _confirmDelete() async {
+    // See trips/trip_history_screen.dart's matching guard: only block
+    // deletion when a recording is genuinely live in this app session
+    // right now, not every unfinished trip — an unfinished trip with no
+    // live recording behind it is an orphan (the app died before Stop &
+    // Save ever ran) and must stay deletable, or it's stuck forever.
+    if (!_trip.isFinished && RecordingController.instance.isRecording.value) {
+      // Deleting the row here wouldn't stop the actual recording (owned by
+      // trip/recording_screen.dart's live LocationRecorder), leaving a
+      // dead trip that finishTrip() can never save into and losing the
+      // whole ride.
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Still recording'),
+          content: const Text(
+            'This trip is still being recorded. Stop it from the Record tab before deleting it.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK')),
+          ],
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Delete trip?'),
-        content: Text('This ${widget.trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
+        content: Text('This ${_trip.distanceKm.toStringAsFixed(2)} km trip will be permanently deleted.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
           TextButton(
@@ -68,20 +128,20 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       ),
     );
     if (confirmed == true) {
-      await TripRepository.instance.deleteTrip(widget.trip.id);
+      await TripRepository.instance.deleteTrip(_trip.id);
       if (mounted) Navigator.of(context).pop();
     }
   }
 
   void _share() {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => StatCardScreen(trip: widget.trip, vehicle: widget.vehicle, points: _points)),
+      MaterialPageRoute(builder: (_) => StatCardScreen(trip: _trip, vehicle: widget.vehicle, points: _points)),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final trip = widget.trip;
+    final trip = _trip;
     return ListenableBuilder(
       listenable: LayoutPrefs.instance,
       builder: (context, _) {
@@ -98,6 +158,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   onDelete: _confirmDelete,
                 ),
               ),
+              if (_orphaned)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
+                  child: _OrphanBanner(recovering: _recovering, onRecover: _recover),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(18, 18, 18, 0),
                 child: _Headline(trip: trip, vehicle: widget.vehicle),
@@ -115,6 +180,63 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Shown on a trip whose recording session died before Stop & Save ever
+/// ran (see _TripDetailScreenState._orphaned) — its GPS points/telemetry
+/// are already saved, they just never got folded into a finished trip.
+/// Offers to do that now via trip/orphan_recovery.dart instead of
+/// leaving the rider looking at an empty "0.0 km in 0m" trip with no
+/// explanation and no way to get real numbers out of it.
+class _OrphanBanner extends StatelessWidget {
+  const _OrphanBanner({required this.recovering, required this.onRecover});
+  final bool recovering;
+  final VoidCallback onRecover;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Noct.surface,
+        borderRadius: BorderRadius.circular(Noct.rMd),
+        border: Border.all(color: Noct.divider),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Ph.warning, size: 18, color: Noct.n400),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This trip never finished recording',
+                  style: TextStyle(fontSize: 13, color: Noct.text, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 3),
+                const Text(
+                  'The route and telemetry were saved, but the app closed before it could be stopped and saved properly.',
+                  style: TextStyle(fontSize: 11.5, color: Noct.n500),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: recovering ? null : onRecover,
+                    child: recovering
+                        ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('Recover this trip'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -140,7 +262,7 @@ class _Headline extends StatelessWidget {
             children: [
               TextSpan(text: trip.distanceKm.toStringAsFixed(1), style: Noct.stat(56)),
               TextSpan(
-                text: ' km in ${_fmtDuration(trip.durationSeconds)}',
+                text: ' km in ${fmtDuration(trip.durationSeconds)}',
                 style: const TextStyle(fontSize: 14, color: Noct.n400, fontWeight: FontWeight.w400),
               ),
             ],
@@ -150,12 +272,6 @@ class _Headline extends StatelessWidget {
     );
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final h = d.inHours;
-    final m = d.inMinutes % 60;
-    return h > 0 ? '${h}h ${m}m' : '${m}m';
-  }
 }
 
 /// Variant A — the default: six stat panels in a 2-column grid. Design
@@ -171,26 +287,37 @@ class _StatGrid extends StatelessWidget {
         ? '${trip.bleMinWaterTemperatureC}–${trip.bleMaxWaterTemperatureC}°'
         : null;
     final cells = [
-      ('Avg km/h', trip.avgSpeedKph?.toStringAsFixed(0), null),
-      ('Max km/h', trip.maxSpeedKph?.toStringAsFixed(0), null),
-      ('Max lean', leanDeg == null ? null : '${leanDeg.toStringAsFixed(0)}°', Noct.a300),
-      ('Max rpm', trip.bleMaxRpm?.toString(), null),
-      ('Hardest brake', trip.behaviorMaxBrakeG == null ? null : '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g', null),
-      ('Water temp', waterRange, null),
+      ('Avg km/h', trip.displayAvgSpeedKph?.toStringAsFixed(0) ?? '—', null),
+      ('Max km/h', trip.maxSpeedKph?.toStringAsFixed(0) ?? '—', null),
+      // The rest only when this trip actually has them — a GPS-only car
+      // trip shouldn't show a wall of "—" tiles (the report variant below
+      // already skips empty rows the same way).
+      if (leanDeg != null) ('Max lean', '${leanDeg.toStringAsFixed(0)}°', Noct.a300),
+      if (trip.bleMaxRpm != null) ('Max rpm', fmtThousands(trip.bleMaxRpm!), null),
+      if (trip.behaviorMaxBrakeG != null) ('Hardest brake', '${trip.behaviorMaxBrakeG!.toStringAsFixed(2)}g', null),
+      if (waterRange != null) ('Water temp', waterRange, null),
     ];
+    // Height from the content (panel padding + value + label), scaled with
+    // the rider's text size — a width-derived aspect ratio left most of
+    // each tile empty on wide phones.
+    final tileHeight = 26 + MediaQuery.textScalerOf(context).scale(46);
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 18, 14, 0),
-      child: GridView.count(
-        crossAxisCount: 2,
+      child: GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: 9,
-        crossAxisSpacing: 9,
-        childAspectRatio: 1.7,
-        children: [
-          for (final (label, value, color) in cells)
-            NoctPanel(child: NoctStat(value: value ?? '—', label: label, valueSize: 24, valueColor: color)),
-        ],
+        padding: EdgeInsets.zero,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 9,
+          crossAxisSpacing: 9,
+          mainAxisExtent: tileHeight,
+        ),
+        itemCount: cells.length,
+        itemBuilder: (context, i) {
+          final (label, value, color) = cells[i];
+          return NoctPanel(child: NoctStat(value: value, label: label, valueSize: 24, valueColor: color));
+        },
       ),
     );
   }
@@ -204,7 +331,7 @@ class _StatReport extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ride = [
-      ('Average speed', trip.avgSpeedKph == null ? null : '${trip.avgSpeedKph!.toStringAsFixed(0)} km/h'),
+      ('Average speed', trip.displayAvgSpeedKph == null ? null : '${trip.displayAvgSpeedKph!.toStringAsFixed(0)} km/h'),
       ('Max speed', trip.maxSpeedKph == null ? null : '${trip.maxSpeedKph!.toStringAsFixed(0)} km/h'),
       ('GPS points', '${trip.pointCount}'),
     ];
@@ -480,16 +607,57 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     if (_controller.isAnimating) _controller.forward();
   }
 
+  /// Back/share/delete — the only way off this screen and the only way
+  /// to delete a trip from its own detail view. Previously only rendered
+  /// once real route points were loaded: a trip with no GPS points at
+  /// all (GPS never got a fix, or one of the recording-interruption bugs
+  /// elsewhere in this app) hit the early returns below and never got
+  /// this row at all, leaving no in-screen way back and no way to delete
+  /// it short of the system back gesture plus a swipe on the trip list.
+  Widget _chipRow(BuildContext context) {
+    return Positioned(
+      // The hero map is deliberately full-bleed under the status
+      // bar/notch, but these chips have to be real tap targets —
+      // without the safe-area inset they render (and hit-test)
+      // right under the system status bar, unreachable.
+      top: 12 + MediaQuery.paddingOf(context).top,
+      left: 10,
+      right: 10,
+      child: Row(
+        children: [
+          _MapChip(icon: Ph.arrowLeft, onTap: widget.onBack),
+          const Spacer(),
+          _MapChip(icon: Ph.export_, onTap: widget.onShare),
+          const SizedBox(width: 8),
+          _MapChip(icon: Ph.trash, onTap: widget.onDelete),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final pts = widget.points;
     if (pts == null) {
-      return const ColoredBox(color: Noct.canvas, child: Center(child: CircularProgressIndicator()));
+      return ColoredBox(
+        color: Noct.canvas,
+        child: Stack(
+          children: [
+            const Center(child: CircularProgressIndicator()),
+            _chipRow(context),
+          ],
+        ),
+      );
     }
     if (pts.isEmpty) {
-      return const ColoredBox(
+      return ColoredBox(
         color: Noct.canvas,
-        child: Center(child: Text('No route recorded for this trip.', style: TextStyle(color: Noct.n500))),
+        child: Stack(
+          children: [
+            const Center(child: Text('No route recorded for this trip.', style: TextStyle(color: Noct.n500))),
+            _chipRow(context),
+          ],
+        ),
       );
     }
 
@@ -503,9 +671,16 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     // Center-and-zoom sidesteps that fit calculation entirely.
     final isDegenerate =
         (bounds.north - bounds.south).abs() < 1e-6 && (bounds.east - bounds.west).abs() < 1e-6;
+    // No one-finger drag — this map is the header of trip detail's
+    // scrolling ListView, so a swipe starting on it has to scroll the
+    // page, not pan the map. Pinch (with two-finger pan) still works.
+    const interaction = InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.drag);
     final mapOptions = isDegenerate
-        ? MapOptions(initialCenter: routePoints.first, initialZoom: 16)
-        : MapOptions(initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)));
+        ? MapOptions(initialCenter: routePoints.first, initialZoom: 16, interactionOptions: interaction)
+        : MapOptions(
+            initialCameraFit: CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(32)),
+            interactionOptions: interaction,
+          );
 
     return ColoredBox(
       color: Noct.canvas,
@@ -587,24 +762,7 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
                   ),
                 ),
               ),
-              Positioned(
-                // The hero map is deliberately full-bleed under the status
-                // bar/notch, but these chips have to be real tap targets —
-                // without the safe-area inset they render (and hit-test)
-                // right under the system status bar, unreachable.
-                top: 12 + MediaQuery.paddingOf(context).top,
-                left: 10,
-                right: 10,
-                child: Row(
-                  children: [
-                    _MapChip(icon: Ph.arrowLeft, onTap: widget.onBack),
-                    const Spacer(),
-                    _MapChip(icon: Ph.export_, onTap: widget.onShare),
-                    const SizedBox(width: 8),
-                    _MapChip(icon: Ph.trash, onTap: widget.onDelete),
-                  ],
-                ),
-              ),
+              _chipRow(context),
               Positioned(
                 left: 14,
                 bottom: 64,
@@ -678,7 +836,8 @@ class _TelemetryCapsuleState extends State<_TelemetryCapsule> {
       ('km/h', speed?.toStringAsFixed(0), null),
       ('rpm', point.bleRpm?.toString(), null),
       ('gear', point.bleGear?.toString(), null),
-      ('lean', point.bleLeanDeg == null ? null : '${point.bleLeanDeg!.toStringAsFixed(0)}°', Noct.a300),
+      // Bike IMU when connected, else the phone's estimate ("Track lean angle").
+      ('lean', effectiveLeanDeg(point) == null ? null : '${effectiveLeanDeg(point)!.toStringAsFixed(0)}°', Noct.a300),
     ];
     // Every other field this point carries — tapping the capsule reveals
     // these too, so what changed during the ride (throttle, TCS

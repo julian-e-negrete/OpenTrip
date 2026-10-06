@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/models/trip_point.dart';
 import '../logging/error_reporter.dart';
@@ -103,6 +105,22 @@ class LocationRecorder {
 
   LocationRecorder({this.showForegroundNotification = true});
 
+  /// Set by [ensureReady] right before this recording starts — whether
+  /// Android's *global* power-save mode was on at that moment. Unlike
+  /// the per-app battery-optimization exemption this class already
+  /// requests (see [_requestBatteryOptimizationExemptionOnce]), power-
+  /// save mode throttles background location updates for every app
+  /// regardless of that exemption, and wasn't visible anywhere in this
+  /// app until now — a real rider's BLE-connected ride landed GPS fixes
+  /// 30-70s apart despite the exemption being granted, while a non-BLE
+  /// ride the same day on the same phone got a clean ~1s the whole way
+  /// through; the extra background BLE radio use plausibly pushed
+  /// battery drain into whatever threshold triggers this. Surfaced so
+  /// trip/recording_screen.dart can warn the rider instead of silently
+  /// recording a sparser trip.
+  bool _powerSaveModeOn = false;
+  bool get powerSaveModeOn => _powerSaveModeOn;
+
   final _pointsController = StreamController<TripPoint>.broadcast();
   final _statsController = StreamController<RecordingStats>.broadcast();
   final _cameraAlerts = CameraAlertService();
@@ -121,6 +139,13 @@ class LocationRecorder {
   TripPoint? _lastAcceptedPoint;
   int _rejectedAccuracyCount = 0;
   int _rejectedGlitchCount = 0;
+
+  // Diagnostics for telling real GNSS fixes from network-derived ones: a
+  // network location carries no speed, so geolocator reports speed 0 and
+  // speedAccuracy 0 — exactly what sparse pocket-carried rides showed.
+  DateTime? _lastRawFixAt;
+  int _fixesWithSpeedAccuracy = 0;
+  int _fixesWithoutSpeedAccuracy = 0;
 
   // Driving-behavior stats (trip/driving_math.dart) — GPS-derived, so
   // available for every vehicle, not just BLE-equipped bikes. _lastHeadingDeg
@@ -172,7 +197,9 @@ class LocationRecorder {
 
   /// Checks location services + permission, requesting if needed. Throws a
   /// descriptive [StateError] instead of surfacing a raw plugin exception.
-  static Future<void> ensureReady() async {
+  /// Returns whether Android's global power-save mode is currently on —
+  /// see [powerSaveModeOn]'s doc comment for why this matters.
+  static Future<bool> ensureReady() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       logBuffer.add('GPS: location services are OFF');
       throw StateError('Location services are off — enable them in system settings.');
@@ -200,11 +227,74 @@ class LocationRecorder {
         logBuffer.add('GPS: notification permission after request: $result');
       }
     }
+
+    await _requestBatteryOptimizationExemptionOnce();
+    return _checkPowerSaveMode();
+  }
+
+  /// No exemption/permission exists for this the way there is for
+  /// battery-optimization — power-save mode is a rider-controlled global
+  /// toggle (manual, or an OEM's own auto-enable-below-X% rule), so the
+  /// most this app can do is surface it. Best-effort: `battery_plus`
+  /// only implements this on Android/iOS/macOS/Windows, and a rider
+  /// should still be able to start a recording even if the check itself
+  /// fails on some device.
+  static Future<bool> _checkPowerSaveMode() async {
+    try {
+      final onBatterySave = await Battery().isInBatterySaveMode;
+      final level = await Battery().batteryLevel;
+      logBuffer.add('GPS: power save mode is ${onBatterySave ? "ON" : "off"} (battery $level%)');
+      return onBatterySave;
+    } catch (e) {
+      logBuffer.add('GPS: power save mode check failed — $e');
+      return false;
+    }
+  }
+
+  static const _batteryOptimizationAskedKey = 'battery_optimization_exemption_asked';
+
+  /// A foreground service + WAKE_LOCK is what Android's own docs say is
+  /// needed to keep location updates flowing in the background — and it
+  /// usually is. In the field, though, a real ride can still see GPS
+  /// fixes land 30s-plus apart instead of the ~1s this app actually
+  /// configures (see location_recorder.dart's own _buildLocationSettings)
+  /// — confirmed directly from a real user's synced trip data, several
+  /// real rides in a row, all with the screen off/locked the whole time.
+  /// That's the signature of an OEM battery manager throttling the
+  /// process underneath the foreground service's own protection, not a
+  /// bug in this app's request itself. REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+  /// is the standard, Play-Store-compliant escape hatch for exactly this
+  /// — legitimate here since continuous background GPS recording is this
+  /// app's core purpose, not an incidental background task (the same
+  /// justification turn-by-turn nav and fitness-tracking apps use for
+  /// the same permission). Asked at most once ever, not on every
+  /// recording start — the system dialog has no "don't ask again" of its
+  /// own, and re-prompting every ride would just be naggy for a rider
+  /// who already said no.
+  static Future<void> _requestBatteryOptimizationExemptionOnce() async {
+    if (!Platform.isAndroid) return;
+    try {
+      final status = await Permission.ignoreBatteryOptimizations.status;
+      logBuffer.add('GPS: battery optimization exemption is $status');
+      if (status.isGranted) return;
+
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_batteryOptimizationAskedKey) ?? false) return;
+      await prefs.setBool(_batteryOptimizationAskedKey, true);
+
+      final result = await Permission.ignoreBatteryOptimizations.request();
+      logBuffer.add('GPS: battery optimization exemption after request: $result');
+    } catch (e, st) {
+      // Best-effort — a rider should still be able to start a recording
+      // even if this particular OS-level ask fails or isn't supported.
+      logBuffer.add('GPS: battery optimization exemption request failed — $e');
+      unawaited(ErrorReporter.report('GPS: battery optimization exemption', e, st));
+    }
   }
 
   Future<void> start(String tripId) async {
     if (isRecording) return;
-    await ensureReady();
+    _powerSaveModeOn = await ensureReady();
 
     _tripId = tripId;
     _startedAt = DateTime.now();
@@ -214,6 +304,9 @@ class LocationRecorder {
     _lastAcceptedPoint = null;
     _rejectedAccuracyCount = 0;
     _rejectedGlitchCount = 0;
+    _lastRawFixAt = null;
+    _fixesWithSpeedAccuracy = 0;
+    _fixesWithoutSpeedAccuracy = 0;
     _cameraAlerts.resetForNewTrip();
     _lastHeadingDeg = null;
     _maxAccelMps2 = null;
@@ -308,6 +401,20 @@ class LocationRecorder {
     // (trip/camera_alerts.dart) doesn't need the same precision as
     // distance accumulation does.
     unawaited(_cameraAlerts.onPosition(position));
+
+    final rawNow = DateTime.now();
+    final sinceLast = rawNow.difference(_lastRawFixAt ?? _startedAt ?? rawNow);
+    _lastRawFixAt = rawNow;
+    final hasSpeedAccuracy = position.speedAccuracy > 0;
+    hasSpeedAccuracy ? _fixesWithSpeedAccuracy++ : _fixesWithoutSpeedAccuracy++;
+    // Only slow arrivals get their own line, so a healthy ~1s ride adds
+    // nothing while a sparse one shows every gap.
+    if (sinceLast.inSeconds >= 10) {
+      logBuffer.add(
+        'GPS: fix after ${sinceLast.inSeconds}s — speed ${(position.speed * 3.6).toStringAsFixed(0)}km/h, '
+        'speedAccuracy ${position.speedAccuracy.toStringAsFixed(1)}, accuracy ${position.accuracy.toStringAsFixed(0)}m',
+      );
+    }
 
     if (position.accuracy > _maxAcceptableAccuracyMeters) {
       _rejectedAccuracyCount++;
@@ -431,7 +538,8 @@ class LocationRecorder {
   Future<RecordingStats> stop() async {
     logBuffer.add(
       'GPS: stopping — accepted=$_seq accuracy-rejected=$_rejectedAccuracyCount '
-      'glitch-rejected=$_rejectedGlitchCount distance=${(_distanceMeters / 1000).toStringAsFixed(2)}km',
+      'glitch-rejected=$_rejectedGlitchCount distance=${(_distanceMeters / 1000).toStringAsFixed(2)}km '
+      'fixes-with-speedAccuracy=$_fixesWithSpeedAccuracy without=$_fixesWithoutSpeedAccuracy',
     );
     await _positionSub?.cancel();
     _positionSub = null;

@@ -82,11 +82,15 @@ Supabase dashboard and stays there.
      testing on your own device). Unlike the Android client, this one's ID
      **is** referenced directly:
      - Paste it as `GOOGLE_IOS_CLIENT_ID` in the build command below.
-     - Reverse it (`1234-abc.apps.googleusercontent.com` becomes
+     - For CI builds (the .ipa and TestFlight), add it as a
+       `GOOGLE_IOS_CLIENT_ID` repo secret — the workflow reverses it and
+       writes it into `Info.plist` for you.
+     - For a local Xcode build, reverse it yourself
+       (`1234-abc.apps.googleusercontent.com` becomes
        `com.googleusercontent.apps.1234-abc`) and paste that into
        `apps/mobile/ios/Runner/Info.plist`, replacing the
-       `REPLACE_WITH_REVERSED_IOS_CLIENT_ID` placeholder already there
-       under `CFBundleURLTypes`.
+       `com.googleusercontent.apps.not-configured` placeholder under
+       `CFBundleURLTypes`.
 4. Back in **Supabase Dashboard → Authentication → Sign In / Providers →
    Google**: enable it, paste the **Web** client's Client ID and Client
    Secret (not the Android one).

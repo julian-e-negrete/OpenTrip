@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../auth/sign_in_prompt.dart';
 import '../auth/current_user.dart';
-import '../crew/crews_screen.dart';
 import '../friends/friends_screen.dart';
 import '../sync/sync_service.dart';
 import '../theme/app_theme.dart';
@@ -82,15 +82,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           ],
         ),
-        body: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Text(
-              'Sign in to see how you rank against other riders.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Noct.n500, fontSize: 13),
-            ),
-          ),
+        body: SignInPrompt(
+          icon: Ph.ranking,
+          title: 'See where you rank',
+          message: 'Leaderboards compare distance, territory and racing times with other riders — they need an account.',
+          onSignedIn: () {
+            setState(() {});
+            _load();
+          },
         ),
       );
     }
@@ -110,11 +109,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   if (mounted) _load();
                 },
               ),
-              IconButton(
-                icon: const Icon(Ph.usersThree),
-                tooltip: 'Crews',
-                onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CrewsScreen())),
-              ),
             ],
           ),
           body: _loading
@@ -122,7 +116,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.only(bottom: Noct.recordControlOverhang + 8),
                     children: [
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),

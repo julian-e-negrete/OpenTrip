@@ -190,9 +190,16 @@ class NoctSegmentedControl<T> extends StatelessWidget {
     if (wrap) {
       return Wrap(spacing: 7, runSpacing: 7, children: chips);
     }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [for (final c in chips) Padding(padding: const EdgeInsets.only(right: 7), child: c)],
+    // Actually scrollable, not just "fixed" — enough options (a rider
+    // with several vehicles, say) previously overflowed a plain Row with
+    // no way to reach the clipped ones, contradicting this class's own
+    // doc comment above.
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [for (final c in chips) Padding(padding: const EdgeInsets.only(right: 7), child: c)],
+      ),
     );
   }
 }

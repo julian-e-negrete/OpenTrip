@@ -50,6 +50,25 @@ class BleConnectionService {
   static const _maxAutoReconnectAttempts = 3;
   int _reconnectAttempt = 0;
 
+  // A real bike found in production (2026-09-09, via a signed-in user's
+  // synced trip): the GATT link itself can stay nominally "connected"
+  // (transport.connectionState never fires false, so _onLinkStateChanged
+  // never runs) while the bike simply stops sending its live telemetry
+  // frame (0x4A/ridingLogMid) for the rest of the ride — RSSI/vibration
+  // dropout, a firmware hiccup, whatever the cause. Confirmed directly
+  // from real trip data: one 27-minute ride had ble_speed_kph/ble_rpm
+  // frozen at the exact same value for 212 of 234 points (the last 24
+  // minutes straight) while GPS speed kept varying normally throughout —
+  // the stale reading kept getting stamped onto every point because
+  // isConnected stayed true the whole time. RidingTelemetry.timestamp is
+  // set only when a real 0x4A frame is parsed (kawasaki_client.dart's
+  // _handleNotify), so it's the right signal to watch: if it stops
+  // advancing for this long while nominally connected, the link is dead
+  // in every way that matters even though the OS hasn't said so yet —
+  // treat it exactly like _onLinkStateChanged(false) would.
+  static const _staleTelemetryTimeout = Duration(seconds: 15);
+  Timer? _staleWatchdog;
+
   BleConnectionState get state => stateNotifier.value;
   bool get isConnected => state == BleConnectionState.connected;
   bool get isBusy => state == BleConnectionState.scanning || state == BleConnectionState.connecting;
@@ -69,7 +88,7 @@ class BleConnectionService {
       await KawasakiConnector.ensurePermissions();
       final result = await KawasakiConnector.findBike(onLog: onLog);
       if (result == null) {
-        throw StateError('No Kawasaki-* bike found nearby. Make sure it\'s on and in range.');
+        throw StateError('No Kawasaki bike found nearby. Make sure it\'s on and in range.');
       }
       stateNotifier.value = BleConnectionState.connecting;
       final client = await KawasakiConnector.connect(result: result, onLog: onLog);
@@ -79,6 +98,7 @@ class BleConnectionService {
       _reconnectAttempt = 0;
       stateNotifier.value = BleConnectionState.connected;
       unawaited(BleKeepAliveService.instance.start());
+      _startStaleWatchdog();
     } catch (e) {
       // StateError/Exception's toString() prefixes the message with
       // "Bad state: "/"Exception: " — meant for a stack trace, not a
@@ -92,6 +112,7 @@ class BleConnectionService {
   }
 
   Future<void> disconnect() async {
+    _stopStaleWatchdog();
     // Unsubscribe from the link-state stream first — otherwise the GATT
     // disconnect this triggers would itself fire _onLinkStateChanged,
     // which would read as an *unexpected* drop and kick off an auto-
@@ -117,10 +138,22 @@ class BleConnectionService {
   }
 
   Future<void> _handleUnexpectedDisconnect() async {
+    _stopStaleWatchdog();
     await _linkSub?.cancel();
     _linkSub = null;
     await _telemetrySub?.cancel();
     _telemetrySub = null;
+    // The old client (and its transport's live characteristic-notification
+    // subscriptions — see flutter_blue_plus_transport.dart's _notifySubs)
+    // was previously just dropped here, not disposed: disconnect() is the
+    // only other place that ever called _client.dispose(), and this path
+    // isn't that. dispose() -> transport.disconnect() is safe to call on
+    // an already-dropped link (guarded by isConnected there), so this is
+    // a pure cleanup, not a behavior change to the reconnect flow itself.
+    // On a bike that drops in and out of range repeatedly, never cleaning
+    // this up meant every dropped connection left its old notification
+    // listener alive and leaking for the rest of the ride.
+    unawaited(_client?.dispose());
     _client = null;
     telemetryNotifier.value = null;
 
@@ -145,6 +178,7 @@ class BleConnectionService {
       // would be a harmless no-op (start() is idempotent) if it somehow
       // ever weren't.
       unawaited(BleKeepAliveService.instance.start());
+      _startStaleWatchdog();
     } catch (e, st) {
       if (_reconnectAttempt >= _maxAutoReconnectAttempts) {
         logBuffer.add('BLE: auto-reconnect gave up after $_reconnectAttempt attempt(s) — $e');
@@ -160,5 +194,36 @@ class BleConnectionService {
       await Future<void>.delayed(const Duration(seconds: 3));
       unawaited(_handleUnexpectedDisconnect());
     }
+  }
+
+  void _startStaleWatchdog() {
+    _staleWatchdog?.cancel();
+    _staleWatchdog = Timer.periodic(const Duration(seconds: 5), (_) => _checkTelemetryFreshness());
+  }
+
+  void _stopStaleWatchdog() {
+    _staleWatchdog?.cancel();
+    _staleWatchdog = null;
+  }
+
+  /// See the doc comment on [_staleTelemetryTimeout]: a live-but-silent
+  /// bike is otherwise indistinguishable from a genuinely fine connection
+  /// with nothing new to report, so this is the only thing that catches
+  /// it. Deliberately does nothing until at least one real frame has ever
+  /// arrived ([telemetryNotifier] stays null until then) — the scan +
+  /// GATT connect + handshake before that can easily take longer than
+  /// the timeout on its own, and that's not a stale *telemetry* frame,
+  /// there's simply been no first frame yet.
+  void _checkTelemetryFreshness() {
+    if (state != BleConnectionState.connected) return;
+    final telemetry = telemetryNotifier.value;
+    if (telemetry == null) return;
+    final silentFor = DateTime.now().difference(telemetry.timestamp);
+    if (silentFor <= _staleTelemetryTimeout) return;
+    logBuffer.add(
+      'BLE: no live telemetry frame in ${silentFor.inSeconds}s while still nominally connected — '
+      'treating as dropped and reconnecting',
+    );
+    unawaited(_handleUnexpectedDisconnect());
   }
 }

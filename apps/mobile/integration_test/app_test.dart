@@ -10,8 +10,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:opentrip_mobile/auth/current_user.dart';
+import 'package:opentrip_mobile/data/models/vehicle.dart';
+import 'package:opentrip_mobile/data/repositories/vehicle_repository.dart';
 import 'package:opentrip_mobile/main.dart';
 import 'package:opentrip_mobile/theme/ph_icons.dart';
+import 'package:opentrip_mobile/trip/recording_screen.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -28,8 +32,8 @@ void main() {
     // Trips tab is the shell's default.
     expect(find.text('Trips'), findsWidgets);
 
-    // Each of the other three tabs renders without throwing.
-    for (final icon in [Ph.ranking, Ph.hexagon, Ph.motorcycle]) {
+    // Each of the other tabs renders without throwing.
+    for (final icon in [Ph.ranking, Ph.flagCheckered, Ph.hexagon, Ph.usersThree, Ph.motorcycle]) {
       await tester.tap(find.byIcon(icon));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
@@ -48,7 +52,22 @@ void main() {
     await tester.tap(recordControl);
     await tester.pumpAndSettle();
 
-    expect(find.text('Start recording'), findsOneWidget);
+    // A fresh install has no vehicles, so Record offers to add one rather
+    // than a start button that couldn't work.
+    Finder inRecord(Finder f) => find.descendant(of: find.byType(RecordingScreen), matching: f);
+    expect(inRecord(find.text('Add a vehicle')), findsOneWidget);
+    expect(inRecord(find.text('Start recording')), findsNothing);
+
+    // Once a vehicle exists (added the way the Garage would), Record picks
+    // it up by itself and shows a real start control.
+    await VehicleRepository.instance.create(
+      userId: await CurrentUser.instance.id(),
+      name: 'Test bike',
+      type: VehicleType.motorcycle,
+    );
+    await tester.pumpAndSettle();
+
+    expect(inRecord(find.text('Start recording')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

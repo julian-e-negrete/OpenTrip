@@ -41,7 +41,19 @@ class TripRepository {
 
   Future<Trip> finishTrip(Trip finished) async {
     final db = await LocalDatabase.instance.database;
-    await db.update('trips', finished.toRow(), where: 'id = ?', whereArgs: [finished.id]);
+    // update() on a row that no longer exists — its trip was deleted
+    // while still recording, a real bug now guarded against at every
+    // delete entry point (trips/trip_history_screen.dart,
+    // trips/trip_detail_screen.dart, vehicles/vehicle_detail_screen.dart)
+    // — used to match 0 rows and silently drop the finished trip on the
+    // floor: the ride's GPS points were already saved, but the trip row
+    // itself, and everything derived from it, was just gone. Falling
+    // back to insert() here means finishing a trip can never lose it,
+    // regardless of what happened to its row in the meantime.
+    final affected = await db.update('trips', finished.toRow(), where: 'id = ?', whereArgs: [finished.id]);
+    if (affected == 0) {
+      await db.insert('trips', finished.toRow());
+    }
     DataEvents.instance.notifyChanged();
     return finished;
   }
@@ -97,8 +109,17 @@ class TripRepository {
     // device via SyncService.pullAll, which doesn't eagerly fetch every
     // trip's points. Try fetching them now; a harmless no-op if there
     // genuinely are none (e.g. a trip stopped with zero GPS fixes) or
-    // sync isn't available.
-    return SyncService.instance.pullTripPoints(tripId);
+    // sync isn't available. Best-effort only: with no signal (the normal
+    // case for a rider on the street) this fetch throws, and callers like
+    // trip/recording_screen.dart's _stop() call this right before flipping
+    // the recording state off — an uncaught SocketException here left a
+    // zero-point trip's Stop & save stuck on screen (repeated "GPS:
+    // stopping" lines in a real log, one per frustrated tap).
+    try {
+      return await SyncService.instance.pullTripPoints(tripId);
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Appends music events in one batch — mirrors [appendPoints]. Called

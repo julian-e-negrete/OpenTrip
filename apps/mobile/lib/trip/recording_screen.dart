@@ -28,6 +28,7 @@ import '../theme/layout_prefs.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
 import '../vehicle/ble_connection_service.dart';
+import '../vehicles/add_vehicle_screen.dart';
 import 'camera_alerts.dart';
 import 'lean_angle_tracker.dart';
 import 'location_recorder.dart';
@@ -190,12 +191,10 @@ class _RecordingScreenState extends State<RecordingScreen> {
       // Keep the current selection if it still exists (e.g. a vehicle was
       // added elsewhere while this tab already had one picked, possibly
       // mid-recording) — only fall back to the first vehicle if it's gone
-      // or nothing was selected yet.
-      final selected = _selectedVehicle;
-      final stillExists = selected != null && vehicles.any((v) => v.id == selected.id);
-      if (!stillExists) {
-        _selectedVehicle = vehicles.isEmpty ? null : vehicles.first;
-      }
+      // or nothing was selected yet. Take the fresh instance for that id,
+      // so an edit (rename, BLE connector) shows up here immediately.
+      final selectedId = _selectedVehicle?.id;
+      _selectedVehicle = vehicles.where((v) => v.id == selectedId).firstOrNull ?? vehicles.firstOrNull;
       _loadingVehicles = false;
     });
   }
@@ -312,6 +311,16 @@ class _RecordingScreenState extends State<RecordingScreen> {
     try {
       final trip = await TripRepository.instance.startTrip(userId: _userId, vehicleId: vehicle.id);
       await _recorder.start(trip.id);
+      if (_recorder.powerSaveModeOn && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Battery Saver is on — GPS updates may land far apart during this ride.'),
+            backgroundColor: Colors.orange.shade800,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
+          ),
+        );
+      }
 
       _pointSub = _recorder.pointStream.listen((point) {
         // Stamp whatever the bike's latest telemetry frame was onto this
@@ -580,7 +589,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
               ListTile(
                 leading: Icon(v.type == VehicleType.car ? Ph.car : Ph.motorcycle, color: Noct.accent),
                 title: Text(v.name, style: const TextStyle(color: Noct.text)),
-                subtitle: Text(v.type.name, style: const TextStyle(color: Noct.n500)),
+                subtitle: Text(v.type.label, style: const TextStyle(color: Noct.n500)),
                 trailing: v.id == _selectedVehicle?.id ? const Icon(Ph.caretRight, color: Noct.accent, size: 16) : null,
                 onTap: () => Navigator.pop(context, v),
               ),
@@ -614,20 +623,26 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Noct.text),
               ),
               const SizedBox(height: 8),
-              StatefulBuilder(
-                builder: (context, setSheetState) => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Track lean angle', style: TextStyle(color: Noct.text, fontSize: 13.5)),
-                  subtitle: const Text(
-                    'Needs the phone mounted rigidly to the bike — not handheld or in a pocket.',
-                    style: TextStyle(color: Noct.n500, fontSize: 11),
+              if (_vehicleIsMotorcycle)
+                StatefulBuilder(
+                  builder: (context, setSheetState) => SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Track lean angle', style: TextStyle(color: Noct.text, fontSize: 13.5)),
+                    subtitle: const Text(
+                      'Needs the phone mounted rigidly to the bike — not handheld or in a pocket.',
+                      style: TextStyle(color: Noct.n500, fontSize: 11),
+                    ),
+                    value: _trackLean,
+                    onChanged: _activeTrip != null
+                        ? null
+                        : (v) => setSheetState(() => setState(() => _trackLean = v)),
                   ),
-                  value: _trackLean,
-                  onChanged: _activeTrip != null
-                      ? null
-                      : (v) => setSheetState(() => setState(() => _trackLean = v)),
+                )
+              else
+                const Text(
+                  'No motorcycle-only settings for this vehicle.',
+                  style: TextStyle(color: Noct.n500, fontSize: 12.5),
                 ),
-              ),
             ],
           ),
         ),
@@ -646,13 +661,30 @@ class _RecordingScreenState extends State<RecordingScreen> {
             child: _loadingVehicles
                 ? const Center(child: CircularProgressIndicator())
                 : _vehicles.isEmpty
-                ? const Center(
+                // A first-time rider's first tap on record lands here —
+                // offer the next step right away instead of sending them
+                // off to find the Garage tab.
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Add a vehicle first (Garage tab) before recording a trip.',
-                        style: TextStyle(color: Noct.n500, fontSize: 13),
-                        textAlign: TextAlign.center,
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Add the vehicle you\'re riding first — trips are recorded per vehicle.',
+                            style: TextStyle(color: Noct.n400, fontSize: 13.5),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 18),
+                          NoctOutlinedButton(
+                            label: 'Add a vehicle',
+                            icon: Ph.plus,
+                            expand: false,
+                            onPressed: () => Navigator.of(
+                              context,
+                            ).push(MaterialPageRoute(builder: (_) => const AddVehicleScreen())),
+                          ),
+                        ],
                       ),
                     ),
                   )
@@ -697,6 +729,20 @@ class _RecordingScreenState extends State<RecordingScreen> {
               style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
             ),
           ),
+        // Cluster was picked (Account > Appearance), but falls back to
+        // Numbers with no bike telemetry to actually drive its dial —
+        // account_screen.dart's own footnote explains this once you've
+        // already selected it there, but that's a settings screen a
+        // rider isn't looking at right now; without this, the fallback
+        // itself looks unexplained/broken in the moment.
+        if (LayoutPrefs.instance.record == RecordVariant.cluster && variant != RecordVariant.cluster)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'Cluster needs a connected bike — showing Numbers until one connects.',
+              style: TextStyle(color: Noct.n500, fontSize: 12),
+            ),
+          ),
         Expanded(
           child: switch (variant) {
             RecordVariant.map => _MapVariant(
@@ -728,7 +774,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         // again — rather than a second navigation — is what starts the
         // trip. This is the reliable, unambiguous fallback for that.
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 14 + Noct.recordControlOverhang),
           child: SizedBox(
             width: double.infinity,
             child: OutlinedButton(
@@ -992,7 +1038,28 @@ class _MapVariantState extends State<_MapVariant> {
   @override
   void initState() {
     super.initState();
+    // RecordingScreen is mounted (hidden) from the moment the shell
+    // appears, so asking for location here would pop the system
+    // permission dialog over whatever tab the rider is actually looking
+    // at. Wait until the Record overlay is really on screen.
+    final visible = RecordingController.instance.isRecordScreenVisible;
+    if (visible.value) {
+      _loadIdleLocation();
+    } else {
+      visible.addListener(_onVisibilityChanged);
+    }
+  }
+
+  void _onVisibilityChanged() {
+    if (!RecordingController.instance.isRecordScreenVisible.value) return;
+    RecordingController.instance.isRecordScreenVisible.removeListener(_onVisibilityChanged);
     _loadIdleLocation();
+  }
+
+  @override
+  void dispose() {
+    RecordingController.instance.isRecordScreenVisible.removeListener(_onVisibilityChanged);
+    super.dispose();
   }
 
   Future<void> _loadIdleLocation() async {

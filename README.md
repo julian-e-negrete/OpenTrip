@@ -11,6 +11,11 @@ publishes the APKs to the **["Latest build" release](../../releases/tag/latest)*
 — on a phone, open that link and download `app-arm64-v8a-release.apk`
 (works on basically any Android phone from the last ~8 years), then
 sideload it. No local Flutter/Android toolchain needed just to try it.
+
+**iPhone:** see [docs/IOS_DISTRIBUTION.md](docs/IOS_DISTRIBUTION.md):
+TestFlight invite links once a paid Apple Developer account is set up,
+or the free `OpenTrip-unsigned.ipa` from the same release, sideloaded
+with Sideloadly/AltStore (re-install every 7 days).
 Login (Google/email) only works in these builds if the repo has
 `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`GOOGLE_WEB_CLIENT_ID` set as Actions
 secrets (see [docs/AUTH_SETUP.md](docs/AUTH_SETUP.md)) — without them the

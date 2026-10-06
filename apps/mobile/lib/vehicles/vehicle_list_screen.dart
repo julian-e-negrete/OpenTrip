@@ -138,7 +138,7 @@ class _VehicleListScreenState extends State<VehicleListScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 18),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 18 + Noct.recordControlOverhang),
               children: [
                 if (_vehicles.isEmpty)
                   const Padding(
@@ -240,7 +240,15 @@ class _VehicleRow extends StatelessWidget {
                                 child: Image.file(File(vehicle.photoPath!), width: 44, height: 44, fit: BoxFit.cover),
                               )
                             : Icon(
-                                supportsBle ? Ph.motorcycle : Ph.car,
+                                // The vehicle's actual type, not BLE
+                                // support — this used to pick the glyph
+                                // by supportsBle, so every non-BLE
+                                // motorcycle (i.e. every model besides
+                                // the ~4 in data/catalog/vehicle_catalog.dart
+                                // that support Kawasaki Rideology) showed
+                                // a car icon. Matches the convention
+                                // trip/recording_screen.dart already uses.
+                                vehicle.type == VehicleType.car ? Ph.car : Ph.motorcycle,
                                 size: 22,
                                 color: supportsBle ? Noct.a200 : Noct.n400,
                               ),
@@ -257,8 +265,15 @@ class _VehicleRow extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              supportsBle ? '${vehicle.type.name} · Kawasaki Rideology BLE' : vehicle.type.name,
+                              [
+                                if ('${vehicle.brand} ${vehicle.model}'.trim().isNotEmpty)
+                                  '${vehicle.brand} ${vehicle.model}'.trim(),
+                                // Telemetry support is already shown by the Connect pill.
+                                vehicle.type.label,
+                              ].join(' · '),
                               style: const TextStyle(fontSize: 11.5, color: Noct.n500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),

@@ -302,6 +302,37 @@ create policy "error_logs_insert_own" on public.error_logs
   for insert with check (auth.uid() = user_id);
 
 
+-- Full local debug log (logging/log_buffer.dart), synced continuously
+-- while signed in — a real gap this project hit twice: error_logs only
+-- ever captures a thrown exception, but a genuinely broken trip (e.g.
+-- a ride that finished normally but recorded zero GPS points, with
+-- nothing throwing at any point) is invisible to it. This is the same
+-- log the on-device "Debug logs" screen shows, batched up and pushed
+-- here by logging/log_sync_service.dart so it's queryable directly
+-- (project-access, same insert-only posture as error_logs) instead of
+-- only reachable by asking the rider to copy/paste it by hand.
+--
+-- Some log lines carry approximate GPS coordinates (rounded to ~5
+-- decimal places — accuracy-rejected/glitch-rejected fix lines in
+-- location_recorder.dart) — this is real location data, not just
+-- diagnostic metadata, which is why this stays insert-only with no
+-- select policy, exactly like error_logs.
+create table if not exists public.debug_log_lines (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  line text not null,
+  synced_at timestamptz not null default now()
+);
+
+create index if not exists idx_debug_log_lines_synced_at on public.debug_log_lines(synced_at desc);
+create index if not exists idx_debug_log_lines_user_synced_at on public.debug_log_lines(user_id, synced_at desc);
+
+alter table public.debug_log_lines enable row level security;
+
+create policy "debug_log_lines_insert_own" on public.debug_log_lines
+  for insert with check (auth.uid() = user_id);
+
+
 -- Display name + country for now — avatar/vehicle photo sync needs
 -- Supabase Storage (a bucket + its own policies), not set up yet.
 -- country_code is a picked ISO 3166-1 alpha-2 code (see

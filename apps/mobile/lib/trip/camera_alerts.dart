@@ -75,6 +75,7 @@ class CameraAlertService {
   final _alertedIds = <String>{};
   Position? _lastQueriedAt;
   bool _queryInFlight = false;
+  bool _disposed = false;
 
   /// Clears which cameras have already alerted — call at the start of a
   /// new trip so passing the same camera again on a later trip still
@@ -151,6 +152,14 @@ class CameraAlertService {
       }
 
       final body = await response.transform(utf8.decoder).join();
+      // dispose() (e.g. the race screen's cancel path, see
+      // racing/solo_race_screen.dart) can land while this request is
+      // still in flight — camerasNotifier is already disposed by the
+      // time this resumes, so writing to it below would throw. The
+      // query itself still succeeded; there's just nothing left alive
+      // to hand the result to, so stop here rather than let that throw
+      // get caught below and logged as a failed query.
+      if (_disposed) return;
       final json = jsonDecode(body) as Map<String, dynamic>;
       final elements = (json['elements'] as List?) ?? const [];
 
@@ -247,6 +256,7 @@ class CameraAlertService {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     camerasNotifier.dispose();
     await _audioPlayer.dispose();
     await _alertController.close();

@@ -10,6 +10,7 @@ import '../theme/date_fmt.dart';
 import '../theme/num_fmt.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/recording_controller.dart';
 import '../trips/trip_detail_screen.dart';
 import 'add_vehicle_screen.dart';
 
@@ -89,12 +90,18 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  ({double km, bool fromBike}) _currentMileage() {
+  ({double km, MileageSource source}) _currentMileage() {
     for (final t in _trips) {
-      if (t.bleOdometerKm != null) return (km: t.bleOdometerKm!, fromBike: true);
+      if (t.bleOdometerKm != null) return (km: t.bleOdometerKm!, source: MileageSource.bike);
     }
     final totalDistanceKm = _trips.fold<double>(0, (sum, t) => sum + t.distanceMeters) / 1000.0;
-    return (km: (_vehicle.startingOdometerKm ?? 0) + totalDistanceKm, fromBike: false);
+    // Previously always labeled "estimated from recorded trips" once
+    // there was no bike-reported odometer — but with zero trips
+    // recorded, that number is just whatever was typed into "Starting
+    // odometer" when the vehicle was added, not an estimate derived
+    // from anything this app has actually measured.
+    final source = totalDistanceKm > 0 ? MileageSource.trips : MileageSource.entered;
+    return (km: (_vehicle.startingOdometerKm ?? 0) + totalDistanceKm, source: source);
   }
 
   Future<void> _logService() async {
@@ -104,8 +111,8 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Log a service?'),
         content: Text(
-          'Marks ${mileage.km.toStringAsFixed(0)} km as this vehicle\'s last service — '
-          'the next one is due ${_vehicle.serviceIntervalKm?.toStringAsFixed(0)} km after that.',
+          'Marks ${fmtThousands(mileage.km.round())} km as this vehicle\'s last service — '
+          'the next one is due ${_vehicle.serviceIntervalKm == null ? '?' : fmtThousands(_vehicle.serviceIntervalKm!.round())} km after that.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
@@ -118,6 +125,30 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   Future<bool> _confirmDeleteTrip(Trip trip) async {
+    // See trips/trip_history_screen.dart's matching guard: only block
+    // deletion when a recording is genuinely live in this app session
+    // right now, not every unfinished trip — an unfinished trip with no
+    // live recording behind it is an orphan (the app died before Stop &
+    // Save ever ran) and must stay deletable, or it's stuck forever.
+    if (!trip.isFinished && RecordingController.instance.isRecording.value) {
+      // Deleting the row here wouldn't stop the actual recording (owned by
+      // trip/recording_screen.dart's live LocationRecorder), leaving a
+      // dead trip that finishTrip() can never save into and losing the
+      // whole ride.
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Still recording'),
+          content: const Text(
+            'This trip is still being recorded. Stop it from the Record tab before deleting it.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK')),
+          ],
+        ),
+      );
+      return false;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -136,13 +167,6 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
     return confirmed ?? false;
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final hours = d.inHours;
-    final minutes = d.inMinutes % 60;
-    if (hours == 0) return '${minutes}m';
-    return '${hours}h ${minutes}m';
-  }
 
   String _typeLabel(VehicleType type) => switch (type) {
     VehicleType.motorcycle => 'Motorcycle',
@@ -194,7 +218,7 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
-                    child: _ThreeStatGrid(trips: _trips, fmtDuration: _fmtDuration),
+                    child: _ThreeStatGrid(trips: _trips, fmtDuration: fmtDuration),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 22, 18, 0),
@@ -211,15 +235,18 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 }
 
+enum MileageSource { bike, trips, entered }
+
 class _OdometerPanel extends StatelessWidget {
   const _OdometerPanel({required this.vehicle, required this.mileage, required this.onLogService});
   final Vehicle vehicle;
-  final ({double km, bool fromBike}) mileage;
+  final ({double km, MileageSource source}) mileage;
   final VoidCallback onLogService;
 
   @override
   Widget build(BuildContext context) {
     final serviceInterval = vehicle.serviceIntervalKm;
+    final noReading = mileage.source == MileageSource.entered && vehicle.startingOdometerKm == null;
     double? remainingKm;
     double? progress;
     var overdue = false;
@@ -238,9 +265,20 @@ class _OdometerPanel extends StatelessWidget {
           Text.rich(
             TextSpan(
               children: [
-                TextSpan(text: fmtThousands(mileage.km.round()), style: Noct.stat(34)),
                 TextSpan(
-                  text: mileage.fromBike ? " km · from the bike's odometer" : ' km · estimated from recorded trips',
+                  // Nothing entered and nothing recorded yet: a bare "0 km ·
+                  // as entered" read as if the rider had typed 0.
+                  text: noReading ? '—' : fmtThousands(mileage.km.round()),
+                  style: Noct.stat(34),
+                ),
+                TextSpan(
+                  text: noReading
+                      ? '  no odometer reading yet — add one with edit'
+                      : switch (mileage.source) {
+                          MileageSource.bike => " km · from the bike's odometer",
+                          MileageSource.trips => ' km · estimated from recorded trips',
+                          MileageSource.entered => ' km · as entered',
+                        },
                   style: const TextStyle(fontSize: 12, color: Noct.n400, fontWeight: FontWeight.w400),
                 ),
               ],
@@ -393,12 +431,6 @@ class _RecentTrips extends StatelessWidget {
   final Vehicle vehicle;
   final Future<bool> Function(Trip) onConfirmDelete;
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    final hours = d.inHours;
-    final minutes = d.inMinutes % 60;
-    return hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -452,7 +484,7 @@ class _RecentTrips extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${fmtDayMonth(trip.startedAt)} · ${_fmtDuration(trip.durationSeconds)}',
+                              '${fmtDayMonth(trip.startedAt)} · ${fmtDuration(trip.durationSeconds)}',
                               style: const TextStyle(fontSize: 11, color: Noct.n500),
                             ),
                           ],

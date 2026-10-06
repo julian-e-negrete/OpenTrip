@@ -70,13 +70,38 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     });
   }
 
-  String _fmtDuration(int seconds) {
-    final d = Duration(seconds: seconds);
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
-  }
 
   Future<bool> _confirmDelete(Trip trip) async {
+    // Only block deletion of a trip that's genuinely recording *in this
+    // app session right now* (RecordingController.instance.isRecording —
+    // there's only ever one active recording app-wide) — not every
+    // unfinished trip. An unfinished trip with no live recording behind
+    // it is an orphan: the app died (crash, OS kill, phone restart)
+    // before Stop & Save ever ran, and blocking its deletion too would
+    // trap the rider with a permanently undeletable ghost trip forever,
+    // exactly the kind of real report that caught this.
+    if (!trip.isFinished && RecordingController.instance.isRecording.value) {
+      // Deleting the row here doesn't stop the actual recording — that's
+      // owned by trip/recording_screen.dart's live LocationRecorder, not
+      // this list screen — so the ride kept running with nowhere to
+      // save to: finishTrip()'s UPDATE matched nothing, silently
+      // dropping the whole trip, while its GPS points, territory, and
+      // any trophy earned along the way stayed behind as permanent
+      // orphans. Block it here instead of leaving that trap in place.
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Still recording'),
+          content: const Text(
+            'This trip is still being recorded. Stop it from the Record tab before deleting it.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK')),
+          ],
+        ),
+      );
+      return false;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -173,7 +198,10 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                   ),
                                   Expanded(
                                     child: _SummaryColumn(
-                                      child: NoctStat(value: '${tripsThisMonth.length}', label: 'Rides'),
+                                      child: NoctStat(
+                                        value: '${tripsThisMonth.length}',
+                                        label: tripsThisMonth.length == 1 ? 'Ride' : 'Rides',
+                                      ),
                                     ),
                                   ),
                                   Expanded(
@@ -203,7 +231,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                         )
                       else if (LayoutPrefs.instance.tripList == TripListVariant.cards)
                         SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14 + Noct.recordControlOverhang),
                           sliver: SliverList.separated(
                             itemCount: _visibleTrips.length,
                             separatorBuilder: (context, index) => const SizedBox(height: 10),
@@ -212,7 +240,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                               return _RouteCardRow(
                                 trip: trip,
                                 vehicle: _vehiclesById[trip.vehicleId],
-                                fmtDuration: _fmtDuration,
+                                fmtDuration: fmtDuration,
                                 onTap: () => _openTrip(trip, _vehiclesById[trip.vehicleId]),
                                 onConfirmDelete: () => _confirmDelete(trip),
                                 onDelete: () => TripRepository.instance.deleteTrip(trip.id),
@@ -222,7 +250,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                         )
                       else
                         SliverPadding(
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          padding: const EdgeInsets.fromLTRB(18, 0, 18, Noct.recordControlOverhang + 8),
                           sliver: SliverList.builder(
                             itemCount: _visibleTrips.length,
                             itemBuilder: (context, i) {
@@ -230,7 +258,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                               return _DenseLogRow(
                                 trip: trip,
                                 vehicle: _vehiclesById[trip.vehicleId],
-                                fmtDuration: _fmtDuration,
+                                fmtDuration: fmtDuration,
                                 onTap: () => _openTrip(trip, _vehiclesById[trip.vehicleId]),
                                 onConfirmDelete: () => _confirmDelete(trip),
                                 onDelete: () => TripRepository.instance.deleteTrip(trip.id),
@@ -382,8 +410,16 @@ class _RouteCardRow extends StatelessWidget {
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      NoctTagChip(fmtDuration(trip.durationSeconds)),
-                      if (trip.avgSpeedKph != null) NoctTagChip('ø ${trip.avgSpeedKph!.toStringAsFixed(0)} km/h'),
+                      // durationSeconds stays 0 in local storage until
+                      // finishTrip() runs at Stop & Save — showing it as
+                      // a real "00:00:00" chip next to "In progress"
+                      // reads as three separate broken-looking zeroes
+                      // rather than one clearly-still-recording trip
+                      // (the Dense log variant sidesteps this the same
+                      // way, swapping its own duration text for "live").
+                      if (trip.isFinished) NoctTagChip(fmtDuration(trip.durationSeconds)),
+                      if (trip.displayAvgSpeedKph != null)
+                        NoctTagChip('ø ${trip.displayAvgSpeedKph!.toStringAsFixed(0)} km/h'),
                       if (leanDeg != null) NoctTagChip('${leanDeg.toStringAsFixed(0)}° lean', accent: true),
                       if (!trip.isFinished) const NoctTagChip('In progress', accent: true),
                     ],
