@@ -65,6 +65,12 @@ class SyncService {
 
   bool _listening = false;
   bool _busy = false;
+
+  /// A local change that landed while a push was already running —
+  /// [pushPendingChanges] used to just return in that case, so the change
+  /// sat unpushed until some unrelated later write happened to trigger
+  /// another push (a trip finished mid-push could wait a whole ride).
+  bool _pushAgain = false;
   DateTime? lastSyncAt;
   String? lastError;
   RealtimeChannel? _channel;
@@ -110,7 +116,11 @@ class SyncService {
   }
 
   Future<void> pushPendingChanges() async {
-    if (!_canSync || _busy) return;
+    if (!_canSync) return;
+    if (_busy) {
+      _pushAgain = true;
+      return;
+    }
     _busy = true;
     try {
       final userId = AuthService.instance.currentUser!.id;
@@ -125,7 +135,7 @@ class SyncService {
       for (final row in vehicleRows) {
         final vehicle = Vehicle.fromRow(row);
         await _client.from('vehicles').upsert(vehicle.toSupabaseRow());
-        await db.update('vehicles', {'synced': 1}, where: 'id = ?', whereArgs: [vehicle.id]);
+        await _markSyncedIfUnchanged(db, 'vehicles', 'id', row);
       }
 
       final tripRows = await db.query('trips', where: 'user_id = ? AND synced = 0', whereArgs: [userId]);
@@ -134,7 +144,7 @@ class SyncService {
         await _client.from('trips').upsert(trip.toSupabaseRow());
         await _pushTripPoints(trip.id);
         await _pushMusicEvents(trip.id);
-        await db.update('trips', {'synced': 1}, where: 'id = ?', whereArgs: [trip.id]);
+        await _markSyncedIfUnchanged(db, 'trips', 'id', row);
       }
 
       final profileRows = await db.query(
@@ -145,7 +155,7 @@ class SyncService {
       for (final row in profileRows) {
         final profile = UserProfile.fromRow(row);
         await _client.from('profiles').upsert(profile.toSupabaseRow());
-        await db.update('profiles', {'synced': 1}, where: 'user_id = ?', whereArgs: [profile.userId]);
+        await _markSyncedIfUnchanged(db, 'profiles', 'user_id', row);
       }
 
       // Territory/trophies (gamification/) — same unsynced-row pattern,
@@ -176,8 +186,10 @@ class SyncService {
           cellBatch.update(
             'territory_cells',
             {'synced': 1},
-            where: 'user_id = ? AND cell_key = ?',
-            whereArgs: [row['user_id'], row['cell_key']],
+            // A trip finished mid-push can bump visit_count again — that
+            // newer count hasn't reached the server, so it stays unsynced.
+            where: 'user_id = ? AND cell_key = ? AND visit_count = ?',
+            whereArgs: [row['user_id'], row['cell_key'], row['visit_count']],
           );
         }
         await cellBatch.commit(noResult: true);
@@ -222,7 +234,63 @@ class SyncService {
       lastError = e.toString();
     } finally {
       _busy = false;
+      if (_pushAgain) {
+        _pushAgain = false;
+        unawaited(pushPendingChanges());
+      }
     }
+  }
+
+  /// Marks [pushedRow] synced only if the local row still matches what was
+  /// just uploaded. A plain `UPDATE ... SET synced = 1` raced with any write
+  /// that landed during the upload: a trip started with signal is pushed
+  /// (still in progress) right away, and if Stop & save finished it while
+  /// that push was in flight, the finished row got marked synced without
+  /// ever being uploaded — the cloud copy stayed a 0 km "in progress" trip
+  /// for good. The compare-and-mark runs in one transaction so no other
+  /// write can slip in between the two.
+  Future<void> _markSyncedIfUnchanged(
+    Database db,
+    String table,
+    String keyColumn,
+    Map<String, Object?> pushedRow,
+  ) {
+    return db.transaction((txn) async {
+      final key = pushedRow[keyColumn];
+      final current = await txn.query(table, where: '$keyColumn = ?', whereArgs: [key], limit: 1);
+      if (current.isEmpty) return;
+      final row = current.first;
+      for (final column in row.keys) {
+        if (column == 'synced') continue;
+        if (row[column] != pushedRow[column]) return;
+      }
+      await txn.update(table, {'synced': 1}, where: '$keyColumn = ?', whereArgs: [key]);
+    });
+  }
+
+  /// Writes rows pulled from the server, skipping any this device still
+  /// holds an unpushed edit of (`synced = 0`). Blindly replacing them lost
+  /// data: a trip finished with no signal stays unsynced locally, and the
+  /// next cold start's [pullAll] — which runs before anything is pushed —
+  /// overwrote it with the server's stale in-progress copy (0 km, no end
+  /// time), already marked synced so it would never be pushed again. The
+  /// local edit is newer by definition; it wins and gets pushed next.
+  Future<void> _applyPulledRows(
+    Database db,
+    String table,
+    String keyColumn,
+    Iterable<Map<String, Object?>> rows,
+  ) {
+    return db.transaction((txn) async {
+      final dirty = await txn.query(table, columns: [keyColumn], where: 'synced = 0');
+      final dirtyKeys = {for (final r in dirty) r[keyColumn]};
+      final batch = txn.batch();
+      for (final row in rows) {
+        if (dirtyKeys.contains(row[keyColumn])) continue;
+        batch.insert(table, row, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    });
   }
 
   Future<void> _pushTripPoints(String tripId) async {
@@ -287,33 +355,17 @@ class SyncService {
       final db = await LocalDatabase.instance.database;
 
       final remoteVehicles = await _client.from('vehicles').select().eq('user_id', userId);
-      final vehicleBatch = db.batch();
-      for (final row in remoteVehicles) {
-        vehicleBatch.insert(
-          'vehicles',
-          Vehicle.fromSupabaseRow(row).toRow(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      await vehicleBatch.commit(noResult: true);
+      await _applyPulledRows(db, 'vehicles', 'id', remoteVehicles.map((row) => Vehicle.fromSupabaseRow(row).toRow()));
 
       final remoteTrips = await _client.from('trips').select().eq('user_id', userId);
-      final tripBatch = db.batch();
-      for (final row in remoteTrips) {
-        tripBatch.insert(
-          'trips',
-          Trip.fromSupabaseRow(row).toRow(),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      await tripBatch.commit(noResult: true);
+      await _applyPulledRows(db, 'trips', 'id', remoteTrips.map((row) => Trip.fromSupabaseRow(row).toRow()));
 
       final remoteProfileRows = await _client.from('profiles').select().eq('user_id', userId).limit(1);
       if (remoteProfileRows.isNotEmpty) {
         final existing = await db.query('profiles', where: 'user_id = ?', whereArgs: [userId], limit: 1);
         final localAvatar = existing.isNotEmpty ? existing.first['avatar_path'] as String? : null;
         final profile = UserProfile.fromSupabaseRow(remoteProfileRows.first, localAvatarPath: localAvatar);
-        await db.insert('profiles', profile.toRow(), conflictAlgorithm: ConflictAlgorithm.replace);
+        await _applyPulledRows(db, 'profiles', 'user_id', [profile.toRow()]);
       }
 
       DataEvents.instance.notifyChanged();
@@ -395,7 +447,9 @@ class SyncService {
           'profiles' => await _mergeRemoteProfile(db, row),
           _ => throw StateError('Unexpected realtime table: $table'),
         };
-        await db.insert(table, localRow, conflictAlgorithm: ConflictAlgorithm.replace);
+        // Same rule as pullAll: a row this device has edited but not yet
+        // pushed is newer than whatever the server is echoing back.
+        await _applyPulledRows(db, table, table == 'profiles' ? 'user_id' : 'id', [localRow]);
       }
       DataEvents.instance.notifyChanged();
     } catch (e) {

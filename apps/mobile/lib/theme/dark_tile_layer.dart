@@ -18,8 +18,16 @@ import 'package:flutter_map/flutter_map.dart';
 /// Esri splits this style into two tile sets — a solid-fill base and a
 /// transparent roads/labels overlay — composited here as two stacked
 /// TileLayers.
+///
+/// Both tile sets stop at zoom 16 ([_maxNativeZoom]). Past that, Esri
+/// answers with grey "Map data not yet available" placeholder tiles, so a
+/// rider pinching in on the live map or a trip replay watched the whole
+/// basemap turn into that placeholder. Capping the native zoom makes
+/// flutter_map upscale the level-16 tiles instead.
 class DarkTileLayer extends StatelessWidget {
   const DarkTileLayer({super.key});
+
+  static const _maxNativeZoom = 16;
 
   @override
   Widget build(BuildContext context) {
@@ -28,11 +36,13 @@ class DarkTileLayer extends StatelessWidget {
         TileLayer(
           urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
           userAgentPackageName: 'co.opentrip.opentrip_mobile',
+          maxNativeZoom: _maxNativeZoom,
         ),
         TileLayer(
           urlTemplate:
               'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
           userAgentPackageName: 'co.opentrip.opentrip_mobile',
+          maxNativeZoom: _maxNativeZoom,
         ),
       ],
     );

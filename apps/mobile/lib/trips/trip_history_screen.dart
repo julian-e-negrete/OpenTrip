@@ -120,6 +120,16 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     return confirmed ?? false;
   }
 
+  /// Drops the row from the list *before* the async delete: a Dismissible
+  /// that's been swiped away must leave the tree on the very next frame,
+  /// and waiting for the delete + DataEvents reload to rebuild the list
+  /// tripped Flutter's "A dismissed Dismissible widget is still part of
+  /// the tree" error on every swipe-delete.
+  void _deleteTrip(Trip trip) {
+    setState(() => _trips = [for (final t in _trips) if (t.id != trip.id) t]);
+    TripRepository.instance.deleteTrip(trip.id);
+  }
+
   void _openTrip(Trip trip, Vehicle? vehicle) {
     Navigator.of(context).push(MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle)));
   }
@@ -243,7 +253,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                 fmtDuration: fmtDuration,
                                 onTap: () => _openTrip(trip, _vehiclesById[trip.vehicleId]),
                                 onConfirmDelete: () => _confirmDelete(trip),
-                                onDelete: () => TripRepository.instance.deleteTrip(trip.id),
+                                onDelete: () => _deleteTrip(trip),
                               );
                             },
                           ),
@@ -261,7 +271,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                                 fmtDuration: fmtDuration,
                                 onTap: () => _openTrip(trip, _vehiclesById[trip.vehicleId]),
                                 onConfirmDelete: () => _confirmDelete(trip),
-                                onDelete: () => TripRepository.instance.deleteTrip(trip.id),
+                                onDelete: () => _deleteTrip(trip),
                               );
                             },
                           ),
@@ -395,7 +405,10 @@ class _RouteCardRow extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      Text(fmtDayMonth(trip.startedAt), style: const TextStyle(fontSize: 11, color: Noct.n500)),
+                      Text(
+                        '${fmtTripDate(trip.startedAt)} · ${fmtTimeOfDay(trip.startedAt)}',
+                        style: const TextStyle(fontSize: 11, color: Noct.n500),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -502,7 +515,12 @@ class _DenseLogRow extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      vehicle?.name ?? 'Unknown vehicle',
+                      // The date column has no room for a year or time.
+                      [
+                        vehicle?.name ?? 'Unknown vehicle',
+                        fmtTimeOfDay(trip.startedAt),
+                        if (trip.startedAt.year != DateTime.now().year) '${trip.startedAt.year}',
+                      ].join(' · '),
                       style: const TextStyle(fontSize: 11.5, color: Noct.n500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

@@ -25,6 +25,7 @@ import '../theme/layout_prefs.dart';
 import '../theme/num_fmt.dart';
 import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
+import '../trip/recording_controller.dart';
 import 'country_picker.dart';
 
 /// Identity (display name + avatar — deliberately never the email, per
@@ -100,7 +101,7 @@ class _AccountScreenState extends State<AccountScreen> {
     if (error != null) return 'Last sync failed: $error';
     final at = SyncService.instance.lastSyncAt;
     if (at == null) return 'Not synced yet';
-    return 'Last synced ${at.toLocal().toString().substring(0, 19)}';
+    return 'Last synced ${fmtRelative(at)}';
   }
 
   String get _displayName {
@@ -121,8 +122,11 @@ class _AccountScreenState extends State<AccountScreen> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
-          FilledButton(
+          // Nocturne never fills a button — the dialog's primary action
+          // is the accent-coloured text action, same as every other dialog.
+          TextButton(
             onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            style: TextButton.styleFrom(foregroundColor: Noct.a200),
             child: const Text('Save'),
           ),
         ],
@@ -175,7 +179,25 @@ class _AccountScreenState extends State<AccountScreen> {
     if (mounted) await _load();
   }
 
+  /// Signing out or wiping data replaces the whole app shell — including
+  /// the Record screen that owns a live recording — so the ride in
+  /// progress would just stop, never saved. Make the rider stop it first.
+  Future<bool> _blockedByRecording(String action) async {
+    if (!RecordingController.instance.isRecording.value) return false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Still recording'),
+        content: Text('Stop and save the trip in progress before you $action.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK'))],
+      ),
+    );
+    return true;
+  }
+
   Future<void> _deleteAccount() async {
+    if (await _blockedByRecording('delete your data')) return;
+    if (!mounted) return;
     final guest = CurrentUser.instance.isGuest;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -221,6 +243,8 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _confirmSignOut() async {
+    if (await _blockedByRecording('sign out')) return;
+    if (!mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -447,8 +471,8 @@ class _AccountScreenState extends State<AccountScreen> {
                     // longer surfaces it.
                     _PreferenceRow(
                       title: 'Debug logs',
-                      subtitle: 'Low-level BLE connection activity',
-                      trailing: const Icon(Icons.article_outlined, size: 18, color: Noct.n400),
+                      subtitle: 'GPS and bike-connection activity, for bug reports',
+                      trailing: const Icon(Ph.article, size: 18, color: Noct.n400),
                       onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LogScreen())),
                     ),
                   ],
@@ -582,7 +606,14 @@ class _PreferenceRow extends StatelessWidget {
               children: [
                 Text(title, style: const TextStyle(fontSize: 13.5, color: Noct.text, fontWeight: FontWeight.w400)),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 11, color: Noct.n500)),
+                // Capped: a failed sync's subtitle is the raw exception
+                // text, which can run to a paragraph.
+                Text(
+                  subtitle,
+                  style: const TextStyle(fontSize: 11, color: Noct.n500),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),

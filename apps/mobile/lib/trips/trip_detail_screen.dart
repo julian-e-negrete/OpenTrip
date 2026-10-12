@@ -248,7 +248,13 @@ class _Headline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final kicker = [fmtWeekdayDayMonth(trip.startedAt), if (vehicle != null) vehicle!.name].join(' · ');
+    // Start time and (for an older ride) the year — "SAT 24 AUG" alone
+    // couldn't tell two rides on the same day, or two Augusts, apart.
+    final kicker = [
+      fmtTripDate(trip.startedAt, withWeekday: true),
+      fmtTimeOfDay(trip.startedAt),
+      if (vehicle != null) vehicle!.name,
+    ].join(' · ');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -336,8 +342,15 @@ class _StatReport extends StatelessWidget {
       ('GPS points', '${trip.pointCount}'),
     ];
     final bike = [
-      ('Max rpm', trip.bleMaxRpm?.toString()),
-      ('Max lean angle', trip.bleMaxLeanDeg == null ? null : '${trip.bleMaxLeanDeg!.toStringAsFixed(0)}°'),
+      // Same formatting and sources as the grid variant: thin-space
+      // thousands, and the phone's lean estimate when the bike has none.
+      ('Max rpm', trip.bleMaxRpm == null ? null : fmtThousands(trip.bleMaxRpm!)),
+      (
+        'Max lean angle',
+        (trip.bleMaxLeanDeg ?? trip.phoneLeanMaxDeg) == null
+            ? null
+            : '${(trip.bleMaxLeanDeg ?? trip.phoneLeanMaxDeg)!.toStringAsFixed(0)}°',
+      ),
       (
         'Water temperature',
         trip.bleMinWaterTemperatureC == null || trip.bleMaxWaterTemperatureC == null
@@ -550,7 +563,13 @@ class _HeroMap extends StatefulWidget {
 class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   bool _satellite = false;
-  bool _doubleSpeed = false;
+
+  /// Playback multiplier, cycled by the scrubber's speed label. 1× (real
+  /// time) stays the default by design — see [_realDuration] — the faster
+  /// steps just make a long ride skimmable without giving that up.
+  static const _speeds = [1, 2, 8, 32];
+  int _speedIndex = 0;
+  int get _speed => _speeds[_speedIndex];
 
   @override
   void initState() {
@@ -587,9 +606,7 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
     } else {
       final pts = widget.points;
       if (pts != null) {
-        _controller.duration = Duration(
-          milliseconds: _realDuration(pts).inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
-        );
+        _controller.duration = Duration(milliseconds: _realDuration(pts).inMilliseconds ~/ _speed);
       }
       if (_controller.isCompleted) _controller.value = 0;
       _controller.forward();
@@ -598,12 +615,10 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
   }
 
   void _toggleSpeed() {
-    setState(() => _doubleSpeed = !_doubleSpeed);
+    setState(() => _speedIndex = (_speedIndex + 1) % _speeds.length);
     final pts = widget.points;
     if (pts == null) return;
-    _controller.duration = Duration(
-      milliseconds: _realDuration(pts).inMilliseconds ~/ (_doubleSpeed ? 2 : 1),
-    );
+    _controller.duration = Duration(milliseconds: _realDuration(pts).inMilliseconds ~/ _speed);
     if (_controller.isAnimating) _controller.forward();
   }
 
@@ -775,7 +790,7 @@ class _HeroMapState extends State<_HeroMap> with SingleTickerProviderStateMixin 
                 child: _Scrubber(
                   controller: _controller,
                   realDuration: _realDuration(pts),
-                  doubleSpeed: _doubleSpeed,
+                  speed: _speed,
                   satellite: _satellite,
                   onTogglePlay: _togglePlay,
                   onToggleSpeed: _toggleSpeed,
@@ -940,7 +955,7 @@ class _Scrubber extends StatelessWidget {
   const _Scrubber({
     required this.controller,
     required this.realDuration,
-    required this.doubleSpeed,
+    required this.speed,
     required this.satellite,
     required this.onTogglePlay,
     required this.onToggleSpeed,
@@ -949,13 +964,13 @@ class _Scrubber extends StatelessWidget {
   });
 
   final AnimationController controller;
-  // The trip's actual real duration, independent of the 1x/2x playback
+  // The trip's actual real duration, independent of the playback speed
   // multiplier — for a long trip played at real time, a few seconds of
   // watching moves the slider by only a couple of pixels, easy to mistake
   // for the replay being stuck rather than just genuinely slow. This
   // clock is what actually proves it's progressing.
   final Duration realDuration;
-  final bool doubleSpeed;
+  final int speed;
   final bool satellite;
   final VoidCallback onTogglePlay;
   final VoidCallback onToggleSpeed;
@@ -1016,21 +1031,36 @@ class _Scrubber extends StatelessWidget {
                 child: Slider(value: controller.value.clamp(0.0, 1.0), onChanged: onScrub),
               ),
             ),
+            // Both sized to a real touch target (~40px) — they were bare
+            // 11px text and a 16px glyph, easy to miss over a moving map.
             GestureDetector(
               onTap: onToggleSpeed,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  doubleSpeed ? '2×' : '1×',
-                  style: const TextStyle(fontSize: 11, color: Noct.n400, fontWeight: FontWeight.w400),
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Center(
+                  child: Text(
+                    '$speed×',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: speed == 1 ? Noct.n400 : Noct.a300,
+                      fontWeight: FontWeight.w500,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ),
               ),
             ),
             GestureDetector(
               onTap: onToggleLayer,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Icon(Ph.globeHemisphereWest, size: 16, color: satellite ? Noct.accent : Noct.n400),
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox(
+                width: 36,
+                height: 40,
+                child: Center(
+                  child: Icon(Ph.globeHemisphereWest, size: 17, color: satellite ? Noct.accent : Noct.n400),
+                ),
               ),
             ),
           ],

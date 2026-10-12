@@ -70,6 +70,21 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
   Future<void> _delete() async {
+    // The Record screen holds on to its selected vehicle for the whole
+    // ride; deleting it underneath a live recording saved the trip against
+    // a vehicle that no longer exists, which the cloud then rejects on
+    // every sync attempt (trips.vehicle_id is a real foreign key there).
+    if (RecordingController.instance.isRecording.value) {
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Still recording'),
+          content: const Text('Stop the trip in progress before deleting a vehicle.'),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('OK'))],
+        ),
+      );
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -168,6 +183,13 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
   }
 
 
+  /// Same reasoning as trips/trip_history_screen.dart's _deleteTrip: the
+  /// swiped row has to leave the list synchronously.
+  void _deleteTrip(Trip trip) {
+    setState(() => _trips = [for (final t in _trips) if (t.id != trip.id) t]);
+    TripRepository.instance.deleteTrip(trip.id);
+  }
+
   String _typeLabel(VehicleType type) => switch (type) {
     VehicleType.motorcycle => 'Motorcycle',
     VehicleType.car => 'Car',
@@ -214,7 +236,12 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 20, 18, 0),
-                    child: _OdometerPanel(vehicle: _vehicle, mileage: _currentMileage(), onLogService: _logService),
+                    child: _OdometerPanel(
+                      vehicle: _vehicle,
+                      mileage: _currentMileage(),
+                      onLogService: _logService,
+                      onSetInterval: _edit,
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 14, 18, 0),
@@ -226,7 +253,12 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(18, 22, 18, 8),
-                    child: _RecentTrips(trips: _trips, vehicle: _vehicle, onConfirmDelete: _confirmDeleteTrip),
+                    child: _RecentTrips(
+                      trips: _trips,
+                      vehicle: _vehicle,
+                      onConfirmDelete: _confirmDeleteTrip,
+                      onDelete: _deleteTrip,
+                    ),
                   ),
                 ],
               ),
@@ -238,10 +270,21 @@ class _VehicleDetailScreenState extends State<VehicleDetailScreen> {
 enum MileageSource { bike, trips, entered }
 
 class _OdometerPanel extends StatelessWidget {
-  const _OdometerPanel({required this.vehicle, required this.mileage, required this.onLogService});
+  const _OdometerPanel({
+    required this.vehicle,
+    required this.mileage,
+    required this.onLogService,
+    required this.onSetInterval,
+  });
   final Vehicle vehicle;
   final ({double km, MileageSource source}) mileage;
   final VoidCallback onLogService;
+
+  /// The interval lives on the edit form. This used to call [onLogService]
+  /// instead, whose dialog ("next one is due ? km after that") logged a
+  /// service without ever asking for an interval, so the button never did
+  /// what it said.
+  final VoidCallback onSetInterval;
 
   @override
   Widget build(BuildContext context) {
@@ -334,7 +377,7 @@ class _OdometerPanel extends StatelessWidget {
           ] else
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton(onPressed: onLogService, child: const Text('Set a service interval')),
+              child: TextButton(onPressed: onSetInterval, child: const Text('Set a service interval')),
             ),
         ],
       ),
@@ -426,10 +469,16 @@ class _BikeRecords extends StatelessWidget {
 }
 
 class _RecentTrips extends StatelessWidget {
-  const _RecentTrips({required this.trips, required this.vehicle, required this.onConfirmDelete});
+  const _RecentTrips({
+    required this.trips,
+    required this.vehicle,
+    required this.onConfirmDelete,
+    required this.onDelete,
+  });
   final List<Trip> trips;
   final Vehicle vehicle;
   final Future<bool> Function(Trip) onConfirmDelete;
+  final ValueChanged<Trip> onDelete;
 
 
   @override
@@ -460,7 +509,7 @@ class _RecentTrips extends StatelessWidget {
                 child: Icon(Ph.trash, color: Theme.of(context).colorScheme.onError, size: 16),
               ),
               confirmDismiss: (_) => onConfirmDelete(trip),
-              onDismissed: (_) => TripRepository.instance.deleteTrip(trip.id),
+              onDismissed: (_) => onDelete(trip),
               child: InkWell(
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute(builder: (_) => TripDetailScreen(trip: trip, vehicle: vehicle))),
@@ -484,7 +533,7 @@ class _RecentTrips extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              '${fmtDayMonth(trip.startedAt)} · ${fmtDuration(trip.durationSeconds)}',
+                              '${fmtTripDate(trip.startedAt)} · ${fmtTimeOfDay(trip.startedAt)} · ${fmtDuration(trip.durationSeconds)}',
                               style: const TextStyle(fontSize: 11, color: Noct.n500),
                             ),
                           ],

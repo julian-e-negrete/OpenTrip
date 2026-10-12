@@ -50,6 +50,12 @@ class BleConnectionService {
   static const _maxAutoReconnectAttempts = 3;
   int _reconnectAttempt = 0;
 
+  /// Bumped by [disconnect]. An auto-reconnect already in flight (scan,
+  /// GATT connect, or its 3s back-off) checks this after every await and
+  /// abandons itself if it changed — otherwise tapping Disconnect while
+  /// the app was reconnecting got silently undone a few seconds later.
+  int _session = 0;
+
   // A real bike found in production (2026-09-09, via a signed-in user's
   // synced trip): the GATT link itself can stay nominally "connected"
   // (transport.connectionState never fires false, so _onLinkStateChanged
@@ -82,16 +88,22 @@ class BleConnectionService {
 
   Future<void> connect({void Function(String)? onLog}) async {
     if (isBusy || isConnected) return;
+    final session = _session;
     stateNotifier.value = BleConnectionState.scanning;
     lastError = null;
     try {
       await KawasakiConnector.ensurePermissions();
       final result = await KawasakiConnector.findBike(onLog: onLog);
+      if (session != _session) return; // disconnect() was called meanwhile
       if (result == null) {
         throw StateError('No Kawasaki bike found nearby. Make sure it\'s on and in range.');
       }
       stateNotifier.value = BleConnectionState.connecting;
       final client = await KawasakiConnector.connect(result: result, onLog: onLog);
+      if (session != _session) {
+        unawaited(client.dispose());
+        return;
+      }
       _client = client;
       _telemetrySub = client.telemetry.listen((t) => telemetryNotifier.value = t);
       _linkSub = client.connectionState.listen(_onLinkStateChanged);
@@ -100,6 +112,7 @@ class BleConnectionService {
       unawaited(BleKeepAliveService.instance.start());
       _startStaleWatchdog();
     } catch (e) {
+      if (session != _session) return;
       // StateError/Exception's toString() prefixes the message with
       // "Bad state: "/"Exception: " — meant for a stack trace, not a
       // banner a rider reads mid-ride. Strip it so only the actual
@@ -112,6 +125,7 @@ class BleConnectionService {
   }
 
   Future<void> disconnect() async {
+    _session++;
     _stopStaleWatchdog();
     // Unsubscribe from the link-state stream first — otherwise the GATT
     // disconnect this triggers would itself fire _onLinkStateChanged,
@@ -138,6 +152,7 @@ class BleConnectionService {
   }
 
   Future<void> _handleUnexpectedDisconnect() async {
+    final session = _session;
     _stopStaleWatchdog();
     await _linkSub?.cancel();
     _linkSub = null;
@@ -164,10 +179,15 @@ class BleConnectionService {
     try {
       await KawasakiConnector.ensurePermissions();
       final result = await KawasakiConnector.findBike();
+      if (session != _session) return;
       if (result == null) {
         throw StateError('Bike went out of range and couldn\'t be found again.');
       }
       final client = await KawasakiConnector.connect(result: result);
+      if (session != _session) {
+        unawaited(client.dispose());
+        return;
+      }
       _client = client;
       _telemetrySub = client.telemetry.listen((t) => telemetryNotifier.value = t);
       _linkSub = client.connectionState.listen(_onLinkStateChanged);
@@ -180,6 +200,7 @@ class BleConnectionService {
       unawaited(BleKeepAliveService.instance.start());
       _startStaleWatchdog();
     } catch (e, st) {
+      if (session != _session) return;
       if (_reconnectAttempt >= _maxAutoReconnectAttempts) {
         logBuffer.add('BLE: auto-reconnect gave up after $_reconnectAttempt attempt(s) — $e');
         unawaited(ErrorReporter.report('BLE auto-reconnect gave up', e, st));
@@ -192,6 +213,7 @@ class BleConnectionService {
       // Give the bike a moment before trying again rather than hammering
       // a scan the instant a connect attempt fails.
       await Future<void>.delayed(const Duration(seconds: 3));
+      if (session != _session) return;
       unawaited(_handleUnexpectedDisconnect());
     }
   }

@@ -14,6 +14,7 @@ import '../theme/ph_icons.dart';
 import '../theme/primitives.dart';
 import '../trip/location_recorder.dart';
 import '../trip/recording_controller.dart';
+import '../vehicles/add_vehicle_screen.dart';
 import 'solo_race_screen.dart';
 
 /// How long the drag-strip countdown runs before GO — a rider's own
@@ -160,18 +161,34 @@ class _RacingScreenState extends State<RacingScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _vehicles.isEmpty
-              ? const Center(
+              // Same next-step button the Record screen offers, rather than
+              // sending the rider off to find the Garage tab.
+              ? Center(
                   child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text(
-                      'Add a vehicle in Garage first to start racing.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Noct.n500),
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Add the vehicle you\'re racing first — times are kept per vehicle.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Noct.n400, fontSize: 13.5),
+                        ),
+                        const SizedBox(height: 18),
+                        NoctOutlinedButton(
+                          label: 'Add a vehicle',
+                          icon: Ph.plus,
+                          expand: false,
+                          onPressed: () =>
+                              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AddVehicleScreen())),
+                        ),
+                      ],
                     ),
                   ),
                 )
               : ListView(
-                  padding: const EdgeInsets.all(18),
+                  // Bottom inset clears the bar's raised record control.
+                  padding: const EdgeInsets.fromLTRB(18, 18, 18, 18 + Noct.recordControlOverhang),
                   children: [
                     const Text('VEHICLE', style: Noct.statLabel),
                     const SizedBox(height: 9),

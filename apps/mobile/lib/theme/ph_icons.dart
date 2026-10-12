@@ -45,6 +45,9 @@ abstract final class Ph {
   static const IconData moonStars = IconData(0xe58e, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData dotsThree = IconData(0xe1fe, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData plus = IconData(0xe3d4, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData check = IconData(0xe182, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData camera = IconData(0xe10e, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
+  static const IconData article = IconData(0xe0a8, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData musicNote = IconData(0xe33c, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData googleLogo = IconData(0xe292, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);
   static const IconData envelopeSimple = IconData(0xe218, fontFamily: _regular, fontPackage: _pkg, matchTextDirection: true);

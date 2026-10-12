@@ -158,7 +158,22 @@ class _SoloRaceScreenState extends State<SoloRaceScreen> {
     logBuffer.add('Racing: GO — trip ${trip.id}, ends at 180 km/h or ${_maxRunSeconds}s');
     // The timer starts here, at GO, and runs continuously until the race
     // actually finishes — nothing below resets or restarts it.
-    await _recorder.start(trip.id);
+    try {
+      await _recorder.start(trip.id);
+    } catch (e) {
+      // RacingScreen checks GPS readiness before pushing this screen, but
+      // location can still be switched off during the countdown — and an
+      // uncaught throw here left the screen frozen on its last digit.
+      logBuffer.add('Racing: GPS failed to start — $e');
+      _cancelled = true;
+      await TripRepository.instance.deleteTrip(trip.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e is StateError ? e.message : 'Couldn\'t start GPS — $e')),
+      );
+      Navigator.of(context).pop();
+      return;
+    }
     if (_cancelled) {
       await _recorder.stop();
       await TripRepository.instance.deleteTrip(trip.id);

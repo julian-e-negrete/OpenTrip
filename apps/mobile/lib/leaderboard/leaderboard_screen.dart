@@ -367,11 +367,15 @@ class _RankRow extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.only(left: 26),
-                  child: _RacingStatsLine(entry: entry, isFastest: isFastest),
-                ),
+                // Skipped for a rider with no racing numbers at all — a row
+                // of three dashes said nothing.
+                if (entry.best0To60Seconds != null || entry.best0To180Seconds != null || entry.topSpeedKph != null) ...[
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 26),
+                    child: _RacingStatsLine(entry: entry, isFastest: isFastest),
+                  ),
+                ],
               ],
             ),
           ),
@@ -397,8 +401,10 @@ class _RacingStatsLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final topSpeedColor = isFastest ? Noct.a300 : Noct.n400;
     final topSpeed = entry.topSpeedKph;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    // A Wrap, not a Row: at a large system text size (or on a 320dp
+    // phone) the three readouts didn't fit and overflowed the row.
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
           '0-60 ${_seconds(entry.best0To60Seconds)}',

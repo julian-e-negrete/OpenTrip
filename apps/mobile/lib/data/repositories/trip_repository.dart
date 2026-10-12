@@ -150,8 +150,14 @@ class TripRepository {
     }
     // Same "this trip arrived via cloud sync, pull its details lazily"
     // fallback as pointsForTrip — a harmless no-op if there's genuinely
-    // nothing (no music logged, or sync unavailable).
-    return SyncService.instance.pullMusicEvents(tripId);
+    // nothing (no music logged, or sync unavailable). Best-effort the same
+    // way: offline, the remote fetch throws, and trip detail used to surface
+    // that as an uncaught error for every music-less trip it opened.
+    try {
+      return await SyncService.instance.pullMusicEvents(tripId);
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// Deletes a trip and its points/music events. Deliberately leaves

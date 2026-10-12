@@ -206,6 +206,7 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
             startingOdometerKm: startingOdometerKm,
             serviceIntervalKm: serviceIntervalKm,
             clearServiceInterval: serviceIntervalKm == null,
+            clearStartingOdometer: startingOdometerKm == null,
             // Every field above just changed locally — re-push on next sync
             // rather than leaving the remote row stale.
             synced: false,
@@ -248,7 +249,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
               child: CircleAvatar(
                 radius: 48,
                 backgroundImage: displayedPhoto != null ? FileImage(displayedPhoto) : null,
-                child: displayedPhoto == null ? const Icon(Icons.add_a_photo_outlined, size: 32) : null,
+                backgroundColor: Noct.surface,
+                child: displayedPhoto == null ? const Icon(Ph.camera, size: 28, color: Noct.n400) : null,
               ),
             ),
           ),
@@ -263,7 +265,8 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
           DropdownButtonFormField<VehicleType>(
             initialValue: _type,
             decoration: const InputDecoration(labelText: 'Type', border: OutlineInputBorder()),
-            items: VehicleType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.name))).toList(),
+            // `label`, not the enum's raw `name` ("motorcycle", "other").
+            items: VehicleType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
             onChanged: _onTypeChanged,
           ),
           const SizedBox(height: 16),
@@ -279,8 +282,10 @@ class _AddVehicleScreenState extends State<AddVehicleScreen> {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'This model supports Kawasaki Rideology BLE — telemetry '
-                      'can connect automatically when recording a trip.',
+                      // Recording never connects on its own — the rider
+                      // connects from this vehicle's Garage row.
+                      'This model supports Kawasaki Rideology BLE — connect it '
+                      'from the Garage tab to record live bike telemetry with your trips.',
                       style: TextStyle(fontSize: 12, color: Noct.a200, height: 1.4),
                     ),
                   ),

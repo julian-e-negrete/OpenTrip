@@ -16,6 +16,17 @@ String fmtDayMonth(DateTime d) => '${d.day} ${monthAbbrev(d.month)}';
 /// e.g. "Sat 24 Aug".
 String fmtWeekdayDayMonth(DateTime d) => '${weekdayAbbrev(d)} ${fmtDayMonth(d)}';
 
+/// A trip's date as shown in lists and headers — "24 Aug", or "24 Aug 2025"
+/// once it's from another year, so last summer's rides don't read as this
+/// summer's. [withWeekday] prefixes "Sat".
+String fmtTripDate(DateTime d, {bool withWeekday = false, DateTime? now}) {
+  final base = withWeekday ? fmtWeekdayDayMonth(d) : fmtDayMonth(d);
+  return d.year == (now ?? DateTime.now()).year ? base : '$base ${d.year}';
+}
+
+/// 24-hour clock, e.g. "07:05".
+String fmtTimeOfDay(DateTime d) => '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
 /// e.g. "2 min ago", "3h ago", "5d ago" — Account's "synced …" caption.
 String fmtRelative(DateTime dt) {
   final diff = DateTime.now().difference(dt);

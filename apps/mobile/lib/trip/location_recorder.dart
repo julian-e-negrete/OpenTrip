@@ -62,6 +62,10 @@ const _hardCorneringThresholdMps2 = 4.0;
 /// of event worth catching.
 const _minSpeedForCorneringKph = 8.0;
 
+/// How long the live speed readout trusts the last fix's speed when no new
+/// fix arrives — see [LocationRecorder._tick].
+const _speedStaleAfter = Duration(seconds: 4);
+
 /// Wraps geolocator's position stream into trip-shaped output: a stream of
 /// [TripPoint]s to persist and a stream of running [RecordingStats] for
 /// the UI. Distance is accumulated incrementally rather than recomputed
@@ -300,6 +304,7 @@ class LocationRecorder {
     _startedAt = DateTime.now();
     _seq = 0;
     _distanceMeters = 0;
+    _lastSpeedKph = null;
     _maxSpeedKph = null;
     _lastAcceptedPoint = null;
     _rejectedAccuracyCount = 0;
@@ -341,14 +346,24 @@ class LocationRecorder {
   /// currently moving. This ticks once a second regardless, recomputing
   /// elapsed live and re-emitting whatever distance/speed the last real
   /// fix reported.
+  ///
+  /// The same gap made the live speed lie: with no new fix while stopped,
+  /// the last moving fix's speed (say 23 km/h on the approach to a red
+  /// light) kept being re-emitted for as long as the rider sat there.
+  /// Past [_speedStaleAfter] without an accepted fix, the speed shown is
+  /// 0 — the distance filter guarantees a fix within a few metres of
+  /// actually moving again.
   void _tick() {
     final startedAt = _startedAt;
     if (startedAt == null) return;
+    final now = DateTime.now();
+    final lastFixAt = _lastAcceptedPoint?.timestamp;
+    final speedStale = lastFixAt != null && now.difference(lastFixAt) > _speedStaleAfter;
     _statsController.add(
       RecordingStats(
-        elapsed: DateTime.now().difference(startedAt),
+        elapsed: now.difference(startedAt),
         distanceMeters: _distanceMeters,
-        currentSpeedKph: _lastSpeedKph,
+        currentSpeedKph: speedStale ? 0 : _lastSpeedKph,
         maxSpeedKph: _maxSpeedKph,
         pointCount: _seq,
       ),

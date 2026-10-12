@@ -68,7 +68,12 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
   }
 
   Future<void> _load() async {
-    setState(() => _loading = true);
+    // Only the first load blanks the screen. This reloads on every
+    // DataEvents change (a trip starting, a vehicle edit, each sync push),
+    // and swapping the map for a spinner each time threw away wherever the
+    // rider had panned/zoomed to. A scope switch still clears it, since
+    // the cells being shown change completely.
+    if (_cells == null) setState(() => _loading = true);
     final myUserId = await CurrentUser.instance.id();
     final cells = _scope == _Scope.global
         ? await SyncService.instance.fetchTerritoryMap()
@@ -87,7 +92,10 @@ class _TerritoryMapScreenState extends State<TerritoryMapScreen> {
 
   void _setScope(_Scope scope) {
     if (scope == _scope) return;
-    setState(() => _scope = scope);
+    setState(() {
+      _scope = scope;
+      _cells = null;
+    });
     _load();
   }
 
@@ -315,25 +323,36 @@ class _TerritorySheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(3),
               child: SizedBox(
                 height: 6,
+                // Zero-count segments are left out rather than given flex
+                // 0: a flex-0 child is laid out unbounded, and the
+                // SizedBox.expand inside it then throws — which is what a
+                // rider with no areas of their own yet (mine == 0) hit.
                 child: Row(
                   children: [
-                    Expanded(flex: mine, child: const ColoredBox(color: Noct.accent, child: SizedBox.expand())),
-                    Expanded(flex: friends, child: const ColoredBox(color: Noct.n400, child: SizedBox.expand())),
-                    Expanded(flex: others > 0 ? others : 1, child: ColoredBox(color: others > 0 ? Noct.n600 : Noct.n900)),
+                    if (mine > 0) Expanded(flex: mine, child: const ColoredBox(color: Noct.accent, child: SizedBox.expand())),
+                    if (friends > 0)
+                      Expanded(flex: friends, child: const ColoredBox(color: Noct.n400, child: SizedBox.expand())),
+                    if (others > 0 || mine + friends == 0)
+                      Expanded(
+                        flex: others > 0 ? others : 1,
+                        child: ColoredBox(color: others > 0 ? Noct.n600 : Noct.n900, child: const SizedBox.expand()),
+                      ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 6),
             const Text(
-              'Share of the visible map',
+              'Share of all claimed areas',
               style: TextStyle(fontSize: 10.5, color: Noct.n500, fontWeight: FontWeight.w400),
             ),
             const SizedBox(height: 14),
             _legendRow('You', Noct.accent, mine, Noct.text),
             if (friends > 0) _legendRow('Friends', Noct.n400, friends, Noct.n300),
             if (others > 0) _legendRow('Others', Noct.n600, others, Noct.n300),
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
+            // Clears the shell's raised record control, which rises into
+            // the bottom of this sheet.
+            SizedBox(height: MediaQuery.of(context).padding.bottom + Noct.recordControlOverhang),
           ],
         ),
       ),

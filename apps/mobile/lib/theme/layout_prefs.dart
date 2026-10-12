@@ -34,10 +34,19 @@ class LayoutPrefs extends ChangeNotifier {
 
   Future<void> load() async {
     final prefs = await SharedPreferences.getInstance();
-    record = RecordVariant.values[prefs.getInt(_kRecord) ?? RecordVariant.map.index];
-    tripList = TripListVariant.values[prefs.getInt(_kTripList) ?? TripListVariant.cards.index];
-    tripDetail = TripDetailVariant.values[prefs.getInt(_kTripDetail) ?? TripDetailVariant.grid.index];
-    ranks = RanksVariant.values[prefs.getInt(_kRanks) ?? RanksVariant.bars.index];
+    record = _read(prefs, _kRecord, RecordVariant.values, record);
+    tripList = _read(prefs, _kTripList, TripListVariant.values, tripList);
+    tripDetail = _read(prefs, _kTripDetail, TripDetailVariant.values, tripDetail);
+    ranks = _read(prefs, _kRanks, RanksVariant.values, ranks);
+  }
+
+  /// A stored index this build doesn't know (saved by a newer build that
+  /// had an extra variant, then downgraded) falls back to the default
+  /// rather than throwing a RangeError before the first frame — which,
+  /// since main() awaits [load], would keep the app from starting at all.
+  static T _read<T>(SharedPreferences prefs, String key, List<T> values, T fallback) {
+    final i = prefs.getInt(key);
+    return i != null && i >= 0 && i < values.length ? values[i] : fallback;
   }
 
   Future<void> setRecord(RecordVariant v) async {

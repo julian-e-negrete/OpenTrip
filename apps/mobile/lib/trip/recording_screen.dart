@@ -22,6 +22,7 @@ import '../data/models/vehicle.dart';
 import '../data/repositories/trip_repository.dart';
 import '../data/repositories/vehicle_repository.dart';
 import '../gamification/gamification_service.dart';
+import '../gamification/trophies.dart';
 import '../theme/app_theme.dart';
 import '../theme/dark_tile_layer.dart';
 import '../theme/layout_prefs.dart';
@@ -62,6 +63,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
   RecordingStats? _stats;
   String? _error;
   bool _loadingVehicles = true;
+
+  /// True while [_start] or [_stop] is in flight. Both await several slow
+  /// steps (permission dialogs, the DB, territory processing), and nothing
+  /// stopped a second tap meanwhile — on the bottom button or the bar's
+  /// raised control — from starting a second trip, or from finishing the
+  /// same trip twice (double territory visits, duplicate trophy dialogs).
+  bool _transitioning = false;
 
   StreamSubscription<TripPoint>? _pointSub;
   StreamSubscription<RecordingStats>? _statsSub;
@@ -305,11 +313,15 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   Future<void> _start() async {
     final vehicle = _selectedVehicle;
-    if (vehicle == null) return;
+    if (vehicle == null || _transitioning || _activeTrip != null) return;
 
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _transitioning = true;
+    });
+    Trip? trip;
     try {
-      final trip = await TripRepository.instance.startTrip(userId: _userId, vehicleId: vehicle.id);
+      trip = await TripRepository.instance.startTrip(userId: _userId, vehicleId: vehicle.id);
       await _recorder.start(trip.id);
       if (_recorder.powerSaveModeOn && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -387,7 +399,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
         _musicSub = SpotifyNowPlaying.instance.trackChanges.listen((event) {
           _musicBuffer.add(
             TripMusicEvent(
-              tripId: trip.id,
+              tripId: trip!.id,
               seq: _musicSeq++,
               track: event.track,
               artist: event.artist,
@@ -417,7 +429,38 @@ class _RecordingScreenState extends State<RecordingScreen> {
       setState(() => _activeTrip = trip);
       RecordingController.instance.isRecording.value = true;
     } catch (e) {
-      setState(() => _error = e.toString());
+      // Usually a refused permission or location services being off —
+      // thrown after the trip row already exists. Left behind, that row
+      // showed up in Trips as a 0 km "In progress" ghost with a Recover
+      // banner for a ride that never started.
+      // Anything already subscribed by the time it threw goes too, so
+      // nothing keeps buffering points for a trip that no longer exists.
+      final failed = trip;
+      if (failed != null) {
+        await _recorder.stop();
+        await _pointSub?.cancel();
+        await _statsSub?.cancel();
+        await _bleTelemetrySub?.cancel();
+        await _leanAngleSub?.cancel();
+        await _leanTracker?.dispose();
+        await _musicSub?.cancel();
+        _pointSub = _statsSub = _bleTelemetrySub = _leanAngleSub = _musicSub = null;
+        _leanTracker = null;
+        _pointBuffer.clear();
+        _liveRoutePoints.clear();
+        _musicBuffer.clear();
+        _musicSeq = 0;
+        _stats = null;
+        await TripRepository.instance.deleteTrip(failed.id);
+      }
+      if (mounted) {
+        setState(
+          () => _error = e is StateError ? e.message : e.toString().replaceFirst(RegExp(r'^Exception: '), ''),
+        );
+      }
+    } finally {
+      _transitioning = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -430,8 +473,25 @@ class _RecordingScreenState extends State<RecordingScreen> {
 
   Future<void> _stop() async {
     final trip = _activeTrip;
-    if (trip == null) return;
+    if (trip == null || _transitioning) return;
+    setState(() {
+      _error = null;
+      _transitioning = true;
+    });
+    try {
+      await _finishActiveTrip(trip);
+    } catch (e) {
+      // Leaves _activeTrip set, so Stop & save can simply be tapped again:
+      // every step below is safe to repeat, and the points recorded so
+      // far are already on disk.
+      if (mounted) setState(() => _error = 'Couldn\'t save the trip — tap Stop & save to try again. ($e)');
+    } finally {
+      _transitioning = false;
+      if (mounted) setState(() {});
+    }
+  }
 
+  Future<void> _finishActiveTrip(Trip trip) async {
     final finalStats = await _recorder.stop();
     unawaited(CrewService.instance.stopRide());
     await _pointSub?.cancel();
@@ -551,6 +611,13 @@ class _RecordingScreenState extends State<RecordingScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Trip saved: ${finished.distanceKm.toStringAsFixed(2)} km')),
     );
+    // Not awaited: the trip is fully saved by now, so the record controls
+    // shouldn't stay locked behind however long the rider takes to
+    // dismiss these.
+    if (newTrophies.isNotEmpty) unawaited(_showTrophies(newTrophies));
+  }
+
+  Future<void> _showTrophies(List<TrophyDefinition> newTrophies) async {
     for (final trophy in newTrophies) {
       if (!mounted) return;
       await showDialog<void>(
@@ -590,7 +657,7 @@ class _RecordingScreenState extends State<RecordingScreen> {
                 leading: Icon(v.type == VehicleType.car ? Ph.car : Ph.motorcycle, color: Noct.accent),
                 title: Text(v.name, style: const TextStyle(color: Noct.text)),
                 subtitle: Text(v.type.label, style: const TextStyle(color: Noct.n500)),
-                trailing: v.id == _selectedVehicle?.id ? const Icon(Ph.caretRight, color: Noct.accent, size: 16) : null,
+                trailing: v.id == _selectedVehicle?.id ? const Icon(Ph.check, color: Noct.accent, size: 16) : null,
                 onTap: () => Navigator.pop(context, v),
               ),
             const SizedBox(height: 8),
@@ -778,13 +845,17 @@ class _RecordingScreenState extends State<RecordingScreen> {
           child: SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed: recording ? _stop : (_selectedVehicle == null ? null : _start),
+              onPressed: _transitioning ? null : (recording ? _stop : (_selectedVehicle == null ? null : _start)),
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: recording ? Theme.of(context).colorScheme.error : Noct.accent, width: 1.5),
                 foregroundColor: recording ? Theme.of(context).colorScheme.error : Noct.a200,
                 padding: const EdgeInsets.symmetric(vertical: 15),
               ),
-              child: Text(recording ? 'Stop & save' : 'Start recording'),
+              child: Text(
+                _transitioning
+                    ? (recording ? 'Saving…' : 'Starting…')
+                    : (recording ? 'Stop & save' : 'Start recording'),
+              ),
             ),
           ),
         ),
@@ -839,22 +910,38 @@ class _RecordHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        GestureDetector(
-          onTap: onVehicleTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-            decoration: BoxDecoration(
-              color: Noct.surface,
-              borderRadius: BorderRadius.circular(Noct.rMd),
-              border: Border.all(color: Noct.n800),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(vehicle?.type == VehicleType.car ? Ph.car : Ph.motorcycle, size: 15, color: Noct.accent),
-                const SizedBox(width: 6),
-                Text(vehicle?.name ?? 'Select vehicle', style: const TextStyle(fontSize: 12.5, color: Noct.text)),
-              ],
+        // Flexible + ellipsis: a long model name ("Kawasaki Ninja ZX-10R
+        // SE") next to the "Searching for GPS" pill overflowed the row.
+        Flexible(
+          child: GestureDetector(
+            onTap: onVehicleTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+              decoration: BoxDecoration(
+                color: Noct.surface,
+                borderRadius: BorderRadius.circular(Noct.rMd),
+                border: Border.all(color: Noct.n800),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(vehicle?.type == VehicleType.car ? Ph.car : Ph.motorcycle, size: 15, color: Noct.accent),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      vehicle?.name ?? 'Select vehicle',
+                      style: const TextStyle(fontSize: 12.5, color: Noct.text),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Only while it can actually be changed (not mid-ride).
+                  if (onVehicleTap != null) ...[
+                    const SizedBox(width: 4),
+                    const Icon(Ph.caretDown, size: 11, color: Noct.n500),
+                  ],
+                ],
+              ),
             ),
           ),
         ),
@@ -866,10 +953,13 @@ class _RecordHeader extends StatelessWidget {
           },
         ),
         const Spacer(),
+        // Opaque with a 10px pad: the bare 26px glyph was a hard target
+        // to hit with a gloved finger.
         GestureDetector(
           onTap: onSettingsTap,
+          behavior: HitTestBehavior.opaque,
           child: const Padding(
-            padding: EdgeInsets.all(4),
+            padding: EdgeInsets.all(10),
             child: Icon(Ph.gearSix, size: 18, color: Noct.n500),
           ),
         ),
@@ -1088,7 +1178,17 @@ class _MapVariantState extends State<_MapVariant> {
     if (current != null && pts.length != _lastCenteredCount) {
       _lastCenteredCount = pts.length;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _mapController.move(current, 16);
+        if (!mounted) return;
+        // Follow the rider at whatever zoom they've pinched to — re-
+        // centering at a hard-coded 16 on every fix snapped a zoomed-out
+        // overview straight back in about once a second.
+        double zoom;
+        try {
+          zoom = _mapController.camera.zoom;
+        } catch (_) {
+          zoom = 16; // map not laid out yet
+        }
+        _mapController.move(current, zoom);
       });
     }
 

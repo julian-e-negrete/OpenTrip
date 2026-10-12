@@ -88,6 +88,7 @@ class Vehicle {
     double? serviceIntervalKm,
     double? lastServiceOdometerKm,
     bool clearServiceInterval = false,
+    bool clearStartingOdometer = false,
     bool? synced,
   }) {
     return Vehicle(
@@ -100,7 +101,9 @@ class Vehicle {
       bleConnector: bleConnector ?? this.bleConnector,
       photoPath: photoPath ?? this.photoPath,
       createdAt: createdAt,
-      startingOdometerKm: startingOdometerKm ?? this.startingOdometerKm,
+      // Clearable for the same reason as the service interval below — the
+      // edit form says "leave blank if unknown", which has to actually work.
+      startingOdometerKm: clearStartingOdometer ? null : (startingOdometerKm ?? this.startingOdometerKm),
       // Unlike every other field, service tracking needs a real way to
       // turn back off (a vehicle's owner decides they don't want to
       // track it anymore) — `?? this.x` alone can only ever set a value,

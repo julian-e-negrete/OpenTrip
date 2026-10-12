@@ -59,10 +59,18 @@ class CrewService {
   Future<void> setShareWhileRiding(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_shareWhileRidingKey, value);
-    if (_riding) {
-      _publishEnabled = value && _publishEnabled;
-      if (!value) await _clearOwnPosition();
+    if (!_riding) return;
+    if (!value) {
+      _publishEnabled = false;
+      await _clearOwnPosition();
+      return;
     }
+    // Turning it back on mid-ride used to be a no-op (`value &&
+    // _publishEnabled` stays false once it was off), so a rider who
+    // flipped it off and on again stayed invisible until the next ride.
+    final crews = await fetchMyCrews();
+    _publishEnabled = _riding && crews.any((c) => c.shareLocation);
+    _lastPublishedAt = null;
   }
 
   // ---- Management ---------------------------------------------------------
